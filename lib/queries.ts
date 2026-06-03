@@ -141,12 +141,14 @@ function computePlayerIndexLive(): Promise<IndexedPlayer[]> {
                     THEN 0.5 + 0.09 * (fga + 0.44 * fta) + 0.18 * ast
                     ELSE tov END, 1) AS tov,
               -- 3PM: no 3pt line before 1979-80. From FT% (touch), role, volume.
+              -- Buffed (volume share + efficiency) so pre-line players aren't
+              -- over-penalized on spacing for shots they never had a line to take.
               round(CASE WHEN season_year < 1980
-                    THEN (fga * CASE WHEN reb >= 9 THEN 0.06
-                                     WHEN ast >= 4.5 AND reb <= 5 THEN 0.36
-                                     ELSE 0.24 END)
-                         * greatest(0.20, least(0.40,
-                             0.5 * (CASE WHEN fta > 0 THEN ftm / fta ELSE 0.5 END) - 0.02))
+                    THEN (fga * CASE WHEN reb >= 9 THEN 0.10
+                                     WHEN ast >= 4.5 AND reb <= 5 THEN 0.42
+                                     ELSE 0.30 END)
+                         * greatest(0.22, least(0.42,
+                             0.5 * (CASE WHEN fta > 0 THEN ftm / fta ELSE 0.5 END) + 0.03))
                     ELSE fg3m END, 1) AS fg3m
          FROM ranked
         WHERE rn = 1`,
