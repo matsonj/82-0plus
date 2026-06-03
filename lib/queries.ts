@@ -7,15 +7,15 @@ import type { PlayerOption } from "./types";
 // tokens can't switch the active database), so unqualified names won't resolve.
 const DB = "nba_box_scores_v2.main";
 
-/** Available decades, derived from the data (grows automatically as seasons are backfilled). */
+/**
+ * Available decades — derived from the player index so every decade we offer
+ * actually has draftable players. (The schedule has older seasons, e.g. the
+ * 1940s, that are too sparse to produce any qualifying players; offering them
+ * would dead-end the slot machine with a 404.)
+ */
 export async function getDecades(): Promise<number[]> {
-  const rows = await query<{ decade: number }>(
-    `SELECT DISTINCT season_year - (season_year % 10) AS decade
-       FROM ${DB}.schedule
-      WHERE season_type = 'Regular Season'
-      ORDER BY 1`,
-  );
-  return rows.map((r) => r.decade);
+  const index = await getPlayerIndex();
+  return [...new Set(index.map((p) => p.decade))].sort((a, b) => a - b);
 }
 
 /** Teams that appear in a decade, with a weight = number of seasons present. */

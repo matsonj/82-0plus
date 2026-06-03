@@ -42,7 +42,12 @@ npm run dev                  # http://localhost:3000
 
 `MOTHERDUCK_TOKEN` is required — get one from
 [app.motherduck.com](https://app.motherduck.com) (Settings → Access Tokens). The
-app queries `nba_box_scores_v2` live at runtime via `@duckdb/node-api`.
+token's account must have access to the `nba_box_scores_v2` database. The app
+queries `nba_box_scores_v2` live at runtime via the pure-JS `pg` driver against
+MotherDuck's PostgreSQL wire endpoint (it still runs DuckDB SQL — no native
+bindings needed). Tables are referenced fully-qualified as
+`nba_box_scores_v2.main.<table>` because read-only tokens can't switch the active
+workspace.
 
 ## Scripts
 
@@ -52,17 +57,23 @@ app queries `nba_box_scores_v2` live at runtime via `@duckdb/node-api`.
 
 ## Architecture
 
-- `lib/motherduck.ts` — cached DuckDB↔MotherDuck connection + query helper
-- `lib/queries.ts` — decades, season-weighted team pool, peak-season player list
+- `lib/motherduck.ts` — `query()` helper backed by a cached `pg` Pool against
+  MotherDuck's PostgreSQL endpoint
+- `lib/queries.ts` — decades, season-weighted team pool, peak-season player list.
+  Reads the materialized `nba_box_scores_v2.main.player_index` table for fast cold
+  starts (falls back to live compute if missing) — refresh it after backfilling
+  box scores.
 - `lib/scoring.ts` — bespoke usage/penalty/Pythagorean model
 - `app/api/{decades,slot,players,simulate}/route.ts` — Node.js route handlers
 - `app/page.tsx` + `components/*` — the game UI (MotherDuck design system)
 
 ## Deploying to Vercel
 
-Set `MOTHERDUCK_TOKEN` in the project's environment variables. The DuckDB native
-bindings are kept out of the bundle via `serverExternalPackages` in
-`next.config.ts`; routes run on the Node.js runtime.
+Set `MOTHERDUCK_TOKEN` in the project's environment variables (the token's
+account must have access to `nba_box_scores_v2`). The data layer is the pure-JS
+`pg` driver, so there are no native binaries to bundle — `next.config.ts` is
+intentionally empty (no `serverExternalPackages`, no `outputFileTracingIncludes`).
+Routes run on the Node.js runtime.
 
 ---
 
