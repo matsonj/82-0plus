@@ -57,10 +57,38 @@ declare global {
  * (a few thousand rows) in the server process. Every team load is then an
  * in-memory filter.
  */
+/**
+ * Read the precomputed index. Prefers the materialized
+ * `nba_box_scores_v2.main.player_index` table (a fast SELECT — refresh it after
+ * a backfill with the CREATE OR REPLACE in computePlayerIndexLive's SQL), and
+ * falls back to computing it live if the table is missing or empty.
+ */
 export function getPlayerIndex(): Promise<IndexedPlayer[]> {
   if (!globalThis.__player_index__) {
-    globalThis.__player_index__ = query<IndexedPlayer>(
-      `WITH per_season AS (
+    globalThis.__player_index__ = (async () => {
+      try {
+        const rows = await query<IndexedPlayer>(
+          `SELECT entity_id, player_name, team, decade, best_season, value, gp, mpg,
+                  pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m
+             FROM ${DB}.player_index`,
+        );
+        if (rows.length > 0) return rows;
+      } catch {
+        // table missing → fall through to live compute
+      }
+      return computePlayerIndexLive();
+    })().catch((err) => {
+      globalThis.__player_index__ = undefined; // allow retry on failure
+      throw err;
+    });
+  }
+  return globalThis.__player_index__;
+}
+
+/** Compute the index from scratch (the source query the materialized table uses). */
+function computePlayerIndexLive(): Promise<IndexedPlayer[]> {
+  return query<IndexedPlayer>(
+    `WITH per_season AS (
          SELECT b.entity_id, b.player_name,
                 b.team_abbreviation AS team,
                 s.season_year - (s.season_year % 10) AS decade,
@@ -122,12 +150,7 @@ export function getPlayerIndex(): Promise<IndexedPlayer[]> {
                     ELSE fg3m END, 1) AS fg3m
          FROM ranked
         WHERE rn = 1`,
-    ).catch((err) => {
-      globalThis.__player_index__ = undefined; // allow retry on failure
-      throw err;
-    });
-  }
-  return globalThis.__player_index__;
+  );
 }
 
 /** Begin computing the index without blocking (used to warm the cache at game start). */
