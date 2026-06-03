@@ -1,65 +1,443 @@
-import Image from "next/image";
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  GameMode,
+  PlayerOption,
+  RosterEntry,
+  SimResult,
+} from "@/lib/types";
+import { canPlay, type SlotKind } from "@/lib/positions";
+import { SlotMachine } from "@/components/SlotMachine";
+import { PlayerList } from "@/components/PlayerList";
+import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
+import { ResultsPanel } from "@/components/ResultsPanel";
+
+const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
+type Phase = "menu" | "play";
 
 export default function Home() {
+  const [phase, setPhase] = useState<Phase>("menu");
+  const [mode, setMode] = useState<GameMode>("classic");
+  const [decades, setDecades] = useState<number[]>([]);
+  const [lineup, setLineup] = useState<(LineupEntry | null)[]>(
+    KINDS.map(() => null),
+  );
+  const [currentDecade, setCurrentDecade] = useState<number | null>(null);
+  const [currentTeam, setCurrentTeam] = useState<string | null>(null);
+  const [pending, setPending] = useState<PlayerOption | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [teamSkips, setTeamSkips] = useState(1);
+  const [decadeSkips, setDecadeSkips] = useState(1);
+  const [result, setResult] = useState<SimResult | null>(null);
+  const [simulating, setSimulating] = useState(false);
+  const [booting, setBooting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const rolling = useRef(false);
+
+  const draftedCount = lineup.filter(Boolean).length;
+  const draftDone = draftedCount === KINDS.length;
+  const draftedIds = lineup
+    .filter(Boolean)
+    .map((e) => (e as LineupEntry).player.entity_id);
+
+  const rollRound = useCallback(
+    async (opts: { decade?: number; exclude?: string } = {}) => {
+      if (decades.length === 0) return;
+      rolling.current = true;
+      const decade =
+        opts.decade ?? decades[Math.floor(Math.random() * decades.length)];
+      setPending(null);
+      setSelected(null);
+      setCurrentDecade(decade);
+      setCurrentTeam(null);
+      try {
+        const url = `/api/slot?decade=${decade}${opts.exclude ? `&exclude=${opts.exclude}` : ""}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("roll failed");
+        const data = await res.json();
+        setCurrentTeam(data.team);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        rolling.current = false;
+      }
+    },
+    [decades],
+  );
+
+  const startGame = useCallback(async (m: GameMode) => {
+    setMode(m);
+    setResult(null);
+    setLineup(KINDS.map(() => null));
+    setCurrentDecade(null);
+    setCurrentTeam(null);
+    setPending(null);
+    setSelected(null);
+    setTeamSkips(1);
+    setDecadeSkips(1);
+    setError(null);
+    setPhase("play");
+    setBooting(true);
+    try {
+      const res = await fetch("/api/decades");
+      if (!res.ok) throw new Error((await res.json()).error ?? "load failed");
+      const { decades: ds } = (await res.json()) as { decades: number[] };
+      setDecades(ds);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBooting(false);
+    }
+  }, []);
+
+  const backToMenu = () => {
+    setPhase("menu");
+    setResult(null);
+    setLineup(KINDS.map(() => null));
+    setCurrentDecade(null);
+    setCurrentTeam(null);
+  };
+
+  // Start a new round whenever there's an open slot and no active round.
+  useEffect(() => {
+    if (phase !== "play" || booting || result || draftDone) return;
+    if (currentDecade !== null || rolling.current) return;
+    if (decades.length === 0) return;
+    rollRound({});
+  }, [phase, booting, result, draftDone, currentDecade, decades, rollRound]);
+
+  const draftable = useCallback(
+    (p: PlayerOption) => {
+      if (draftedIds.includes(p.entity_id)) return false;
+      return KINDS.some((kind, i) => lineup[i] === null && canPlay(p, kind));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lineup],
+  );
+
+  const placeAt = (player: PlayerOption, i: number) => {
+    if (currentTeam === null || currentDecade === null) return;
+    const entry: LineupEntry = { player, team: currentTeam, decade: currentDecade };
+    setLineup((prev) => prev.map((s, idx) => (idx === i ? entry : s)));
+    setPending(null);
+    setSelected(null);
+    setCurrentDecade(null);
+    setCurrentTeam(null);
+  };
+
+  const pick = (player: PlayerOption) => {
+    const eligible = KINDS.map((kind, i) => ({ kind, i }))
+      .filter(({ i }) => lineup[i] === null)
+      .filter(({ kind }) => canPlay(player, kind))
+      .map(({ i }) => i);
+    if (eligible.length === 0) return;
+    if (eligible.length === 1) placeAt(player, eligible[0]);
+    else setPending(player);
+  };
+
+  const onSlotClick = (i: number) => {
+    if (pending) {
+      if (lineup[i] === null && canPlay(pending, KINDS[i])) placeAt(pending, i);
+      return;
+    }
+    if (selected === null) {
+      if (lineup[i]) setSelected(i);
+      return;
+    }
+    if (i === selected) {
+      setSelected(null);
+      return;
+    }
+    const sel = lineup[selected] as LineupEntry;
+    const target = lineup[i];
+    if (target === null) {
+      if (canPlay(sel.player, KINDS[i])) {
+        setLineup((prev) =>
+          prev.map((s, idx) => (idx === i ? sel : idx === selected ? null : s)),
+        );
+        setSelected(null);
+      }
+    } else if (
+      canPlay(sel.player, KINDS[i]) &&
+      canPlay(target.player, KINDS[selected])
+    ) {
+      setLineup((prev) =>
+        prev.map((s, idx) => (idx === i ? sel : idx === selected ? target : s)),
+      );
+      setSelected(null);
+    }
+  };
+
+  const removeSlot = (i: number) => {
+    setLineup((prev) => prev.map((s, idx) => (idx === i ? null : s)));
+    setSelected(null);
+  };
+
+  let targets: number[] = [];
+  if (pending) {
+    targets = KINDS.map((kind, i) => ({ kind, i }))
+      .filter(({ i }) => lineup[i] === null)
+      .filter(({ kind }) => canPlay(pending, kind))
+      .map(({ i }) => i);
+  } else if (selected !== null) {
+    const sel = lineup[selected] as LineupEntry;
+    targets = KINDS.map((_, i) => i).filter((i) => {
+      if (i === selected) return false;
+      const t = lineup[i];
+      if (t === null) return canPlay(sel.player, KINDS[i]);
+      return canPlay(sel.player, KINDS[i]) && canPlay(t.player, KINDS[selected]);
+    });
+  }
+
+  const rosterEntries: RosterEntry[] = lineup.filter(Boolean).map((e) => {
+    const { player, team, decade } = e as LineupEntry;
+    return { ...player, team, decade };
+  });
+
+  const teamSkip = () => {
+    if (teamSkips <= 0 || currentDecade === null || pending) return;
+    setTeamSkips((n) => n - 1);
+    rollRound({ decade: currentDecade, exclude: currentTeam ?? undefined });
+  };
+
+  const decadeSkip = () => {
+    if (decadeSkips <= 0 || currentDecade === null || pending) return;
+    const others = decades.filter((d) => d !== currentDecade);
+    if (others.length === 0) return;
+    setDecadeSkips((n) => n - 1);
+    setCurrentDecade(others[Math.floor(Math.random() * others.length)]);
+  };
+
+  const simulate = async () => {
+    setSimulating(true);
+    try {
+      const res = await fetch("/api/simulate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ roster: rosterEntries }),
+      });
+      const data = await res.json();
+      setResult(data.result as SimResult);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setSimulating(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
+      <div className="md-sunbeam" />
+
+      <header className="relative z-10 flex items-center justify-between py-4 sm:py-5">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl" aria-hidden>
+            🦆
+          </span>
+          <span className="font-display text-lg font-bold tracking-tight">
+            82-0<span className="text-[var(--md-orange)]">+</span>
+          </span>
+        </div>
+        {phase === "play" && (
+          <span
+            className="md-capsule"
+            style={
+              mode === "hoopiq"
+                ? { background: "var(--md-ink)", color: "var(--md-white)" }
+                : undefined
+            }
+          >
+            {mode === "hoopiq" ? "HoopIQ" : "Classic"}
+          </span>
+        )}
+      </header>
+
+      {/* ---------------- MENU ---------------- */}
+      {phase === "menu" && (
+        <section className="relative z-10 flex flex-col items-center text-center">
+          <div className="md-capsule mb-4 max-w-full text-center">
+            Can you go 82-0?
+          </div>
+          <h1
+            className="font-display font-bold tracking-tight"
+            style={{ fontSize: "clamp(40px, 11vw, 80px)", lineHeight: 1 }}
+          >
+            Go 82&ndash;0.
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="mx-auto mt-4 max-w-md text-[14px] leading-relaxed sm:text-[15px]">
+            Five rounds. Each spin gives you one team + era — draft a player and
+            slot him at Guard, Wing, Big, or Flex. Fit five together and simulate
+            the season.
           </p>
+
+          <div className="mt-8 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+            Choose a mode
+          </div>
+          <div className="mt-3 grid w-full max-w-md gap-3 sm:grid-cols-2">
+            <button
+              className="md-card md-card--lift p-5 text-left transition-transform hover:-translate-y-0.5"
+              onClick={() => startGame("classic")}
+            >
+              <div className="font-display text-xl font-bold">Classic</div>
+              <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
+                Per-game stats shown. Draft with full information.
+              </p>
+            </button>
+            <button
+              className="md-card md-card--lift p-5 text-left transition-transform hover:-translate-y-0.5"
+              style={{ background: "var(--md-ink)" }}
+              onClick={() => startGame("hoopiq")}
+            >
+              <div className="font-display text-xl font-bold text-[var(--md-white)]">
+                HoopIQ
+              </div>
+              <p className="mt-1 text-[13px] text-[var(--md-paper-3)]">
+                Stats hidden. Draft from memory — true hoops IQ.
+              </p>
+            </button>
+          </div>
+          <p className="mt-6 text-[11px] text-[var(--md-ink-muted)]">
+            Players are sorted by minutes per game.
+          </p>
+        </section>
+      )}
+
+      {error && phase === "play" && (
+        <div className="relative z-10 mx-auto mt-6 max-w-lg">
+          <div className="md-card border-[var(--md-coral)] p-4">
+            <p className="font-display text-sm">Data error: {error}</p>
+            <p className="mt-2 text-xs text-[var(--md-ink-muted)]">
+              Check <code>MOTHERDUCK_TOKEN</code> in <code>.env.local</code>.
+            </p>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+      )}
+
+      {/* ---------------- RESULT ---------------- */}
+      {phase === "play" && result && (
+        <section className="relative z-10 mx-auto mt-4 w-full max-w-lg">
+          <ResultsPanel roster={rosterEntries} result={result} onReset={backToMenu} />
+        </section>
+      )}
+
+      {/* ---------------- GAME ---------------- */}
+      {phase === "play" && !result && !booting && (
+        <section className="relative z-10 mt-4 flex flex-col gap-5">
+          <div>
+            <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+              Your lineup · {draftedCount}/{KINDS.length}
+            </div>
+            <LineupBoard
+              kinds={KINDS}
+              entries={lineup}
+              targets={targets}
+              selected={selected}
+              onSlotClick={onSlotClick}
+              onRemove={removeSlot}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <div className="mt-2 text-center font-display text-[11px] text-[var(--md-ink-muted)]">
+              {pending
+                ? "Tap a glowing slot to place him."
+                : selected !== null
+                  ? "Tap a glowing slot to move him (or tap him again to cancel)."
+                  : draftDone
+                    ? "Tap a player, then a slot, to rearrange."
+                    : "Tip: tap a drafted player then a slot to move him."}
+            </div>
+          </div>
+
+          {pending && (
+            <div className="md-card md-card--lift flex flex-col items-center gap-3 p-4">
+              <div className="font-display text-sm">
+                Where does{" "}
+                <span className="font-bold">{pending.player_name}</span> play?
+              </div>
+              <button
+                className="md-btn md-btn--sm md-btn--secondary"
+                onClick={() => setPending(null)}
+              >
+                Cancel pick
+              </button>
+            </div>
+          )}
+
+          {!draftDone && !pending && currentDecade !== null && (
+            <div className="md-card md-card--lift flex flex-col items-center gap-4 p-4 sm:p-5">
+              <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                Round {draftedCount + 1} of {KINDS.length}
+              </div>
+              <SlotMachine team={currentTeam} decade={currentDecade} size="lg" />
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  className="md-btn md-btn--sm md-btn--secondary"
+                  onClick={teamSkip}
+                  disabled={teamSkips <= 0}
+                >
+                  ↻ Team skip ({teamSkips})
+                </button>
+                <button
+                  className="md-btn md-btn--sm md-btn--secondary"
+                  onClick={decadeSkip}
+                  disabled={decadeSkips <= 0 || decades.length < 2}
+                >
+                  ↻ Decade skip ({decadeSkips})
+                </button>
+              </div>
+              <div className="w-full">
+                {currentTeam ? (
+                  <PlayerList
+                    team={currentTeam}
+                    decade={currentDecade}
+                    mode={mode}
+                    draftable={draftable}
+                    onPick={pick}
+                    onNoneEligible={() =>
+                      rollRound({
+                        decade: currentDecade,
+                        exclude: currentTeam ?? undefined,
+                      })
+                    }
+                  />
+                ) : (
+                  <div className="py-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
+                    Spinning the reel…
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {draftDone && (
+            <div className="flex flex-col items-center gap-3">
+              <div className="font-display text-sm">
+                Five drafted, positions covered. Time to find out.
+              </div>
+              <button
+                className="md-btn md-btn--lg md-btn--teal"
+                disabled={simulating}
+                onClick={simulate}
+              >
+                {simulating ? "Simulating…" : "Simulate Season"}
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {phase === "play" && booting && !result && (
+        <div className="relative z-10 py-20 text-center font-display text-sm text-[var(--md-ink-muted)]">
+          Spinning up the league…
         </div>
-      </main>
-    </div>
+      )}
+
+      <footer className="relative z-10 mt-auto pt-12 text-center">
+        <p className="font-display text-xs text-[var(--md-ink-muted)]">
+          Powered by MotherDuck · <code>nba_box_scores_v2</code>
+        </p>
+        <p className="mt-2 text-[11px] text-[var(--md-ink-muted)]">
+          An independent project, not affiliated with or endorsed by the NBA.
+        </p>
+      </footer>
+    </main>
   );
 }

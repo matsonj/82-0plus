@@ -1,26 +1,191 @@
 @import "tailwindcss";
 
+/* ============================================================
+   MotherDuck design tokens
+   Vibe: cream paper, thick ink lines, a yellow sunbeam, a cheerful
+   orange duck. Flat fills, visible strokes, hard offset shadows.
+   ============================================================ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --md-ink: #383838;
+  --md-ink-muted: #818181;
+  --md-paper: #f4efea;
+  --md-paper-2: #ece5dd;
+  --md-paper-3: #e1d6cb;
+  --md-white: #ffffff;
+
+  --md-yellow: #ffde00;
+  --md-orange: #ff9538;
+  --md-orange-deep: #a45916;
+  --md-coral: #ff7169;
+  --md-teal: #16aa98;
+  --md-teal-bright: #53dbc9;
+  --md-sky: #6fc2ff;
+  --md-blue: #2ba5ff;
+
+  --md-shadow-sm: 2px 2px 0 0 var(--md-ink);
+  --md-shadow-md: 4px 4px 0 0 var(--md-ink);
+  --md-shadow-lg: 8px 8px 0 0 var(--md-ink);
+
+  --font-display-stack: var(--font-display), "Space Mono", Menlo, ui-monospace,
+    monospace;
+  --font-sans-stack: var(--font-sans), Inter, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--md-paper);
+  color: var(--md-ink);
+  font-family: var(--font-sans-stack);
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
+  font-family: var(--font-display-stack);
+}
+
+/* ---------- Capsule / pill ---------- */
+.md-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: var(--md-yellow);
+  border: 2px solid var(--md-ink);
+  font-family: var(--font-display-stack);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--md-ink);
+  line-height: 1.3;
+}
+.md-capsule--teal { background: var(--md-teal-bright); }
+.md-capsule--coral { background: var(--md-coral); }
+.md-capsule--sky { background: var(--md-sky); }
+.md-capsule--ink { background: var(--md-ink); color: var(--md-white); }
+
+/* ---------- Card ---------- */
+.md-card {
+  background: var(--md-white);
+  border: 2px solid var(--md-ink);
+  border-radius: 0;
+}
+.md-card--lift {
+  box-shadow: var(--md-shadow-md);
+}
+
+/* ---------- Buttons ---------- */
+.md-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border: 2px solid var(--md-ink);
+  background: var(--md-yellow);
+  color: var(--md-ink);
+  font-family: var(--font-display-stack);
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--md-shadow-sm);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.md-btn:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--md-shadow-md);
+}
+.md-btn:active:not(:disabled) {
+  transform: translate(0, 0);
+  box-shadow: 0 0 0 0 var(--md-ink);
+}
+.md-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.md-btn--secondary { background: var(--md-white); }
+.md-btn--ink { background: var(--md-ink); color: var(--md-white); }
+.md-btn--teal { background: var(--md-teal-bright); }
+.md-btn--lg { padding: 16px 32px; font-size: 18px; }
+.md-btn--sm { padding: 7px 12px; font-size: 12px; box-shadow: none; }
+.md-btn--sm:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--md-shadow-sm);
+}
+
+/* ---------- Team badge ---------- */
+.md-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display-stack);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 2px solid var(--md-ink);
+  background: var(--md-orange);
+  color: var(--md-ink);
+}
+
+/* ---------- Sunbeam burst behind hero ---------- */
+.md-sunbeam {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(
+    circle at 50% -10%,
+    rgba(255, 222, 0, 0.6),
+    transparent 55%
+  );
+  pointer-events: none;
+}
+
+/* ---------- Slot reel spin animation ---------- */
+@keyframes md-spin-flicker {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(-5px); opacity: 0.45; }
+}
+.md-spinning {
+  animation: md-spin-flicker 0.16s linear infinite;
+}
+
+/* ---------- Stat grid ---------- */
+.md-statline {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  border: 2px solid var(--md-ink);
+  background: var(--md-ink);
+}
+.md-stat {
+  background: var(--md-paper-2);
+  padding: 6px 4px;
+  text-align: center;
+}
+.md-stat__label {
+  font-family: var(--font-display-stack);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--md-ink-muted);
+}
+.md-stat__value {
+  font-family: var(--font-display-stack);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* ---------- Custom scrollbar for dropdown ---------- */
+.md-scroll::-webkit-scrollbar { width: 10px; }
+.md-scroll::-webkit-scrollbar-track { background: var(--md-paper-2); }
+.md-scroll::-webkit-scrollbar-thumb {
+  background: var(--md-ink);
+  border: 2px solid var(--md-paper-2);
 }
