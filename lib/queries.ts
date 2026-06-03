@@ -3,12 +3,15 @@ import type { PlayerOption } from "./types";
 
 // All SQL lives here. Decade buckets use `season_year - (season_year % 10)`
 // because DuckDB `/` is float division. Regular Season only for fairness.
+// Tables are fully qualified: we connect to the "md:" workspace (read-only
+// tokens can't switch the active database), so unqualified names won't resolve.
+const DB = "nba_box_scores_v2.main";
 
 /** Available decades, derived from the data (grows automatically as seasons are backfilled). */
 export async function getDecades(): Promise<number[]> {
   const rows = await query<{ decade: number }>(
     `SELECT DISTINCT season_year - (season_year % 10) AS decade
-       FROM schedule
+       FROM ${DB}.schedule
       WHERE season_type = 'Regular Season'
       ORDER BY 1`,
   );
@@ -22,8 +25,8 @@ export async function getTeamWeights(
   return query<{ team: string; weight: number }>(
     `SELECT b.team_abbreviation AS team,
             count(DISTINCT s.season_year) AS weight
-       FROM box_scores b
-       JOIN schedule s USING (game_id)
+       FROM ${DB}.box_scores b
+       JOIN ${DB}.schedule s USING (game_id)
       WHERE b.period = 'FullGame'
         AND s.season_type = 'Regular Season'
         AND s.season_year - (s.season_year % 10) = $1
@@ -72,10 +75,10 @@ export function getPlayerIndex(): Promise<IndexedPlayer[]> {
                 avg(b.fg_attempted)  AS fga, avg(b.fg3_attempted) AS fg3a,
                 avg(b.fg3_made)      AS fg3m, avg(b.ft_attempted) AS fta,
                 avg(b.ft_made)       AS ftm, avg(b.turnovers) AS tov
-           FROM game_quality g
-           JOIN box_scores b
+           FROM ${DB}.game_quality g
+           JOIN ${DB}.box_scores b
              ON g.game_id = b.game_id AND g.entity_id = b.entity_id AND b.period = 'FullGame'
-           JOIN schedule s ON g.game_id = s.game_id
+           JOIN ${DB}.schedule s ON g.game_id = s.game_id
           WHERE g.game_quality >= 0
             AND s.season_type = 'Regular Season'
           GROUP BY 1, 2, 3, 4, 5

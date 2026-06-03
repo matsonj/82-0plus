@@ -1,42 +1,44 @@
-import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
+import { Pool, types } from "pg";
 
-// Cached MotherDuck connection. We stash the promise on globalThis so Next.js
-// dev hot-reloads (which re-evaluate modules) reuse one connection per process,
-// and Vercel Fluid Compute reuses it across warm invocations.
-const DB_NAME = "nba_box_scores_v2";
+// MotherDuck's PostgreSQL wire endpoint — a pure-JS driver, so there are no
+// native binaries to bundle (works cleanly on Vercel). It still runs DuckDB SQL.
+// https://motherduck.com/docs/sql-reference/postgres-endpoint/
+
+// DuckDB/PG numeric types arrive as strings by default; coerce to JS numbers.
+types.setTypeParser(20, (v) => parseInt(v, 10)); // int8 / bigint (counts)
+types.setTypeParser(1700, (v) => parseFloat(v)); // numeric
+
+const PG_HOST =
+  process.env.MOTHERDUCK_PG_HOST ?? "pg.us-east-1-aws.motherduck.com";
 
 declare global {
   // eslint-disable-next-line no-var
-  var __md_conn__: Promise<DuckDBConnection> | undefined;
+  var __md_pool__: Pool | undefined;
 }
 
-async function createConnection(): Promise<DuckDBConnection> {
-  const token = process.env.MOTHERDUCK_TOKEN;
-  if (!token) {
-    throw new Error(
-      "MOTHERDUCK_TOKEN is not set. Add it to .env.local (see .env.example).",
-    );
-  }
-  const path = `md:${DB_NAME}?motherduck_token=${encodeURIComponent(token)}`;
-  const instance = await DuckDBInstance.create(path);
-  return instance.connect();
-}
-
-function getConnection(): Promise<DuckDBConnection> {
-  if (!globalThis.__md_conn__) {
-    globalThis.__md_conn__ = createConnection().catch((err) => {
-      // Reset so the next request can retry instead of caching the failure.
-      globalThis.__md_conn__ = undefined;
-      throw err;
+function getPool(): Pool {
+  if (!globalThis.__md_pool__) {
+    const token = process.env.MOTHERDUCK_TOKEN;
+    if (!token) {
+      throw new Error(
+        "MOTHERDUCK_TOKEN is not set. Add it to .env.local (see .env.example).",
+      );
+    }
+    // Connect to the default workspace ("md:") and reference the database with
+    // fully-qualified names — read-only tokens can't change the active workspace.
+    globalThis.__md_pool__ = new Pool({
+      host: PG_HOST,
+      port: 5432,
+      user: "postgres",
+      password: token,
+      database: "md:",
+      ssl: { rejectUnauthorized: true },
+      max: 4,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 15_000,
     });
   }
-  return globalThis.__md_conn__;
-}
-
-function normalize(value: unknown): unknown {
-  // DuckDB returns BIGINT as JS bigint; convert to number for JSON friendliness.
-  if (typeof value === "bigint") return Number(value);
-  return value;
+  return globalThis.__md_pool__;
 }
 
 export type QueryParam = string | number | null;
@@ -46,14 +48,6 @@ export async function query<T = Record<string, unknown>>(
   sql: string,
   params: QueryParam[] = [],
 ): Promise<T[]> {
-  const conn = await getConnection();
-  const reader =
-    params.length > 0
-      ? await conn.runAndReadAll(sql, params)
-      : await conn.runAndReadAll(sql);
-  return reader.getRowObjects().map((row) => {
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(row)) out[key] = normalize(row[key]);
-    return out as T;
-  });
+  const res = await getPool().query(sql, params);
+  return res.rows as T[];
 }
