@@ -22,9 +22,10 @@ const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play";
 type GameType = "free" | "daily";
 
-// Each time a decade is used its odds drop 30% (weight × 0.7 per use).
+// Each time a decade is used its odds drop 90% (weight × 0.1 per use) so the
+// draft spreads across eras instead of clustering in the same time period.
 function pickWeightedDecade(pool: number[], usage: Record<number, number>): number {
-  const weights = pool.map((d) => Math.pow(0.7, usage[d] ?? 0));
+  const weights = pool.map((d) => Math.pow(0.1, usage[d] ?? 0));
   const total = weights.reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
   for (let i = 0; i < pool.length; i++) {

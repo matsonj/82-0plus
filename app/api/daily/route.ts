@@ -74,10 +74,10 @@ export async function GET(req: NextRequest) {
         [...playableByDecade.get(d)!].some((t) => !usedTeams.has(t)),
       );
       if (candidates.length === 0) break;
-      // Used decades decay 30% per use.
+      // Used decades decay 90% per use, so the daily slots spread across eras.
       const decade = weightedPick(
         candidates,
-        candidates.map((d) => Math.pow(0.7, usage[d] ?? 0)),
+        candidates.map((d) => Math.pow(0.1, usage[d] ?? 0)),
         rng,
       );
 
