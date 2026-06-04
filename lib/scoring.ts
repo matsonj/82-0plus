@@ -58,14 +58,16 @@ export interface ScoringPlayer {
 export const SCORING_CONFIG = {
   GAMES: 82,
   AVG_GQ: 0.5,
-  NET_PER_GQ: 34, // GQ→net slope (≈ the real team-season slope; lower = talent matters less)
+  NET_PER_GQ: 40, // GQ→net slope (talent weight)
   WINS_PER_NET: 2.7,
   BASE_WINS: 41,
 
   // Fit penalties, in net-rating points subtracted at their worst.
-  USAGE_MAX_PEN: 14, // shot-overlap of ball-dominant stars
-  BALLHOG_MAX_PEN: 9, // iso-heavy, low assisted-FG%
-  OUTSIDE_PEN_PER_EXTRA: 3, // per non-shooter beyond the first (clogs the paint)
+  USAGE_MAX_PEN: 20, // shot-overlap: stars must sacrifice usage to fit together
+  BALLHOG_MAX_PEN: 11, // iso-heavy, low assisted-FG%
+  // Outside shooting (stepped): 0–1 non-shooters is fine, 2 hurts, 3+ is brutal.
+  OUTSIDE_PEN_2: 5, // exactly two non-shooters
+  OUTSIDE_PEN_3PLUS: 15, // three or more — the paint is hopelessly clogged
 
   // Archetype-balance penalties (by natural position).
   NO_GUARD_PEN: 9, // no true ball-handler / perimeter defender
@@ -149,9 +151,13 @@ export function simulateRoster(
     (p.fta >= 1 && p.ftm / p.fta <= cfg.FT_LIABILITY_MAX) ||
     (p.fg3a >= cfg.FG3_MIN_ATTEMPTS && p.fg3m / p.fg3a < cfg.FG3_LIABILITY_MAX);
   const nonShooters = roster.reduce((c, p) => c + (isNonShooter(p) ? 1 : 0), 0);
-  const extraNonShooters = Math.max(0, nonShooters - 1);
-  const outsidePen = cfg.OUTSIDE_PEN_PER_EXTRA * extraNonShooters;
-  const shootFactor = clamp(1 - extraNonShooters / Math.max(1, n - 1), 0, 1);
+  const outsidePen =
+    nonShooters >= 3
+      ? cfg.OUTSIDE_PEN_3PLUS
+      : nonShooters === 2
+        ? cfg.OUTSIDE_PEN_2
+        : 0;
+  const shootFactor = nonShooters <= 1 ? 1 : 0; // synergy needs ≤1 non-shooter
 
   // Ball movement: share of made FGs that were assisted. Below target → ball-hog
   // tax on iso-heavy stat accumulators who don't play winning basketball.

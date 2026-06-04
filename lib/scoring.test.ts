@@ -56,21 +56,20 @@ describe("simulateRoster", () => {
     expect(iso.wins).toBeLessThan(passing.wins);
   });
 
-  it("outside shooting: one non-shooter is free, each extra is taxed", () => {
+  it("outside shooting: 0–1 non-shooters free, 2 hurts, 3+ is brutal", () => {
     // balancedRoster shooters all have FT% ~0.67–0.93 and decent 3P% → 0 liabilities.
     const base = balancedRoster(0.78);
     const clean = simulateRoster(base);
     expect(clean.nonShooters).toBe(0);
     expect(clean.outsidePen).toBe(0);
-    // Turn two players into bad-FT, no-3 bigs (Shaq/Ben-Wallace types).
+    // Turn players into bad-FT, no-3 bigs (Shaq/Ben-Wallace types).
     const brick = (x: ScoringPlayer): ScoringPlayer => ({ ...x, fta: 8, ftm: 4, fg3a: 0, fg3m: 0 });
-    const oneHog = base.map((x, i) => (i < 1 ? brick(x) : x));
-    const twoHogs = base.map((x, i) => (i < 2 ? brick(x) : x));
-    const threeHogs = base.map((x, i) => (i < 3 ? brick(x) : x));
-    expect(simulateRoster(oneHog).outsidePen).toBe(0); // one is free
-    expect(simulateRoster(twoHogs).outsidePen).toBe(C.OUTSIDE_PEN_PER_EXTRA); // 1 extra
-    expect(simulateRoster(threeHogs).outsidePen).toBe(2 * C.OUTSIDE_PEN_PER_EXTRA);
-    expect(simulateRoster(threeHogs).wins).toBeLessThan(clean.wins);
+    const stamp = (k: number) => simulateRoster(base.map((x, i) => (i < k ? brick(x) : x)));
+    expect(stamp(1).outsidePen).toBe(0); // one is free
+    expect(stamp(2).outsidePen).toBe(C.OUTSIDE_PEN_2);
+    expect(stamp(3).outsidePen).toBe(C.OUTSIDE_PEN_3PLUS);
+    expect(stamp(4).outsidePen).toBe(C.OUTSIDE_PEN_3PLUS); // capped at 3+
+    expect(stamp(3).wins).toBeLessThan(clean.wins);
   });
 
   it("a great FT shooter who never shoots threes is NOT a non-shooter (era-fair)", () => {
