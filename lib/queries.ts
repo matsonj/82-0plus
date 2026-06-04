@@ -42,6 +42,9 @@ export interface IndexedPlayer {
   fgm: number;
   ftm: number;
   tsplus: number; // era-relative true-shooting (player TS% / league TS% that season), clamped
+  height_in: number; // real height in inches (default ~league avg if bio missing)
+  pos: string | null; // real basketball-reference position (null → derive from box line)
+  all_def: number; // All-Defensive team on best_season: 1 (1st), 2 (2nd), 0 (none)
 }
 
 /**
@@ -127,7 +130,8 @@ export function getPlayerIndex(
       try {
         const rows = await query<IndexedPlayer>(
           `SELECT entity_id, player_name, team, decade, best_season, value, gp, mpg,
-                  pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m, fgm, ftm, tsplus
+                  pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m, fgm, ftm, tsplus,
+                  height_in, pos, all_def
              FROM ${DB}.player_index`,
           [],
           options,
@@ -194,7 +198,7 @@ function computePlayerIndexLive(
                 ) AS rn
            FROM per_season
        )
-       SELECT entity_id, player_name, team, decade,
+       SELECT r.entity_id, player_name, team, decade,
               r.season_year AS best_season,
               round(med_gq, 3) AS value, gp, round(mpg, 1) AS mpg,
               round(pts, 1) AS pts, round(reb, 1) AS reb, round(ast, 1) AS ast,
@@ -231,9 +235,15 @@ function computePlayerIndexLive(
               round(greatest(0.80, least(1.30,
                 CASE WHEN (fga + 0.44 * fta) > 0 AND lt.lg_ts > 0
                      THEN (pts / (2 * (fga + 0.44 * fta))) / lt.lg_ts
-                     ELSE 1.0 END)), 3) AS tsplus
+                     ELSE 1.0 END)), 3) AS tsplus,
+              -- Real height/position (b-ref) + All-Defense on the card's season.
+              COALESCE(pb.height_in, 79) AS height_in,
+              pb.pos AS pos,
+              COALESCE(ad.all_team, 0) AS all_def
          FROM ranked r
          JOIN league_ts lt ON lt.season_year = r.season_year
+         LEFT JOIN ${DB}.player_bio pb ON pb.entity_id = r.entity_id
+         LEFT JOIN ${DB}.all_defense ad ON ad.entity_id = r.entity_id AND ad.season_year = r.season_year
         WHERE rn = 1`,
     [],
     options,
@@ -324,6 +334,9 @@ export async function hydrateRoster(
       fgm: p.fgm, ftm: p.ftm,
       // Default to league-average if a stale/old index row lacks tsplus.
       tsplus: Number.isFinite(p.tsplus) ? p.tsplus : 1,
+      height_in: Number.isFinite(p.height_in) ? p.height_in : 79,
+      pos: p.pos ?? null,
+      allDef: p.all_def ?? 0,
     });
     lines.push({
       entity_id: p.entity_id, player_name: p.player_name, team: p.team,

@@ -10,6 +10,7 @@ function p(over: Partial<ScoringPlayer>): ScoringPlayer {
   return {
     gq: 0.5, mpg: 36, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0,
     fga: 0, fg3a: 0, fg3m: 0, fta: 0, tov: 0, fgm: 0, ftm: 0, tsplus: 1.0,
+    height_in: 79, pos: null, allDef: 0,
     ...over,
   };
 }
@@ -33,9 +34,29 @@ describe("simulateRoster", () => {
     expect(r.usagePen).toBe(0);
     expect(r.outsidePen).toBe(0);
     expect(r.ballhogPen).toBe(0);
+    expect(r.sizePen).toBe(0); // 5 × 79" = 395 ≥ target
+    expect(r.defBuff).toBe(0);
     expect(r.synergyBonus).toBe(0);
     expect(r.netRating).toBe(0);
     expect(r.wins).toBe(41);
+  });
+
+  it("a too-short lineup is penalized; All-Defense adds effective height + a margin buff", () => {
+    const short = balancedRoster(0.75).map((x) => ({ ...x, height_in: 75 }));
+    const r = simulateRoster(short);
+    expect(r.sizePen).toBeGreaterThan(0); // 5 × 75 = 375, in the penalty ramp
+    // Make two of them All-Defense 1st team: effective height up, margin buff up.
+    const stoppers = short.map((x, i) => (i < 2 ? { ...x, allDef: 1 } : x));
+    const rs = simulateRoster(stoppers);
+    expect(rs.defBuff).toBe(2 * C.DEF_MARGIN_1ST);
+    expect(rs.sizePen).toBeLessThan(r.sizePen); // effective inches reduce the size hit
+    expect(rs.wins).toBeGreaterThan(r.wins);
+  });
+
+  it("All-Defense margin buff is capped", () => {
+    const allStoppers = balancedRoster(0.7).map((x) => ({ ...x, allDef: 1 }));
+    const r = simulateRoster(allStoppers);
+    expect(r.defBuff).toBe(C.DEF_MARGIN_CAP); // 5×2=10 capped to 7
   });
 
   it("82-0 requires ≈ +15 net rating", () => {

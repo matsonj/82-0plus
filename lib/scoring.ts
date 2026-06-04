@@ -18,6 +18,9 @@ export interface ScoringPlayer {
   fgm: number;
   ftm: number;
   tsplus: number; // era-relative true-shooting (player TS% / league TS% that season)
+  height_in: number; // real height (inches)
+  pos: string | null; // real b-ref position (drives balance/eligibility; null → derived)
+  allDef: number; // All-Defensive team on the drafted season: 1 (1st), 2 (2nd), 0 (none)
 }
 
 /**
@@ -41,9 +44,14 @@ export interface ScoringPlayer {
  *     • ball-hog   — winning basketball moves the ball: if too few of the team's
  *                    made shots are assisted (assisted-FG% below target), a tax
  *                    hits iso-heavy stat accumulators.
- *     • balance    — by NATURAL position: no true guard (no real ball-handler /
- *                    perimeter D), no true big (no rim protection), or a lopsided
- *                    archetype (4+ of one).
+ *     • balance    — by REAL position (b-ref): no true guard (no ball-handler) or
+ *                    a lopsided archetype (4+ sharing one spot).
+ *     • size       — total real height vs a threshold: a team that's too short
+ *                    gets penalized. All-Defense players add EFFECTIVE height (a
+ *                    lockdown defender plays bigger), so a switchy small-ball five
+ *                    isn't dinged for size the way a soft small lineup is.
+ *     • defense    — All-Defensive selections add a net-rating margin bonus (GQ
+ *                    undercounts defense, so elite stoppers are buffed back up).
  *     • synergy    — a small bonus when a roster spaces, shares, doesn't overload
  *                    usage AND is balanced: good construction is rewarded, not
  *                    just un-penalized. Gated so it can't manufacture net from a
@@ -69,10 +77,23 @@ export const SCORING_CONFIG = {
   OUTSIDE_PEN_2: 5, // exactly two non-shooters
   OUTSIDE_PEN_3PLUS: 15, // three or more — the paint is hopelessly clogged
 
-  // Archetype-balance penalties (by natural position).
+  // Archetype-balance penalties (by REAL position).
   NO_GUARD_PEN: 9, // no true ball-handler / perimeter defender
-  NO_BIG_PEN: 7, // no true rim protection / rebounding
-  SKEW_PEN: 3, // per player beyond 3 sharing one natural position
+  SKEW_PEN: 3, // per player beyond 3 sharing one position
+
+  // Size (total real height of the five vs a threshold). All-Defense players add
+  // effective inches (they defend bigger than they measure).
+  SIZE_MAX_PEN: 6, // worst-case penalty for a far-too-short lineup
+  SIZE_TARGET_TOTAL: 393, // sum of 5 heights at/above which there's no penalty (~6'7" avg)
+  SIZE_FLOOR_TOTAL: 373, // sum at/below which the full penalty applies (~6'2.6" avg)
+  DEF_HEIGHT_1ST: 4, // effective inches an All-Def 1st-teamer adds to team height
+  DEF_HEIGHT_2ND: 2, // … 2nd-teamer
+
+  // Defense margin bonus (GQ undercounts defense): net rating added per All-Def
+  // selection on the drafted season.
+  DEF_MARGIN_1ST: 2,
+  DEF_MARGIN_2ND: 1,
+  DEF_MARGIN_CAP: 7, // soft cap on the total defensive buff
 
   // Construction synergy: a well-spaced, ball-moving, non-overloaded AND balanced
   // roster amplifies talent — the upside that lets a great team reach 82-0.
@@ -116,6 +137,7 @@ export function simulateRoster(
       usageFactor: 1, assistFactor: 1, nonShooters: 0,
       totalAst: 0, assistedPct: 0,
       usagePen: 0, outsidePen: 0, ballhogPen: 0, balancePen: 0, synergyBonus: 0,
+      sizePen: 0, defBuff: 0, avgHeight: 0, allDefCount: 0,
       roleCounts: { G: 0, W: 0, B: 0 },
       totalPoss: 0,
       teamBox: { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgPct: 0, ftPct: 0, tov: 0 },
@@ -167,14 +189,38 @@ export function simulateRoster(
   const usagePen = cfg.USAGE_MAX_PEN * (1 - usageFactor);
   const ballhogPen = cfg.BALLHOG_MAX_PEN * (1 - assistFactor);
 
-  // Archetype balance by natural position.
+  // Archetype balance by REAL position.
   const roleCounts = { G: 0, W: 0, B: 0 } as Record<Role, number>;
   for (const p of roster) roleCounts[primaryRole(p)] += 1;
   let balancePen = 0;
   if (roleCounts.G === 0) balancePen += cfg.NO_GUARD_PEN;
-  if (roleCounts.B === 0) balancePen += cfg.NO_BIG_PEN;
   const maxRole = Math.max(roleCounts.G, roleCounts.W, roleCounts.B);
   if (maxRole > 3) balancePen += cfg.SKEW_PEN * (maxRole - 3);
+
+  // All-Defense: count selections on each drafted season.
+  const n1st = roster.reduce((c, p) => c + (p.allDef === 1 ? 1 : 0), 0);
+  const n2nd = roster.reduce((c, p) => c + (p.allDef === 2 ? 1 : 0), 0);
+  const allDefCount = n1st + n2nd;
+
+  // Size: total real height, with All-Defense players adding effective inches
+  // (a stopper defends bigger than he measures). Too short → penalty.
+  const heightTotal = sum((p) => p.height_in);
+  const effectiveHeight =
+    heightTotal + cfg.DEF_HEIGHT_1ST * n1st + cfg.DEF_HEIGHT_2ND * n2nd;
+  const sizePen =
+    cfg.SIZE_MAX_PEN *
+    clamp(
+      (cfg.SIZE_TARGET_TOTAL - effectiveHeight) /
+        (cfg.SIZE_TARGET_TOTAL - cfg.SIZE_FLOOR_TOTAL),
+      0,
+      1,
+    );
+
+  // Defense margin bonus: GQ undercounts defense, so All-Def selections buff net.
+  const defBuff = Math.min(
+    cfg.DEF_MARGIN_CAP,
+    cfg.DEF_MARGIN_1ST * n1st + cfg.DEF_MARGIN_2ND * n2nd,
+  );
 
   // Synergy rewards a well-spaced, ball-moving, non-overloaded AND balanced
   // roster, scaled by talent — the only way to clear the bar for a perfect season.
@@ -185,7 +231,8 @@ export function simulateRoster(
       : 0;
 
   const netRating =
-    baseNet - usagePen - outsidePen - ballhogPen - balancePen + synergyBonus;
+    baseNet - usagePen - outsidePen - ballhogPen - balancePen - sizePen +
+    defBuff + synergyBonus;
 
   const wins = clamp(
     Math.round(cfg.BASE_WINS + cfg.WINS_PER_NET * netRating),
@@ -239,6 +286,10 @@ export function simulateRoster(
     ballhogPen: round1(ballhogPen),
     balancePen: round1(balancePen),
     synergyBonus: round1(synergyBonus),
+    sizePen: round1(sizePen),
+    defBuff: round1(defBuff),
+    avgHeight: Math.round(heightTotal / n),
+    allDefCount,
     roleCounts,
     totalPoss: round1(totalPoss),
     teamBox,

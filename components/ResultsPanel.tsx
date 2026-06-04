@@ -216,9 +216,23 @@ export function ResultsPanel({
         <Adj
           label="Lineup balance"
           detail={`${result.roleCounts.G}G · ${result.roleCounts.W}W · ${result.roleCounts.B}B${
-            result.roleCounts.G === 0 ? " — no guard" : result.roleCounts.B === 0 ? " — no big" : ""
+            result.roleCounts.G === 0 ? " — no guard" : ""
           }`}
           value={-result.balancePen}
+        />
+        <Adj
+          label="Size"
+          detail={`${Math.floor(result.avgHeight / 12)}'${result.avgHeight % 12}" avg`}
+          value={-result.sizePen}
+        />
+        <Adj
+          label="Defense"
+          detail={
+            result.allDefCount > 0
+              ? `${result.allDefCount} All-Defensive`
+              : "no All-Defensive"
+          }
+          value={result.defBuff}
         />
         <Adj label="Construction synergy" value={result.synergyBonus} />
         <div className="mt-0.5 flex items-baseline justify-between border-t-2 border-[var(--md-ink)] pt-1 font-display text-sm font-bold">
