@@ -9,6 +9,10 @@ import type { ScoringPlayer } from "./scoring";
 // tokens can't switch the active database), so unqualified names won't resolve.
 const DB = "nba_box_scores_v2.main";
 
+// A team+decade combo must have at least this many drafted-eligible players to
+// appear in the slot machine (keeps thin combos out of the rotation).
+const MIN_PLAYERS_PER_COMBO = 10;
+
 /** Full per-(player, team, decade) row — server-side only (carries GQ + sim inputs). */
 export interface IndexedPlayer {
   entity_id: string;
@@ -39,7 +43,28 @@ export interface IndexedPlayer {
  */
 export async function getDecades(): Promise<number[]> {
   const index = await getPlayerIndex();
-  return [...new Set(index.map((p) => p.decade))].sort((a, b) => a - b);
+  const counts = new Map<string, number>(); // "team|decade" → player count
+  for (const p of index) {
+    const k = `${p.team}|${p.decade}`;
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const decades = new Set<number>();
+  for (const [k, c] of counts) {
+    if (c >= MIN_PLAYERS_PER_COMBO) decades.add(Number(k.split("|")[1]));
+  }
+  return [...decades].sort((a, b) => a - b);
+}
+
+/** Teams in a decade with enough players to be offered (≥ MIN_PLAYERS_PER_COMBO). */
+export async function getPlayableTeams(decade: number): Promise<Set<string>> {
+  const index = await getPlayerIndex();
+  const counts = new Map<string, number>();
+  for (const p of index) {
+    if (p.decade === decade) counts.set(p.team, (counts.get(p.team) ?? 0) + 1);
+  }
+  return new Set(
+    [...counts].filter(([, c]) => c >= MIN_PLAYERS_PER_COMBO).map(([t]) => t),
+  );
 }
 
 /** Teams that appear in a decade, with a weight = number of seasons present. */
@@ -199,12 +224,17 @@ export async function getPlayers(
     .map((p) => toPublic(p, mode));
 }
 
-/** Decades in which a team has draftable players (for the same-team decade skip). */
+/** Decades where a team has enough players to be offered (for the decade skip). */
 export async function getTeamDecades(team: string): Promise<number[]> {
   const index = await getPlayerIndex();
-  return [...new Set(index.filter((p) => p.team === team).map((p) => p.decade))].sort(
-    (a, b) => a - b,
-  );
+  const counts = new Map<number, number>();
+  for (const p of index) {
+    if (p.team === team) counts.set(p.decade, (counts.get(p.decade) ?? 0) + 1);
+  }
+  return [...counts]
+    .filter(([, c]) => c >= MIN_PLAYERS_PER_COMBO)
+    .map(([d]) => d)
+    .sort((a, b) => a - b);
 }
 
 /**

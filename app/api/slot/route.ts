@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTeamWeights, getPlayerIndex } from "@/lib/queries";
+import { getTeamWeights, getPlayableTeams } from "@/lib/queries";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,19 +26,19 @@ export async function GET(req: NextRequest) {
     if (!Number.isInteger(decade) || decade < 1900 || decade > 2100) {
       return NextResponse.json({ error: "invalid decade" }, { status: 400 });
     }
-    const exclude = sp.get("exclude"); // avoid this team on a team-skip re-roll
-
-    // Only offer teams that actually have draftable players this decade. The slot
-    // pool (any team with games) and the player index (≥20 qualifying games per
-    // season) use different filters, so a sparse team — e.g. CIN in the 1950s —
-    // could be offered with nobody to draft. Intersect the two.
-    const [teamWeights, index] = await Promise.all([
-      getTeamWeights(decade),
-      getPlayerIndex(),
-    ]);
-    const playable = new Set(
-      index.filter((p) => p.decade === decade).map((p) => p.team),
+    // Teams to exclude (comma-separated): already-drafted teams never repeat,
+    // plus the current team on a team-skip re-roll.
+    const excludeParam = sp.get("exclude");
+    const excludes = new Set(
+      excludeParam ? excludeParam.split(",").filter(Boolean) : [],
     );
+
+    // Only offer teams with enough players this decade (≥ MIN_PLAYERS_PER_COMBO),
+    // weighted by their season-count.
+    const [teamWeights, playable] = await Promise.all([
+      getTeamWeights(decade),
+      getPlayableTeams(decade),
+    ]);
     const teams = teamWeights.filter((t) => playable.has(t.team));
     if (teams.length === 0) {
       return NextResponse.json(
@@ -47,8 +47,10 @@ export async function GET(req: NextRequest) {
       );
     }
     let pool = teams;
-    if (exclude) {
-      const filtered = teams.filter((t) => t.team !== exclude);
+    if (excludes.size > 0) {
+      const filtered = teams.filter((t) => !excludes.has(t.team));
+      // Only fall back to the full pool if exclusions would leave nothing
+      // (a sparse decade whose teams are all used) — otherwise never repeat.
       if (filtered.length > 0) pool = filtered;
     }
     return NextResponse.json({ team: weightedPick(pool), decade });

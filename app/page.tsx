@@ -17,6 +17,18 @@ import { ResultsPanel } from "@/components/ResultsPanel";
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play";
 
+// Each time a decade is used its odds drop 30% (weight × 0.7 per use).
+function pickWeightedDecade(pool: number[], usage: Record<number, number>): number {
+  const weights = pool.map((d) => Math.pow(0.7, usage[d] ?? 0));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < pool.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return pool[i];
+  }
+  return pool[pool.length - 1];
+}
+
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("menu");
   const [mode, setMode] = useState<GameMode>("classic");
@@ -39,6 +51,8 @@ export default function Home() {
 
   const rollSeq = useRef(0); // guards against out-of-order /api/slot responses
   const rollActive = useRef(false); // synchronous in-flight flag for the auto-start effect
+  const lineupRef = useRef(lineup); // latest lineup for rollRound (avoids stale closure)
+  lineupRef.current = lineup;
 
   const draftedCount = lineup.filter(Boolean).length;
   const draftDone = draftedCount === KINDS.length;
@@ -47,19 +61,27 @@ export default function Home() {
     .map((e) => (e as LineupEntry).player.entity_id);
 
   const rollRound = useCallback(
-    async (opts: { decade?: number; exclude?: string } = {}) => {
+    async (opts: { decade?: number; excludeTeam?: string } = {}) => {
       if (decades.length === 0) return;
+      // Already-drafted teams never repeat; used decades are down-weighted.
+      const committed = lineupRef.current.filter(Boolean) as LineupEntry[];
+      const usedTeams = committed.map((e) => e.team);
+      const usage: Record<number, number> = {};
+      for (const e of committed) usage[e.decade] = (usage[e.decade] ?? 0) + 1;
+      const excludes = [
+        ...new Set([...usedTeams, ...(opts.excludeTeam ? [opts.excludeTeam] : [])]),
+      ];
+
       const myId = ++rollSeq.current;
       rollActive.current = true;
       setRolling(true);
       setPending(null);
       setSelected(null);
-      const decade =
-        opts.decade ?? decades[Math.floor(Math.random() * decades.length)];
+      const decade = opts.decade ?? pickWeightedDecade(decades, usage);
       setCurrentDecade(decade);
       setCurrentTeam(null);
       try {
-        const url = `/api/slot?decade=${decade}${opts.exclude ? `&exclude=${opts.exclude}` : ""}`;
+        const url = `/api/slot?decade=${decade}${excludes.length ? `&exclude=${excludes.join(",")}` : ""}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("roll failed");
         const data = await res.json();
@@ -208,7 +230,7 @@ export default function Home() {
   const teamSkip = () => {
     if (teamSkips <= 0 || currentDecade === null || pending || rolling) return;
     setTeamSkips((n) => n - 1);
-    rollRound({ decade: currentDecade, exclude: currentTeam ?? undefined });
+    rollRound({ decade: currentDecade, excludeTeam: currentTeam ?? undefined });
   };
 
   // Decade skip keeps the team and only moves to an era where that team has
@@ -232,7 +254,11 @@ export default function Home() {
         return; // keep the skip
       }
       setDecadeSkips((n) => n - 1);
-      setCurrentDecade(others[Math.floor(Math.random() * others.length)]);
+      const usage: Record<number, number> = {};
+      for (const e of lineupRef.current) {
+        if (e) usage[e.decade] = (usage[e.decade] ?? 0) + 1;
+      }
+      setCurrentDecade(pickWeightedDecade(others, usage));
     } catch {
       /* keep the skip on failure */
     }
@@ -435,7 +461,7 @@ export default function Home() {
                     onNoneEligible={() =>
                       rollRound({
                         decade: currentDecade ?? undefined,
-                        exclude: currentTeam ?? undefined,
+                        excludeTeam: currentTeam ?? undefined,
                       })
                     }
                   />
