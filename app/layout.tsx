@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Mono, Inter } from "next/font/google";
 import "./globals.css";
+import { SITE_URL } from "@/lib/site";
 
 // Aeonik Mono is the real brand face; Space Mono is the documented fallback.
 const display = Space_Mono({
@@ -15,6 +16,7 @@ const sans = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "82-0+ · Build an undefeated season",
   description:
     "Draft a 5-man roster across the decades and see if it can go 82-0. Powered by MotherDuck Game Quality.",

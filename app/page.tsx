@@ -15,11 +15,12 @@ import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
+import { encodeShare } from "@/lib/shareCode";
+import { SITE_URL } from "@/lib/site";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play";
 type GameType = "free" | "daily";
-const SITE_URL = "https://82-0plus.vercel.app";
 
 // Each time a decade is used its odds drop 30% (weight × 0.7 per use).
 function pickWeightedDecade(pool: number[], usage: Record<number, number>): number {
@@ -396,13 +397,34 @@ export default function Home() {
       : mode === "hoopiq"
         ? "HoopIQ"
         : "Classic";
+  // Encode the finished season into a shareable link that renders a rich
+  // preview (dynamic OG image) when pasted into Slack/Twitter/etc.
+  const shareUrl = result
+    ? `${SITE_URL}/s?r=${encodeURIComponent(
+        encodeShare({
+          w: result.wins,
+          l: result.losses,
+          n: result.netRating,
+          p: result.perfect,
+          m: modeLabel,
+          r: resultRoster.map((r) => ({
+            t: r.team,
+            s: r.best_season,
+            name: r.player_name,
+            pts: r.pts,
+            reb: r.reb,
+            ast: r.ast,
+          })),
+        }),
+      )}`
+    : SITE_URL;
   const shareText = result
     ? [
         `82-0+ 🏀 ${result.wins}-${result.losses} (${result.netRating >= 0 ? "+" : ""}${result.netRating} net) · ${modeLabel}`,
         ...resultRoster.map(
           (r) => `${r.team} '${String(r.best_season).slice(2)} ${r.player_name}`,
         ),
-        SITE_URL,
+        shareUrl,
       ].join("\n")
     : "";
 
