@@ -82,26 +82,41 @@ describe("simulateRoster", () => {
     expect(r.usagePen).toBeGreaterThan(2);
   });
 
-  it("teamBox: integer totals + attempt-weighted FG%/FT% (mpg=42 ⇒ raw sums)", () => {
-    // At 42 mpg the per-36+bench scale (×42/mpg) is 1, so totals equal raw sums.
+  it("teamBox: integer totals + attempt-weighted FG%/FT% (mpg=42, on-budget ⇒ raw sums)", () => {
+    // At 42 mpg the per-36+bench scale is 1; poss = 18 + 0.44·5 + 1.8 = 22/slot
+    // ⇒ totalPoss = 110 = budget ⇒ usageScale 1, so totals equal raw sums.
     const five = Array.from({ length: 5 }, () =>
-      p({ gq: 0.7, mpg: 42, pts: 20, reb: 6, ast: 4, stl: 1, blk: 0.5, tov: 2.5,
-          fga: 14, fgm: 7, fta: 4, ftm: 3 }),
+      p({ gq: 0.7, mpg: 42, pts: 20, reb: 6, ast: 4, stl: 1, blk: 0.5, tov: 1.8,
+          fga: 18, fgm: 9, fta: 5, ftm: 4 }),
     );
     const r = simulateRoster(five);
+    expect(r.usageFactor).toBe(1);
     expect(r.teamBox).toEqual({
       pts: 100, reb: 30, ast: 20, stl: 5, blk: 3, // whole integers (blk 2.5 → 3)
-      fgPct: 50, // 35/70
-      ftPct: 75, // 15/20
-      tov: 13, // 12.5 → 13
+      fgPct: 50, // 45/90
+      ftPct: 80, // 20/25
+      tov: 9, // 1.8 × 5
     });
   });
 
   it("team box extrapolates per-36 with bench fill (stat × 42 / mpg)", () => {
-    // 20 pts in 24 mpg → 20×42/24 = 35 per slot; ×5 = 175.
-    const five = Array.from({ length: 5 }, () => p({ mpg: 24, pts: 20 }));
+    // 20 pts in 24 mpg → 20×42/24 = 35 per slot; ×5 = 175. poss 22/slot ⇒ on budget.
+    const five = Array.from({ length: 5 }, () => p({ mpg: 24, pts: 20, fga: 20, tov: 2 }));
     const r = simulateRoster(five);
+    expect(r.usageFactor).toBe(1);
     expect(r.teamBox.pts).toBe(175);
+  });
+
+  it("usage scales the box: over-budget discounts, under-budget bumps up", () => {
+    const raw = 100; // 20 pts × 5 at mpg 42 (scale 1)
+    const over = simulateRoster(
+      Array.from({ length: 5 }, () => p({ mpg: 42, pts: 20, fga: 30, tov: 4 })),
+    ); // poss 34/slot → 170 total → scale < 1
+    const under = simulateRoster(
+      Array.from({ length: 5 }, () => p({ mpg: 42, pts: 20, fga: 12, tov: 0 })),
+    ); // poss 12/slot → 60 total → scale > 1
+    expect(over.teamBox.pts).toBeLessThan(raw);
+    expect(under.teamBox.pts).toBeGreaterThan(raw);
   });
 
   it("scoreline derives from the team box: pf = box pts, pa = pf − net", () => {

@@ -75,6 +75,8 @@ export const SCORING_CONFIG = {
 
   // Fit targets.
   POSS_BUDGET_PER_SLOT: 22, // possessions (fga + 0.44·fta + tov) one slot can absorb
+  USAGE_BOX_MIN: 0.6, // floor on the box usage-scale (heavy overload can't zero scoring)
+  USAGE_BOX_MAX: 1.4, // cap on the box usage-scale (under-usage bump is bounded)
   EFF_FLOOR: 0.85, // team TS+ at/below this → full efficiency penalty
   EFF_PAR: 1.0, // league-average TS+ → no efficiency penalty (neutral)
   EFF_ELITE: 1.12, // team TS+ at/above this → full synergy eligibility
@@ -131,10 +133,13 @@ export function simulateRoster(
   const baseNet = cfg.NET_PER_GQ * (meanGQ - cfg.AVG_GQ);
 
   // Fit factors in [0, 1] (1 = no problem).
-  const usageFactor = Math.min(
-    1,
-    (n * cfg.POSS_BUDGET_PER_SLOT) / Math.max(totalPoss, 1e-9),
-  );
+  const usageRatio =
+    totalPoss > 0 ? (n * cfg.POSS_BUDGET_PER_SLOT) / totalPoss : 1;
+  // Penalty/synergy only care about OVER-budget overlap (capped at 1).
+  const usageFactor = Math.min(1, usageRatio);
+  // The box uses the uncapped ratio (clamped): >1 bumps an under-used lineup's
+  // scoring up to fill the spare possessions, <1 discounts an overloaded one.
+  const usageScale = clamp(usageRatio, cfg.USAGE_BOX_MIN, cfg.USAGE_BOX_MAX);
   // Efficiency only penalizes BELOW league-average TS+ (par = no penalty);
   // above-average efficiency earns its upside through the synergy gate below.
   const efficiencyFactor = clamp(
@@ -181,18 +186,26 @@ export function simulateRoster(
   // by a bench player at 50% (= 6 effective minutes) → stat × 42 / mpg. Summed
   // across the five, this is a full-team per-game line; FG%/FT% derive from the
   // same minutes-weighted makes/attempts (the ×42 cancels in the ratio).
+  //
+  // Possession-consuming stats (scoring, assists, turnovers) are then scaled by
+  // usageScale: an overloaded lineup of ball-dominant stars only realizes a
+  // fraction of its combined shot diet, while an under-used lineup fills the
+  // spare possessions and bumps up. Rebounds/steals/blocks aren't usage-
+  // constrained, so they're left whole; FG%/FT% are unchanged (the scale would
+  // cancel in the ratio, so it isn't applied to makes/attempts).
   const EFF_MIN = 42;
   const ext = (f: (p: ScoringPlayer) => number) =>
     roster.reduce((a, p) => a + (p.mpg > 0 ? (f(p) * EFF_MIN) / p.mpg : 0), 0);
+  const u = usageScale;
   const teamBox = {
-    pts: Math.round(ext((p) => p.pts)),
+    pts: Math.round(ext((p) => p.pts) * u),
     reb: Math.round(ext((p) => p.reb)),
-    ast: Math.round(ext((p) => p.ast)),
+    ast: Math.round(ext((p) => p.ast) * u),
     stl: Math.round(ext((p) => p.stl)),
     blk: Math.round(ext((p) => p.blk)),
     fgPct: pctOf(ext((p) => p.fgm), ext((p) => p.fga)),
     ftPct: pctOf(ext((p) => p.ftm), ext((p) => p.fta)),
-    tov: Math.round(ext((p) => p.tov)),
+    tov: Math.round(ext((p) => p.tov) * u),
   };
 
   return {
