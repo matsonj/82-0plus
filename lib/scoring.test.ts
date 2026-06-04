@@ -14,23 +14,25 @@ function p(over: Partial<ScoringPlayer>): ScoringPlayer {
   };
 }
 
-// A balanced five (2 guards, a wing, 2 bigs) that fits a fixed possession budget.
-// `tsplus` sets every player's era-relative efficiency (1.0 = league average).
-function balancedRoster(gq: number, tsplus = 1.0): ScoringPlayer[] {
+// A balanced five (2 guards, a wing, 2 bigs) that spaces the floor, shares the
+// ball (assisted-FG% well above target) and fits the possession budget.
+function balancedRoster(gq: number): ScoringPlayer[] {
   return [
-    p({ gq, tsplus, ast: 9, stl: 1.5, fga: 12, fta: 3, tov: 2, fg3m: 2.5, reb: 3, blk: 0.2 }),
-    p({ gq, tsplus, ast: 5, stl: 1.2, fga: 13, fta: 3, tov: 1.5, fg3m: 2.5, reb: 4, blk: 0.4 }),
-    p({ gq, tsplus, ast: 3, stl: 1.0, fga: 13, fta: 4, tov: 1.5, fg3m: 2.0, reb: 6, blk: 0.6 }),
-    p({ gq, tsplus, ast: 2, stl: 0.8, fga: 12, fta: 4, tov: 1.5, fg3m: 1.5, reb: 8, blk: 1.0 }),
-    p({ gq, tsplus, ast: 1.5, stl: 0.6, fga: 11, fta: 5, tov: 1.5, fg3m: 0.5, reb: 11, blk: 1.8 }),
+    p({ gq, ast: 8, stl: 1.5, fga: 12, fgm: 6, fta: 3, ftm: 2, tov: 2, fg3m: 2.5, reb: 3, blk: 0.2 }),
+    p({ gq, ast: 5, stl: 1.2, fga: 13, fgm: 6, fta: 3, ftm: 2, tov: 1.5, fg3m: 2.5, reb: 4, blk: 0.4 }),
+    p({ gq, ast: 4, stl: 1.0, fga: 12, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3m: 2.0, reb: 6, blk: 0.6 }),
+    p({ gq, ast: 3, stl: 0.8, fga: 12, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3m: 1.5, reb: 8, blk: 1.0 }),
+    p({ gq, ast: 2, stl: 0.6, fga: 11, fgm: 5, fta: 5, ftm: 4, tov: 1.5, fg3m: 1.0, reb: 11, blk: 1.8 }),
   ];
 }
 
 describe("simulateRoster", () => {
-  it("a balanced, league-average-efficiency, average-talent roster is 41-41", () => {
-    const r = simulateRoster(balancedRoster(C.AVG_GQ, C.EFF_PAR));
+  it("a balanced, well-built, average-talent roster is 41-41", () => {
+    const r = simulateRoster(balancedRoster(C.AVG_GQ));
     expect(r.balancePen).toBe(0);
-    expect(r.effPen).toBe(0); // par efficiency is not penalized
+    expect(r.usagePen).toBe(0);
+    expect(r.outsidePen).toBe(0);
+    expect(r.ballhogPen).toBe(0);
     expect(r.synergyBonus).toBe(0);
     expect(r.netRating).toBe(0);
     expect(r.wins).toBe(41);
@@ -40,39 +42,56 @@ describe("simulateRoster", () => {
     expect(netRatingForPerfect()).toBeCloseTo(15.2, 1);
   });
 
-  it("an elite, efficient, balanced, non-overlapping roster earns synergy and goes 82-0", () => {
-    const r = simulateRoster(balancedRoster(0.85, 1.15));
+  it("an elite, spaced, ball-moving, balanced roster earns synergy and goes 82-0", () => {
+    const r = simulateRoster(balancedRoster(0.92));
     expect(r.synergyBonus).toBeGreaterThan(0);
     expect(r.perfect).toBe(true);
   });
 
-  it("efficiency is required for 82-0: the same elite roster at par efficiency falls short", () => {
-    const elite = simulateRoster(balancedRoster(0.85, 1.15));
-    const par = simulateRoster(balancedRoster(0.85, C.EFF_PAR));
-    expect(par.synergyBonus).toBe(0); // no elite-efficiency → no synergy
-    expect(par.perfect).toBe(false);
-    expect(par.wins).toBeLessThan(elite.wins);
+  it("ball-hog tax: an iso lineup (few assisted FGs) wins less than the same passing lineup", () => {
+    const passing = simulateRoster(balancedRoster(0.78));
+    const iso = simulateRoster(balancedRoster(0.78).map((x) => ({ ...x, ast: 0.5 })));
+    expect(passing.ballhogPen).toBe(0);
+    expect(iso.ballhogPen).toBeGreaterThan(0);
+    expect(iso.wins).toBeLessThan(passing.wins);
   });
 
-  it("below-average efficiency (volume chuckers) takes the efficiency penalty", () => {
-    const inefficient = simulateRoster(balancedRoster(0.75, 0.85));
-    const par = simulateRoster(balancedRoster(0.75, C.EFF_PAR));
-    expect(inefficient.efficiencyFactor).toBe(0);
-    expect(inefficient.effPen).toBe(C.EFF_MAX_PEN);
-    expect(inefficient.wins).toBeLessThan(par.wins);
+  it("outside shooting: one non-shooter is free, each extra is taxed", () => {
+    // balancedRoster shooters all have FT% ~0.67–0.93 and decent 3P% → 0 liabilities.
+    const base = balancedRoster(0.78);
+    const clean = simulateRoster(base);
+    expect(clean.nonShooters).toBe(0);
+    expect(clean.outsidePen).toBe(0);
+    // Turn two players into bad-FT, no-3 bigs (Shaq/Ben-Wallace types).
+    const brick = (x: ScoringPlayer): ScoringPlayer => ({ ...x, fta: 8, ftm: 4, fg3a: 0, fg3m: 0 });
+    const oneHog = base.map((x, i) => (i < 1 ? brick(x) : x));
+    const twoHogs = base.map((x, i) => (i < 2 ? brick(x) : x));
+    const threeHogs = base.map((x, i) => (i < 3 ? brick(x) : x));
+    expect(simulateRoster(oneHog).outsidePen).toBe(0); // one is free
+    expect(simulateRoster(twoHogs).outsidePen).toBe(C.OUTSIDE_PEN_PER_EXTRA); // 1 extra
+    expect(simulateRoster(threeHogs).outsidePen).toBe(2 * C.OUTSIDE_PEN_PER_EXTRA);
+    expect(simulateRoster(threeHogs).wins).toBeLessThan(clean.wins);
+  });
+
+  it("a great FT shooter who never shoots threes is NOT a non-shooter (era-fair)", () => {
+    // 0 three-point attempts (e.g. pre-1980), strong FT% → not flagged.
+    const oldStars = Array.from({ length: 5 }, () =>
+      p({ gq: 0.7, ast: 4, reb: 6, blk: 0.5, fga: 14, fgm: 7, fta: 6, ftm: 5, fg3a: 0, fg3m: 0, tov: 2 }),
+    );
+    expect(simulateRoster(oldStars).nonShooters).toBe(0);
   });
 
   it("no true guard is penalized hard and earns no synergy", () => {
     // Five frontcourt players (high reb/blk, low ast) → 0 natural guards.
     const bigs = Array.from({ length: 5 }, () =>
-      p({ gq: 0.8, tsplus: 1.15, ast: 2, stl: 0.8, reb: 10, blk: 1.5, fga: 13, fta: 5, tov: 2, fg3m: 1 }),
+      p({ gq: 0.8, ast: 2, stl: 0.8, reb: 10, blk: 1.5, fga: 13, fgm: 7, fta: 5, ftm: 3, tov: 2, fg3m: 2 }),
     );
     const r = simulateRoster(bigs);
     expect(r.roleCounts.G).toBe(0);
     expect(r.balancePen).toBeGreaterThanOrEqual(C.NO_GUARD_PEN);
     expect(r.synergyBonus).toBe(0);
-    // Much worse than the same talent + efficiency, balanced.
-    expect(r.wins).toBeLessThan(simulateRoster(balancedRoster(0.8, 1.15)).wins);
+    // Much worse than the same talent, balanced.
+    expect(r.wins).toBeLessThan(simulateRoster(balancedRoster(0.8)).wins);
   });
 
   it("five ball-dominant chuckers trigger the usage penalty", () => {

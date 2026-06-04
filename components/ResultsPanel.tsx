@@ -4,34 +4,32 @@ import { useState } from "react";
 import type { SimRosterLine, SimResult } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
 
-function Bar({
+// One line of the net-rating breakdown: a label (+ optional detail) and the
+// signed net-rating points the factor moved.
+function Adj({
   label,
+  detail,
   value,
-  hint,
 }: {
   label: string;
+  detail?: string;
   value: number;
-  hint: string;
 }) {
-  const pct = Math.round(value * 100);
+  const v = Math.round(value * 10) / 10;
   const color =
-    value >= 0.95
-      ? "var(--md-teal-bright)"
-      : value >= 0.8
-        ? "var(--md-yellow)"
-        : "var(--md-coral)";
+    v > 0 ? "var(--md-teal)" : v < 0 ? "var(--md-coral)" : "var(--md-ink-muted)";
   return (
-    <div>
-      <div className="flex items-baseline justify-between font-display text-xs font-bold uppercase tracking-wide">
-        <span>{label}</span>
-        <span>{pct}%</span>
-      </div>
-      <div className="mt-0.5 h-2.5 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)]">
-        <div className="h-full" style={{ width: `${pct}%`, background: color }} />
-      </div>
-      <div className="mt-0.5 text-[10px] leading-snug text-[var(--md-ink-muted)]">
-        {hint}
-      </div>
+    <div className="flex items-baseline justify-between gap-2 font-display text-sm">
+      <span>
+        {label}
+        {detail ? (
+          <span className="text-[var(--md-ink-muted)]"> · {detail}</span>
+        ) : null}
+      </span>
+      <span style={{ color }}>
+        {v > 0 ? "+" : v < 0 ? "−" : ""}
+        {Math.abs(v).toFixed(1)}
+      </span>
     </div>
   );
 }
@@ -190,44 +188,45 @@ export function ResultsPanel({
         </div>
       </div>
 
-      <div className="grid gap-2.5">
-        <Bar
+      <div className="grid gap-1">
+        <div className="flex items-baseline justify-between font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+          <span>Score breakdown</span>
+          <span>net rating</span>
+        </div>
+        <Adj label="Talent" detail={`avg GQ ${result.meanGQ.toFixed(3)}`} value={result.baseNet} />
+        <Adj
           label="Usage fit"
-          value={result.usageFactor}
-          hint="How well your scorers share one ball. Stacking ball-dominant stars throttles this."
+          detail={`${Math.round(result.usageFactor * 100)}% — shot overlap`}
+          value={-result.usagePen}
         />
-        <Bar
-          label="Shot efficiency"
-          value={result.efficiencyFactor}
-          hint={`Era-relative true shooting. Team TS+ ${result.teamTsPlus.toFixed(
-            2,
-          )} (1.00 = league average for its era). Efficient stars beat volume scorers.`}
+        <Adj
+          label="Outside shooting"
+          detail={
+            result.nonShooters > 1
+              ? `${result.nonShooters} non-shooters`
+              : `${result.nonShooters} non-shooter`
+          }
+          value={-result.outsidePen}
         />
-        <div>
-          <div className="flex items-baseline justify-between font-display text-xs font-bold uppercase tracking-wide">
-            <span>Lineup</span>
-            <span>
-              {result.roleCounts.G}G · {result.roleCounts.W}W ·{" "}
-              {result.roleCounts.B}B
-            </span>
-          </div>
-          <div className="mt-1 text-[11px] leading-snug text-[var(--md-ink-muted)]">
-            {result.balancePen > 0 ? (
-              <span style={{ color: "var(--md-coral)" }}>
-                −{result.balancePen} net — lopsided lineup
-                {result.roleCounts.G === 0 ? " (no true guard)" : ""}
-                {result.roleCounts.B === 0 ? " (no true big)" : ""}. A combo player
-                can fill the slot, but you still need real backcourt and frontcourt.
-              </span>
-            ) : result.synergyBonus > 0 ? (
-              <span style={{ color: "var(--md-teal)" }}>
-                +{result.synergyBonus} net — flawless construction bonus. Clean,
-                balanced fit amplifies your talent.
-              </span>
-            ) : (
-              "Balance the lineup and push every fit bar to 100% to unlock the construction bonus that reaches 82-0."
-            )}
-          </div>
+        <Adj
+          label="Ball movement"
+          detail={`${Math.round(result.assistedPct * 100)}% assisted`}
+          value={-result.ballhogPen}
+        />
+        <Adj
+          label="Lineup balance"
+          detail={`${result.roleCounts.G}G · ${result.roleCounts.W}W · ${result.roleCounts.B}B${
+            result.roleCounts.G === 0 ? " — no guard" : result.roleCounts.B === 0 ? " — no big" : ""
+          }`}
+          value={-result.balancePen}
+        />
+        <Adj label="Construction synergy" value={result.synergyBonus} />
+        <div className="mt-0.5 flex items-baseline justify-between border-t-2 border-[var(--md-ink)] pt-1 font-display text-sm font-bold">
+          <span>Net rating</span>
+          <span style={{ color: netRating >= 0 ? "var(--md-teal)" : "var(--md-coral)" }}>
+            {netRating >= 0 ? "+" : "−"}
+            {Math.abs(netRating).toFixed(1)}
+          </span>
         </div>
       </div>
 

@@ -48,17 +48,21 @@ export interface SimResult {
   wins: number;
   losses: number;
   perfect: boolean;
-  netRating: number; // team point differential per game
+  netRating: number; // team point differential per game (after all adjustments)
+  baseNet: number; // GQ-derived net rating BEFORE construction adjustments
   meanGQ: number; // era-neutral team quality (avg peak GQ)
   pf: number; // implied points for (display)
   pa: number; // implied points allowed (display)
-  // fit factors in [0,1]
+  // fit factors / counts
   usageFactor: number; // possession-budget headroom (1 = no shot-overlap problem)
-  efficiencyFactor: number; // era-relative shot efficiency (1 = elite TS+)
-  teamTsPlus: number; // possession-weighted team TS+ (1.0 = league average)
-  // net-rating points each penalty cost (and the synergy bonus)
+  assistFactor: number; // assisted-FG% vs target (1 = shares the ball)
+  nonShooters: number; // count of FT/3P "non-shooters" in the five
+  totalAst: number; // team assists (for display)
+  assistedPct: number; // share of made FGs that were assisted (0–1)
+  // net-rating points each adjustment moved (penalties subtract, synergy adds)
   usagePen: number;
-  effPen: number;
+  outsidePen: number;
+  ballhogPen: number;
   balancePen: number;
   synergyBonus: number;
   roleCounts: { G: number; W: number; B: number };
