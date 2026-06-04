@@ -197,19 +197,11 @@ export function ResultsPanel({
           hint="How well your scorers share one ball. Stacking ball-dominant stars throttles this."
         />
         <Bar
-          label="Ball-handling"
-          value={result.pAst}
-          hint={`Playmaking vs. target. ${result.totalAst} combined assists.`}
-        />
-        <Bar
-          label="3pt spacing"
-          value={result.p3}
-          hint={`Floor spacing vs. target. ${result.total3m} combined made 3s.`}
-        />
-        <Bar
-          label="Defense"
-          value={result.defenseFactor}
-          hint={`Steals + blocks vs. target. ${result.totalStocks} combined stocks.`}
+          label="Shot efficiency"
+          value={result.efficiencyFactor}
+          hint={`Era-relative true shooting. Team TS+ ${result.teamTsPlus.toFixed(
+            2,
+          )} (1.00 = league average for its era). Efficient stars beat volume scorers.`}
         />
         <div>
           <div className="flex items-baseline justify-between font-display text-xs font-bold uppercase tracking-wide">

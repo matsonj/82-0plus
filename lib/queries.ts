@@ -33,6 +33,7 @@ export interface IndexedPlayer {
   fg3m: number;
   fta: number;
   tov: number;
+  tsplus: number; // era-relative true-shooting (player TS% / league TS% that season), clamped
 }
 
 /**
@@ -111,7 +112,7 @@ export function getPlayerIndex(
       try {
         const rows = await query<IndexedPlayer>(
           `SELECT entity_id, player_name, team, decade, best_season, value, gp, mpg,
-                  pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m
+                  pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m, tsplus
              FROM ${DB}.player_index`,
           [],
           options,
@@ -158,6 +159,18 @@ function computePlayerIndexLive(
           GROUP BY 1, 2, 3, 4, 5
          HAVING count(*) >= 20
        ),
+       -- League true-shooting per season. Old-era absolute TS% is unreliable
+       -- (incomplete box-score coverage), but a player's TS+ (his TS% over the
+       -- league's, same source) is era-fair, so a 1962 volume scorer isn't
+       -- penalized against a 2016 league he never played in.
+       league_ts AS (
+         SELECT s.season_year,
+                sum(b.points) / (2 * (sum(b.fg_attempted) + 0.44 * sum(b.ft_attempted))) AS lg_ts
+           FROM ${DB}.box_scores b
+           JOIN ${DB}.schedule s ON b.game_id = s.game_id
+          WHERE b.period = 'FullGame' AND s.season_type = 'Regular Season'
+          GROUP BY 1
+       ),
        ranked AS (
          SELECT *,
                 row_number() OVER (
@@ -166,37 +179,44 @@ function computePlayerIndexLive(
            FROM per_season
        )
        SELECT entity_id, player_name, team, decade,
-              season_year AS best_season,
+              r.season_year AS best_season,
               round(med_gq, 3) AS value, gp, round(mpg, 1) AS mpg,
               round(pts, 1) AS pts, round(reb, 1) AS reb, round(ast, 1) AS ast,
               round(fga, 1) AS fga, round(fg3a, 1) AS fg3a, round(fta, 1) AS fta,
               -- Era backfill: estimate stats the NBA didn't record from what it did.
               -- Steals/blocks: not tracked before 1973-74.
-              round(CASE WHEN season_year < 1974
+              round(CASE WHEN r.season_year < 1974
                     THEN 0.7 + 0.6 * greatest(0, least(1, (ast - 2) / 6.0))
                              + 0.2 * (1 - greatest(0, least(1, (reb - 4) / 8.0)))
                     ELSE stl END, 2) AS stl,
-              round(CASE WHEN season_year < 1974
+              round(CASE WHEN r.season_year < 1974
                     THEN 0.3 + 1.6 * greatest(0, least(1, (reb - 4) / 8.0))
                     ELSE blk END, 2) AS blk,
               -- Turnovers: not tracked before 1977-78. From usage + playmaking.
-              round(CASE WHEN season_year < 1978
+              round(CASE WHEN r.season_year < 1978
                     THEN 0.5 + 0.09 * (fga + 0.44 * fta) + 0.18 * ast
                     ELSE tov END, 1) AS tov,
               -- 3PM: no line before 1979-80 → estimate; 1980-99 bigs get a modest floor.
               round(CASE
-                    WHEN season_year < 1980
+                    WHEN r.season_year < 1980
                     THEN (fga * CASE WHEN reb >= 9 THEN 0.10
                                      WHEN ast >= 4.5 AND reb <= 5 THEN 0.42
                                      ELSE 0.30 END)
                          * greatest(0.22, least(0.42,
                              0.5 * (CASE WHEN fta > 0 THEN ftm / fta ELSE 0.5 END) + 0.03))
-                    WHEN season_year < 2000 AND reb >= 9
+                    WHEN r.season_year < 2000 AND reb >= 9
                     THEN greatest(fg3m, fga * 0.10
                          * greatest(0.22, least(0.42,
                              0.5 * (CASE WHEN fta > 0 THEN ftm / fta ELSE 0.5 END) + 0.03)))
-                    ELSE fg3m END, 1) AS fg3m
-         FROM ranked
+                    ELSE fg3m END, 1) AS fg3m,
+              -- Era-relative true-shooting (TS+), clamped to a sane band so noisy
+              -- old-era league denominators can't produce extreme modifiers.
+              round(greatest(0.80, least(1.30,
+                CASE WHEN (fga + 0.44 * fta) > 0 AND lt.lg_ts > 0
+                     THEN (pts / (2 * (fga + 0.44 * fta))) / lt.lg_ts
+                     ELSE 1.0 END)), 3) AS tsplus
+         FROM ranked r
+         JOIN league_ts lt ON lt.season_year = r.season_year
         WHERE rn = 1`,
     [],
     options,
@@ -284,6 +304,8 @@ export async function hydrateRoster(
       gq: p.value,
       pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
       fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
+      // Default to league-average if a stale/old index row lacks tsplus.
+      tsplus: Number.isFinite(p.tsplus) ? p.tsplus : 1,
     });
     lines.push({
       entity_id: p.entity_id, player_name: p.player_name, team: p.team,

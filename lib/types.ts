@@ -52,22 +52,16 @@ export interface SimResult {
   pf: number; // implied points for (display)
   pa: number; // implied points allowed (display)
   // fit factors in [0,1]
-  usageFactor: number;
-  pAst: number;
-  p3: number;
-  defenseFactor: number;
+  usageFactor: number; // possession-budget headroom (1 = no shot-overlap problem)
+  efficiencyFactor: number; // era-relative shot efficiency (1 = elite TS+)
+  teamTsPlus: number; // possession-weighted team TS+ (1.0 = league average)
   // net-rating points each penalty cost (and the synergy bonus)
   usagePen: number;
-  spacingPen: number;
-  playmakingPen: number;
-  defensePen: number;
+  effPen: number;
   balancePen: number;
   synergyBonus: number;
   roleCounts: { G: number; W: number; B: number };
   totalPoss: number;
-  totalAst: number;
-  total3m: number;
-  totalStocks: number;
 }
 
 export type GameMode = "classic" | "hoopiq";
