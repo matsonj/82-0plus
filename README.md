@@ -6,31 +6,41 @@ across the decades and see if it can go **82-0**. Powered by the
 
 ## How it works
 
-- **Draft** — one slot per decade available in the data (today: 2000s / 2010s /
-  2020s; expands automatically as older seasons are backfilled). Each slot rolls
-  a random franchise, weighted by how many seasons it appears in that decade — so
-  long-lived teams come up more, but the SuperSonics still show up for the 2000s.
+- **Draft** — five slots: `[G, FLEX, W, FLEX, B]`. Each slot rolls a decade
+  (used decades' odds decay 90% per use, so a lineup spreads across eras) and a
+  franchise (weighted by seasons present). A decade is only offered once it has
+  enough playable franchises (today the 1960s–2020s; the 1950s are still too
+  thin). Teams never repeat; one team-skip and one decade-skip in free play.
 - **Player value = Game Quality (GQ).** Players are valued by their **highest
-  single-season median GQ** on that team in that decade — GQ is the share of
-  weekly head-to-head matchups a player wins across 9 box-score categories
-  (defined in the `game_quality` view). The displayed PTS/REB/AST/STL/BLK come
-  from that same peak season.
+  single-season median GQ** on that team in that decade. GQ is the share of
+  weekly head-to-head matchups a player wins across the box-score categories the
+  NBA actually tracked that era — the `game_quality` view is **era-aware** (no
+  3PT before 1979-80, no steals/blocks before 1973-74, no turnovers before
+  1977-78), so a pre-tracking-era great isn't penalized for stats that didn't
+  exist.
 - **Scoring** — the roster is simulated as a team into an 82-game record:
-  - **Quality = Game Quality**, which is era-neutral (each player is scored only
-    against his contemporaries), so cross-era picks are fair. Team quality →
-    a base **net rating**.
-  - **Fit penalties** subtract net-rating points: **usage** (five ball-dominant
-    stars can't all eat), **spacing** (too few 3s), **playmaking** (too few
-    assists), **defense** (too few steals + blocks), and **balance** (derived
-    positions — no rim protector, no creator, or a redundant lineup).
+  - **Talent = Game Quality**, era-neutral by construction, mapped to a base
+    **net rating**.
+  - **Construction adjustments** then move that net rating (each shown on the
+    result breakdown): **usage fit** (five ball-dominant stars can't all eat),
+    **outside shooting** (a non-shooter is ≤65% FT or a genuine bad 3pt shooter;
+    one is fine, each extra is taxed), **ball movement** (a low assisted-FG% iso
+    lineup pays a ball-hog tax), **balance** (need a real ball-handler; no
+    lopsided five), **size** (too little total height — though All-Defense players
+    add effective inches), and a **defense buff** (All-Defensive selections add
+    margin, since GQ undercounts defense). A small **synergy** bonus rewards a
+    well-built roster.
   - **Wins = 41 + 2.7 × net rating** (the canonical NBA relationship), so an
-    82-0 season needs ≈ **+15.2 net** — a high but reachable apex.
+    82-0 season needs ≈ **+15.2 net** — reachable only by an elite, well-fit core.
 
-  Positions are **derived** from the box line (`lib/positions.ts`) — the database
-  has no position column. The full model lives in `lib/scoring.ts` (unit-tested,
-  tunable via `SCORING_CONFIG`).
+  Positions, height, and All-Defensive selections come from **basketball-reference**
+  (enriched to our player ids — see `db/enrichment_tables.md`); positions fall back
+  to a box-line heuristic where bio is missing. The full model lives in
+  `lib/scoring.ts` (unit-tested, tunable via `SCORING_CONFIG`).
 
-Two modes: **Classic** (stats visible) and **HoopIQ** (draft blind).
+Three modes: **Classic** (stats visible), **HoopIQ** (draft blind), and **Daily**
+(a date-seeded HoopIQ challenge — the same five rolls for everyone, once per
+Pacific day).
 
 ## Setup
 
@@ -67,8 +77,10 @@ affinity.
   Reads the materialized `nba_box_scores_v2.main.player_index` table for fast cold
   starts (falls back to live compute if missing) — refresh it after backfilling
   box scores.
-- `lib/scoring.ts` — bespoke usage/penalty/Pythagorean model
-- `app/api/{decades,slot,players,simulate}/route.ts` — Node.js route handlers
+- `lib/scoring.ts` — the roster→record model (GQ talent + construction
+  adjustments → net rating → wins)
+- `app/api/{decades,slot,players,simulate,daily,team-decades,og}/route.ts` —
+  Node.js route handlers (`/api/og` renders the dynamic share image)
 - `app/page.tsx` + `components/*` — the game UI (MotherDuck design system)
 
 ## Deploying to Vercel
