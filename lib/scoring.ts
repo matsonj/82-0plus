@@ -4,6 +4,7 @@ import { primaryRole, type Role } from "./positions";
 /** A drafted player's box line plus their era-neutral Game Quality (peak-season median). */
 export interface ScoringPlayer {
   gq: number;
+  mpg: number;
   pts: number;
   reb: number;
   ast: number;
@@ -77,9 +78,6 @@ export const SCORING_CONFIG = {
   EFF_FLOOR: 0.85, // team TS+ at/below this → full efficiency penalty
   EFF_PAR: 1.0, // league-average TS+ → no efficiency penalty (neutral)
   EFF_ELITE: 1.12, // team TS+ at/above this → full synergy eligibility
-
-  // Implied scoreline for display only.
-  BASE_PPG: 112,
 } as const;
 
 export type ScoringConfig = typeof SCORING_CONFIG;
@@ -105,7 +103,7 @@ export function simulateRoster(
   if (n === 0) {
     return {
       wins: 0, losses: cfg.GAMES, perfect: false, netRating: 0, meanGQ: 0,
-      pf: cfg.BASE_PPG, pa: cfg.BASE_PPG,
+      pf: 0, pa: 0,
       usageFactor: 1, efficiencyFactor: 1, teamTsPlus: 1,
       usagePen: 0, effPen: 0, balancePen: 0, synergyBonus: 0,
       roleCounts: { G: 0, W: 0, B: 0 },
@@ -178,14 +176,33 @@ export function simulateRoster(
     cfg.GAMES,
   );
 
+  // Minutes-extrapolated team box. Each starter's per-game line is taken per-36
+  // and scaled to a full position: 36 starter minutes + the remaining 12 covered
+  // by a bench player at 50% (= 6 effective minutes) → stat × 42 / mpg. Summed
+  // across the five, this is a full-team per-game line; FG%/FT% derive from the
+  // same minutes-weighted makes/attempts (the ×42 cancels in the ratio).
+  const EFF_MIN = 42;
+  const ext = (f: (p: ScoringPlayer) => number) =>
+    roster.reduce((a, p) => a + (p.mpg > 0 ? (f(p) * EFF_MIN) / p.mpg : 0), 0);
+  const teamBox = {
+    pts: Math.round(ext((p) => p.pts)),
+    reb: Math.round(ext((p) => p.reb)),
+    ast: Math.round(ext((p) => p.ast)),
+    stl: Math.round(ext((p) => p.stl)),
+    blk: Math.round(ext((p) => p.blk)),
+    fgPct: pctOf(ext((p) => p.fgm), ext((p) => p.fga)),
+    ftPct: pctOf(ext((p) => p.ftm), ext((p) => p.fta)),
+    tov: Math.round(ext((p) => p.tov)),
+  };
+
   return {
     wins,
     losses: cfg.GAMES - wins,
     perfect: wins === cfg.GAMES,
     netRating: round1(netRating),
     meanGQ: Math.round(meanGQ * 1000) / 1000,
-    pf: round1(cfg.BASE_PPG + netRating / 2),
-    pa: round1(cfg.BASE_PPG - netRating / 2),
+    pf: teamBox.pts,
+    pa: Math.round(teamBox.pts - netRating),
     usageFactor: round2(usageFactor),
     efficiencyFactor: round2(efficiencyFactor),
     teamTsPlus: round2(teamTsPlus),
@@ -195,17 +212,6 @@ export function simulateRoster(
     synergyBonus: round1(synergyBonus),
     roleCounts,
     totalPoss: round1(totalPoss),
-    teamBox: {
-      // Whole-integer team line. FG%/FT% are attempt-weighted across the five
-      // (sum of makes / sum of attempts), in whole percentage points.
-      pts: Math.round(sum((p) => p.pts)),
-      reb: Math.round(sum((p) => p.reb)),
-      ast: Math.round(sum((p) => p.ast)),
-      stl: Math.round(sum((p) => p.stl)),
-      blk: Math.round(sum((p) => p.blk)),
-      fgPct: pctOf(sum((p) => p.fgm), sum((p) => p.fga)),
-      ftPct: pctOf(sum((p) => p.ftm), sum((p) => p.fta)),
-      tov: Math.round(sum((p) => p.tov)),
-    },
+    teamBox,
   };
 }

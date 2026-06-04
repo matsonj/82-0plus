@@ -8,7 +8,7 @@ import {
 
 function p(over: Partial<ScoringPlayer>): ScoringPlayer {
   return {
-    gq: 0.5, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0,
+    gq: 0.5, mpg: 36, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0,
     fga: 0, fg3a: 0, fg3m: 0, fta: 0, tov: 0, fgm: 0, ftm: 0, tsplus: 1.0,
     ...over,
   };
@@ -82,9 +82,10 @@ describe("simulateRoster", () => {
     expect(r.usagePen).toBeGreaterThan(2);
   });
 
-  it("teamBox: integer totals + attempt-weighted FG%/FT%", () => {
+  it("teamBox: integer totals + attempt-weighted FG%/FT% (mpg=42 ⇒ raw sums)", () => {
+    // At 42 mpg the per-36+bench scale (×42/mpg) is 1, so totals equal raw sums.
     const five = Array.from({ length: 5 }, () =>
-      p({ gq: 0.7, pts: 20, reb: 6, ast: 4, stl: 1, blk: 0.5, tov: 2.5,
+      p({ gq: 0.7, mpg: 42, pts: 20, reb: 6, ast: 4, stl: 1, blk: 0.5, tov: 2.5,
           fga: 14, fgm: 7, fta: 4, ftm: 3 }),
     );
     const r = simulateRoster(five);
@@ -94,6 +95,22 @@ describe("simulateRoster", () => {
       ftPct: 75, // 15/20
       tov: 13, // 12.5 → 13
     });
+  });
+
+  it("team box extrapolates per-36 with bench fill (stat × 42 / mpg)", () => {
+    // 20 pts in 24 mpg → 20×42/24 = 35 per slot; ×5 = 175.
+    const five = Array.from({ length: 5 }, () => p({ mpg: 24, pts: 20 }));
+    const r = simulateRoster(five);
+    expect(r.teamBox.pts).toBe(175);
+  });
+
+  it("scoreline derives from the team box: pf = box pts, pa = pf − net", () => {
+    const five = Array.from({ length: 5 }, () =>
+      p({ gq: 0.8, mpg: 36, pts: 22, reb: 6, ast: 4, fga: 15, fgm: 8, fta: 5, ftm: 4 }),
+    );
+    const r = simulateRoster(five);
+    expect(r.pf).toBe(r.teamBox.pts);
+    expect(r.pa).toBe(Math.round(r.pf - r.netRating));
   });
 
   it("better players (higher GQ) win more, all else equal", () => {

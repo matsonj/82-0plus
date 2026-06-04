@@ -318,7 +318,7 @@ export async function hydrateRoster(
     if (!p) throw new Error(`unknown roster pick: ${pick.entity_id}`);
     players.push(p);
     scoring.push({
-      gq: p.value,
+      gq: p.value, mpg: p.mpg,
       pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
       fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
       fgm: p.fgm, ftm: p.ftm,

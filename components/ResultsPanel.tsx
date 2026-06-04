@@ -269,8 +269,8 @@ export function ResultsPanel({
               ["BLK", result.teamBox.blk],
             ],
             [
-              ["FG%", result.teamBox.fgPct],
-              ["FT%", result.teamBox.ftPct],
+              ["FG%", `${result.teamBox.fgPct}%`],
+              ["FT%", `${result.teamBox.ftPct}%`],
               ["TO", result.teamBox.tov],
             ],
           ] as const
