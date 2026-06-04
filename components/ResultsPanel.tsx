@@ -25,10 +25,10 @@ function Bar({
         <span>{label}</span>
         <span>{pct}%</span>
       </div>
-      <div className="mt-1 h-3 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)]">
+      <div className="mt-0.5 h-2.5 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)]">
         <div className="h-full" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <div className="mt-1 text-[11px] leading-snug text-[var(--md-ink-muted)]">
+      <div className="mt-0.5 text-[10px] leading-snug text-[var(--md-ink-muted)]">
         {hint}
       </div>
     </div>
@@ -64,22 +64,22 @@ export function ResultsPanel({
   };
 
   return (
-    <div className="md-card md-card--lift flex flex-col gap-6 p-6">
+    <div className="md-card md-card--lift flex flex-col gap-4 p-4 sm:p-5">
       <div className="text-center">
         {perfect ? (
-          <div className="md-capsule md-capsule--teal mb-3">
+          <div className="md-capsule md-capsule--teal mb-2">
             🏆 Perfect Season
           </div>
         ) : (
-          <div className="md-capsule mb-3">Final Record</div>
+          <div className="md-capsule mb-2">Final Record</div>
         )}
         <div
           className="font-display font-bold"
-          style={{ fontSize: "72px", lineHeight: 1 }}
+          style={{ fontSize: "clamp(46px, 13vw, 64px)", lineHeight: 1 }}
         >
           {wins}&ndash;{losses}
         </div>
-        <div className="mt-2 font-display text-sm text-[var(--md-ink-muted)]">
+        <div className="mt-1 font-display text-sm text-[var(--md-ink-muted)]">
           {pf} scored · {pa} allowed ·{" "}
           <span
             style={{
@@ -95,7 +95,7 @@ export function ResultsPanel({
         </div>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid gap-2.5">
         <Bar
           label="Usage fit"
           value={result.usageFactor}
@@ -151,7 +151,7 @@ export function ResultsPanel({
         {roster.map((r) => (
           <div
             key={r.entity_id}
-            className="flex items-baseline justify-between gap-2 border-b border-[var(--md-paper-3)] py-1 font-display text-sm"
+            className="flex items-baseline justify-between gap-2 border-b border-[var(--md-paper-3)] py-0.5 font-display text-sm"
           >
             <span>
               <span className="text-[var(--md-orange-deep)]">{r.team}</span> &rsquo;

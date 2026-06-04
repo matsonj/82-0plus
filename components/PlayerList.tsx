@@ -14,6 +14,40 @@ const ROLE_BG: Record<Role, string> = {
 };
 
 type Status = "loading" | "ok" | "error";
+type SortKey = "mpg" | "pts" | "reb" | "ast" | "stl" | "blk";
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "mpg", label: "MPG" },
+  { key: "pts", label: "PPG" },
+  { key: "reb", label: "RPG" },
+  { key: "ast", label: "APG" },
+  { key: "stl", label: "SPG" },
+  { key: "blk", label: "BPG" },
+];
+const POS_FILTERS: ("all" | Role)[] = ["all", "G", "W", "B"];
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="border-2 border-[var(--md-ink)] px-2 py-1 font-display text-[11px] font-bold uppercase tracking-wide"
+      style={{
+        background: active ? "var(--md-ink)" : "var(--md-white)",
+        color: active ? "var(--md-white)" : "var(--md-ink)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 export function PlayerList({
   team,
@@ -34,6 +68,8 @@ export function PlayerList({
   const [status, setStatus] = useState<Status>("loading");
   const [q, setQ] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [sortKey, setSortKey] = useState<SortKey>("mpg");
+  const [posFilter, setPosFilter] = useState<"all" | Role>("all");
 
   useEffect(() => {
     let active = true;
@@ -64,11 +100,23 @@ export function PlayerList({
   const available = useMemo(() => all.filter(draftable), [all, draftable]);
   const rows = useMemo(() => {
     const nq = norm(q);
-    return available.filter((p) => nq === "" || norm(p.player_name).includes(nq));
-  }, [available, q]);
+    const filtered = available.filter(
+      (p) =>
+        (posFilter === "all" || p.positions.includes(posFilter)) &&
+        (nq === "" || norm(p.player_name).includes(nq)),
+    );
+    // Default + HoopIQ stay on the server's minutes order; Classic can re-sort.
+    if (mode === "classic" && sortKey !== "mpg") {
+      return [...filtered].sort(
+        (a, b) => Number(b[sortKey] ?? 0) - Number(a[sortKey] ?? 0),
+      );
+    }
+    if (mode === "classic" && sortKey === "mpg") {
+      return [...filtered].sort((a, b) => Number(b.mpg ?? 0) - Number(a.mpg ?? 0));
+    }
+    return filtered;
+  }, [available, q, sortKey, posFilter, mode]);
 
-  // Only a genuinely-loaded-but-empty roster offers the free respin; a failed
-  // load is a distinct error so we don't treat a data/token outage as "no players".
   const noneEligible = status === "ok" && available.length === 0;
 
   return (
@@ -79,8 +127,39 @@ export function PlayerList({
         placeholder={`Filter ${team} roster…`}
         className="w-full border-2 border-[var(--md-ink)] bg-[var(--md-white)] px-3 py-2 font-display text-sm outline-none focus:bg-[var(--md-paper)]"
       />
+
+      {mode === "classic" && status === "ok" && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-1">
+            {POS_FILTERS.map((p) => (
+              <Chip
+                key={p}
+                active={posFilter === p}
+                onClick={() => setPosFilter(p)}
+              >
+                {p === "all" ? "All" : p}
+              </Chip>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="mr-0.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+              Sort
+            </span>
+            {SORTS.map((s) => (
+              <Chip
+                key={s.key}
+                active={sortKey === s.key}
+                onClick={() => setSortKey(s.key)}
+              >
+                {s.label}
+              </Chip>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div
-        className="md-scroll max-h-[20rem] overflow-auto border-2 border-[var(--md-ink)] bg-[var(--md-white)]"
+        className="md-scroll max-h-[18rem] overflow-auto border-2 border-[var(--md-ink)] bg-[var(--md-white)]"
         style={{ boxShadow: "var(--md-shadow-md)" }}
       >
         {status === "loading" && (
@@ -109,6 +188,11 @@ export function PlayerList({
             <button className="md-btn md-btn--sm" onClick={onNoneEligible}>
               ↻ Respin team (free)
             </button>
+          </div>
+        )}
+        {status === "ok" && available.length > 0 && rows.length === 0 && (
+          <div className="px-3 py-6 text-center font-display text-sm text-[var(--md-ink-muted)]">
+            No {posFilter === "all" ? "" : `${posFilter} `}players match.
           </div>
         )}
         {status === "ok" &&
@@ -152,10 +236,10 @@ export function PlayerList({
                 {mode === "classic" && p.mpg !== null ? (
                   <>
                     <div className="font-display text-sm font-bold text-[var(--md-orange-deep)]">
-                      {p.mpg}
+                      {sortKey === "mpg" ? p.mpg : (p[sortKey] ?? 0)}
                     </div>
                     <div className="font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
-                      mpg
+                      {SORTS.find((s) => s.key === sortKey)?.label}
                     </div>
                   </>
                 ) : (
