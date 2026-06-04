@@ -35,6 +35,11 @@ export function canPlay(p: RoleInput, kind: SlotKind): boolean {
   return kind === "FLEX" || eligiblePositions(p).includes(kind);
 }
 
+/** Same check from a precomputed eligibility list (client uses the DTO's positions). */
+export function canFill(positions: Role[], kind: SlotKind): boolean {
+  return kind === "FLEX" || positions.includes(kind);
+}
+
 /** Higher = more of a big; lower = more of a guard. */
 export function frontcourtIndex(p: RoleInput): number {
   return p.reb + 2 * p.blk - p.ast;

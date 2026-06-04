@@ -1,5 +1,7 @@
-import { query, type QueryParam } from "./motherduck";
-import type { PlayerOption } from "./types";
+import { query } from "./motherduck";
+import { eligiblePositions } from "./positions";
+import type { GameMode, PublicPlayer, SimPick, SimRosterLine } from "./types";
+import type { ScoringPlayer } from "./scoring";
 
 // All SQL lives here. Decade buckets use `season_year - (season_year % 10)`
 // because DuckDB `/` is float division. Regular Season only for fairness.
@@ -7,11 +9,33 @@ import type { PlayerOption } from "./types";
 // tokens can't switch the active database), so unqualified names won't resolve.
 const DB = "nba_box_scores_v2.main";
 
+/** Full per-(player, team, decade) row — server-side only (carries GQ + sim inputs). */
+export interface IndexedPlayer {
+  entity_id: string;
+  player_name: string;
+  team: string;
+  decade: number;
+  best_season: number;
+  value: number; // peak season-median Game Quality (scoring only, never sent to client)
+  gp: number;
+  mpg: number;
+  pts: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  fga: number;
+  fg3a: number;
+  fg3m: number;
+  fta: number;
+  tov: number;
+}
+
 /**
  * Available decades — derived from the player index so every decade we offer
  * actually has draftable players. (The schedule has older seasons, e.g. the
  * 1940s, that are too sparse to produce any qualifying players; offering them
- * would dead-end the slot machine with a 404.)
+ * would dead-end the slot machine.)
  */
 export async function getDecades(): Promise<number[]> {
   const index = await getPlayerIndex();
@@ -36,31 +60,15 @@ export async function getTeamWeights(
   );
 }
 
-export interface IndexedPlayer extends PlayerOption {
-  team: string;
-  decade: number;
-}
-
 declare global {
   // eslint-disable-next-line no-var
   var __player_index__: Promise<IndexedPlayer[]> | undefined;
 }
 
 /**
- * Compute, for every (player, team, decade), the player's VALUE = highest
- * single-season median Game Quality, with the displayed stats taken FROM THAT
- * SAME peak season.
- *
- * The `game_quality` view is expensive (a weekly all-vs-all self-join over the
- * whole table), and it can't be filtered to one team without still computing the
- * full week — so we run it ONCE for the entire league and cache the small result
- * (a few thousand rows) in the server process. Every team load is then an
- * in-memory filter.
- */
-/**
  * Read the precomputed index. Prefers the materialized
  * `nba_box_scores_v2.main.player_index` table (a fast SELECT — refresh it after
- * a backfill with the CREATE OR REPLACE in computePlayerIndexLive's SQL), and
+ * a backfill with the CREATE OR REPLACE of computePlayerIndexLive's SQL), and
  * falls back to computing it live if the table is missing or empty.
  */
 export function getPlayerIndex(): Promise<IndexedPlayer[]> {
@@ -124,10 +132,7 @@ function computePlayerIndexLive(): Promise<IndexedPlayer[]> {
               round(med_gq, 3) AS value, gp, round(mpg, 1) AS mpg,
               round(pts, 1) AS pts, round(reb, 1) AS reb, round(ast, 1) AS ast,
               round(fga, 1) AS fga, round(fg3a, 1) AS fg3a, round(fta, 1) AS fta,
-              -- Era backfill: the NBA didn't record some stats in early eras, so
-              -- estimate them from what WAS recorded. Game Quality is computed
-              -- in-DB and stays era-internally fair, so this only feeds the
-              -- scoring fit factors + derived position. Cutoffs use real data.
+              -- Era backfill: estimate stats the NBA didn't record from what it did.
               -- Steals/blocks: not tracked before 1973-74.
               round(CASE WHEN season_year < 1974
                     THEN 0.7 + 0.6 * greatest(0, least(1, (ast - 2) / 6.0))
@@ -140,11 +145,7 @@ function computePlayerIndexLive(): Promise<IndexedPlayer[]> {
               round(CASE WHEN season_year < 1978
                     THEN 0.5 + 0.09 * (fga + 0.44 * fta) + 0.18 * ast
                     ELSE tov END, 1) AS tov,
-              -- 3PM: no 3pt line before 1979-80 → estimate from FT% (touch),
-              -- role, volume (buffed so pre-line players aren't over-penalized on
-              -- spacing). 1980–99 bigs had the line but the era didn't ask them
-              -- to shoot it, so floor their 3PM at a modest projection too, else
-              -- a non-shooting-by-era big wrecks a modern lineup's spacing.
+              -- 3PM: no line before 1979-80 → estimate; 1980-99 bigs get a modest floor.
               round(CASE
                     WHEN season_year < 1980
                     THEN (fga * CASE WHEN reb >= 9 THEN 0.10
@@ -167,28 +168,71 @@ export function warmPlayerIndex(): void {
   void getPlayerIndex().catch(() => {});
 }
 
-const norm = (s: string) =>
-  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+/** Map an internal row to the client-safe DTO (drops GQ + sim-only inputs). */
+function toPublic(p: IndexedPlayer, mode: GameMode): PublicPlayer {
+  const classic = mode === "classic";
+  return {
+    entity_id: p.entity_id,
+    player_name: p.player_name,
+    best_season: p.best_season,
+    positions: eligiblePositions(p),
+    mpg: classic ? p.mpg : null,
+    pts: classic ? p.pts : null,
+    reb: classic ? p.reb : null,
+    ast: classic ? p.ast : null,
+    stl: classic ? p.stl : null,
+    blk: classic ? p.blk : null,
+  };
+}
 
-/** Players for a team+decade, ranked by value (peak season-median GQ), from the cached index. */
+/** Public player list for a team+decade, sorted by minutes per game (GQ hidden). */
 export async function getPlayers(
   team: string,
   decade: number,
-  q: string | null,
-): Promise<PlayerOption[]> {
+  mode: GameMode,
+): Promise<PublicPlayer[]> {
   const index = await getPlayerIndex();
-  const nq = q ? norm(q.trim()) : "";
   return index
-    .filter(
-      (p) =>
-        p.team === team &&
-        p.decade === decade &&
-        (nq === "" || norm(p.player_name).includes(nq)),
-    )
-    // Sort by minutes per game (not Game Quality — that stays hidden).
+    .filter((p) => p.team === team && p.decade === decade)
     .sort((a, b) => b.mpg - a.mpg)
-    .slice(0, 60);
+    .slice(0, 60)
+    .map((p) => toPublic(p, mode));
 }
 
-// Re-exported for callers that still pass typed params elsewhere.
-export type { QueryParam };
+/** Decades in which a team has draftable players (for the same-team decade skip). */
+export async function getTeamDecades(team: string): Promise<number[]> {
+  const index = await getPlayerIndex();
+  return [...new Set(index.filter((p) => p.team === team).map((p) => p.decade))].sort(
+    (a, b) => a - b,
+  );
+}
+
+/**
+ * Hydrate a roster of (entity_id, team, decade) picks server-side into scoring
+ * inputs (incl. GQ) + display lines. The client never submits stats, so it can't
+ * fabricate an 82-0 season. Throws if any pick isn't a real index entry.
+ */
+export async function hydrateRoster(
+  picks: SimPick[],
+): Promise<{ scoring: ScoringPlayer[]; lines: SimRosterLine[] }> {
+  const index = await getPlayerIndex();
+  const byKey = new Map(
+    index.map((p) => [`${p.entity_id}|${p.team}|${p.decade}`, p]),
+  );
+  const scoring: ScoringPlayer[] = [];
+  const lines: SimRosterLine[] = [];
+  for (const pick of picks) {
+    const p = byKey.get(`${pick.entity_id}|${pick.team}|${pick.decade}`);
+    if (!p) throw new Error(`unknown roster pick: ${pick.entity_id}`);
+    scoring.push({
+      gq: p.value,
+      pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
+      fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
+    });
+    lines.push({
+      entity_id: p.entity_id, player_name: p.player_name, team: p.team,
+      best_season: p.best_season, pts: p.pts, reb: p.reb, ast: p.ast,
+    });
+  }
+  return { scoring, lines };
+}

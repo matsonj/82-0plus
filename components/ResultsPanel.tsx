@@ -1,6 +1,6 @@
 "use client";
 
-import type { RosterEntry, SimResult } from "@/lib/types";
+import type { SimRosterLine, SimResult } from "@/lib/types";
 
 function Bar({
   label,
@@ -39,7 +39,7 @@ export function ResultsPanel({
   result,
   onReset,
 }: {
-  roster: RosterEntry[];
+  roster: SimRosterLine[];
   result: SimResult;
   onReset: () => void;
 }) {

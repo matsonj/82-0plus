@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams;
     const team = sp.get("team");
     const decade = Number(sp.get("decade"));
-    const q = sp.get("q");
+    const mode = sp.get("mode") === "hoopiq" ? "hoopiq" : "classic";
 
     if (!team || !/^[A-Z]{3}$/.test(team)) {
       return NextResponse.json({ error: "invalid team" }, { status: 400 });
@@ -18,11 +18,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "invalid decade" }, { status: 400 });
     }
 
-    const players = await getPlayers(team, decade, q);
+    const players = await getPlayers(team, decade, mode);
     return NextResponse.json({ players });
   } catch (err) {
+    console.error("[/api/players]", err);
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: "Couldn't load that roster right now." },
       { status: 500 },
     );
   }

@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   GameMode,
-  PlayerOption,
-  RosterEntry,
+  PublicPlayer,
+  SimPick,
   SimResult,
+  SimRosterLine,
 } from "@/lib/types";
-import { canPlay, type SlotKind } from "@/lib/positions";
+import { canFill, type SlotKind } from "@/lib/positions";
 import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
@@ -25,15 +26,19 @@ export default function Home() {
   );
   const [currentDecade, setCurrentDecade] = useState<number | null>(null);
   const [currentTeam, setCurrentTeam] = useState<string | null>(null);
-  const [pending, setPending] = useState<PlayerOption | null>(null);
+  const [pending, setPending] = useState<PublicPlayer | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [teamSkips, setTeamSkips] = useState(1);
   const [decadeSkips, setDecadeSkips] = useState(1);
+  const [rolling, setRolling] = useState(false);
   const [result, setResult] = useState<SimResult | null>(null);
+  const [resultRoster, setResultRoster] = useState<SimRosterLine[]>([]);
   const [simulating, setSimulating] = useState(false);
   const [booting, setBooting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const rolling = useRef(false);
+
+  const rollSeq = useRef(0); // guards against out-of-order /api/slot responses
+  const rollActive = useRef(false); // synchronous in-flight flag for the auto-start effect
 
   const draftedCount = lineup.filter(Boolean).length;
   const draftDone = draftedCount === KINDS.length;
@@ -44,11 +49,13 @@ export default function Home() {
   const rollRound = useCallback(
     async (opts: { decade?: number; exclude?: string } = {}) => {
       if (decades.length === 0) return;
-      rolling.current = true;
-      const decade =
-        opts.decade ?? decades[Math.floor(Math.random() * decades.length)];
+      const myId = ++rollSeq.current;
+      rollActive.current = true;
+      setRolling(true);
       setPending(null);
       setSelected(null);
+      const decade =
+        opts.decade ?? decades[Math.floor(Math.random() * decades.length)];
       setCurrentDecade(decade);
       setCurrentTeam(null);
       try {
@@ -56,11 +63,15 @@ export default function Home() {
         const res = await fetch(url);
         if (!res.ok) throw new Error("roll failed");
         const data = await res.json();
+        if (rollSeq.current !== myId) return; // a newer roll superseded this one
         setCurrentTeam(data.team);
-      } catch (e) {
-        setError((e as Error).message);
+      } catch {
+        if (rollSeq.current === myId) setError("Couldn't roll a team. Try again.");
       } finally {
-        rolling.current = false;
+        if (rollSeq.current === myId) {
+          rollActive.current = false;
+          setRolling(false);
+        }
       }
     },
     [decades],
@@ -69,6 +80,7 @@ export default function Home() {
   const startGame = useCallback(async (m: GameMode) => {
     setMode(m);
     setResult(null);
+    setResultRoster([]);
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
@@ -81,11 +93,11 @@ export default function Home() {
     setBooting(true);
     try {
       const res = await fetch("/api/decades");
-      if (!res.ok) throw new Error((await res.json()).error ?? "load failed");
+      if (!res.ok) throw new Error("load failed");
       const { decades: ds } = (await res.json()) as { decades: number[] };
       setDecades(ds);
-    } catch (e) {
-      setError((e as Error).message);
+    } catch {
+      setError("Couldn't load the league. Try again.");
     } finally {
       setBooting(false);
     }
@@ -94,6 +106,7 @@ export default function Home() {
   const backToMenu = () => {
     setPhase("menu");
     setResult(null);
+    setResultRoster([]);
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
@@ -102,21 +115,21 @@ export default function Home() {
   // Start a new round whenever there's an open slot and no active round.
   useEffect(() => {
     if (phase !== "play" || booting || result || draftDone) return;
-    if (currentDecade !== null || rolling.current) return;
+    if (currentDecade !== null || rollActive.current) return;
     if (decades.length === 0) return;
     rollRound({});
   }, [phase, booting, result, draftDone, currentDecade, decades, rollRound]);
 
   const draftable = useCallback(
-    (p: PlayerOption) => {
+    (p: PublicPlayer) => {
       if (draftedIds.includes(p.entity_id)) return false;
-      return KINDS.some((kind, i) => lineup[i] === null && canPlay(p, kind));
+      return KINDS.some((kind, i) => lineup[i] === null && canFill(p.positions, kind));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [lineup],
   );
 
-  const placeAt = (player: PlayerOption, i: number) => {
+  const placeAt = (player: PublicPlayer, i: number) => {
     if (currentTeam === null || currentDecade === null) return;
     const entry: LineupEntry = { player, team: currentTeam, decade: currentDecade };
     setLineup((prev) => prev.map((s, idx) => (idx === i ? entry : s)));
@@ -126,19 +139,23 @@ export default function Home() {
     setCurrentTeam(null);
   };
 
-  const pick = (player: PlayerOption) => {
+  const pick = (player: PublicPlayer) => {
     const eligible = KINDS.map((kind, i) => ({ kind, i }))
       .filter(({ i }) => lineup[i] === null)
-      .filter(({ kind }) => canPlay(player, kind))
+      .filter(({ kind }) => canFill(player.positions, kind))
       .map(({ i }) => i);
     if (eligible.length === 0) return;
     if (eligible.length === 1) placeAt(player, eligible[0]);
     else setPending(player);
   };
 
+  // Slot clicks place the pending pick, or move/swap already-drafted players
+  // between eligible slots. There is no delete — committed picks can be
+  // rearranged but not removed (so you can't re-roll past the five spins).
   const onSlotClick = (i: number) => {
     if (pending) {
-      if (lineup[i] === null && canPlay(pending, KINDS[i])) placeAt(pending, i);
+      if (lineup[i] === null && canFill(pending.positions, KINDS[i]))
+        placeAt(pending, i);
       return;
     }
     if (selected === null) {
@@ -152,15 +169,15 @@ export default function Home() {
     const sel = lineup[selected] as LineupEntry;
     const target = lineup[i];
     if (target === null) {
-      if (canPlay(sel.player, KINDS[i])) {
+      if (canFill(sel.player.positions, KINDS[i])) {
         setLineup((prev) =>
           prev.map((s, idx) => (idx === i ? sel : idx === selected ? null : s)),
         );
         setSelected(null);
       }
     } else if (
-      canPlay(sel.player, KINDS[i]) &&
-      canPlay(target.player, KINDS[selected])
+      canFill(sel.player.positions, KINDS[i]) &&
+      canFill(target.player.positions, KINDS[selected])
     ) {
       setLineup((prev) =>
         prev.map((s, idx) => (idx === i ? sel : idx === selected ? target : s)),
@@ -169,57 +186,81 @@ export default function Home() {
     }
   };
 
-  const removeSlot = (i: number) => {
-    setLineup((prev) => prev.map((s, idx) => (idx === i ? null : s)));
-    setSelected(null);
-  };
-
   let targets: number[] = [];
   if (pending) {
     targets = KINDS.map((kind, i) => ({ kind, i }))
       .filter(({ i }) => lineup[i] === null)
-      .filter(({ kind }) => canPlay(pending, kind))
+      .filter(({ kind }) => canFill(pending.positions, kind))
       .map(({ i }) => i);
   } else if (selected !== null) {
     const sel = lineup[selected] as LineupEntry;
     targets = KINDS.map((_, i) => i).filter((i) => {
       if (i === selected) return false;
       const t = lineup[i];
-      if (t === null) return canPlay(sel.player, KINDS[i]);
-      return canPlay(sel.player, KINDS[i]) && canPlay(t.player, KINDS[selected]);
+      if (t === null) return canFill(sel.player.positions, KINDS[i]);
+      return (
+        canFill(sel.player.positions, KINDS[i]) &&
+        canFill(t.player.positions, KINDS[selected])
+      );
     });
   }
 
-  const rosterEntries: RosterEntry[] = lineup.filter(Boolean).map((e) => {
-    const { player, team, decade } = e as LineupEntry;
-    return { ...player, team, decade };
-  });
-
   const teamSkip = () => {
-    if (teamSkips <= 0 || currentDecade === null || pending) return;
+    if (teamSkips <= 0 || currentDecade === null || pending || rolling) return;
     setTeamSkips((n) => n - 1);
     rollRound({ decade: currentDecade, exclude: currentTeam ?? undefined });
   };
 
-  const decadeSkip = () => {
-    if (decadeSkips <= 0 || currentDecade === null || pending) return;
-    const others = decades.filter((d) => d !== currentDecade);
-    if (others.length === 0) return;
-    setDecadeSkips((n) => n - 1);
-    setCurrentDecade(others[Math.floor(Math.random() * others.length)]);
+  // Decade skip keeps the team and only moves to an era where that team has
+  // players, so it never spends the skip just to force a free team respin.
+  const decadeSkip = async () => {
+    if (
+      decadeSkips <= 0 ||
+      currentDecade === null ||
+      currentTeam === null ||
+      pending ||
+      rolling
+    )
+      return;
+    try {
+      const res = await fetch(`/api/team-decades?team=${currentTeam}`);
+      if (!res.ok) return;
+      const { decades: teamDecades } = (await res.json()) as { decades: number[] };
+      const others = (teamDecades ?? []).filter((d) => d !== currentDecade);
+      if (others.length === 0) {
+        setError(`${currentTeam} only has players in the ${currentDecade}s.`);
+        return; // keep the skip
+      }
+      setDecadeSkips((n) => n - 1);
+      setCurrentDecade(others[Math.floor(Math.random() * others.length)]);
+    } catch {
+      /* keep the skip on failure */
+    }
   };
 
   const simulate = async () => {
     setSimulating(true);
     try {
+      const picks: SimPick[] = lineup.filter(Boolean).map((e) => {
+        const entry = e as LineupEntry;
+        return {
+          entity_id: entry.player.entity_id,
+          team: entry.team,
+          decade: entry.decade,
+        };
+      });
       const res = await fetch("/api/simulate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ roster: rosterEntries }),
+        body: JSON.stringify({ roster: picks }),
       });
+      if (!res.ok) throw new Error("simulate failed");
       const data = await res.json();
       setResult(data.result as SimResult);
+      setResultRoster((data.roster as SimRosterLine[]) ?? []);
       window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      setError("Couldn't simulate that season. Try again.");
     } finally {
       setSimulating(false);
     }
@@ -305,10 +346,7 @@ export default function Home() {
       {error && phase === "play" && (
         <div className="relative z-10 mx-auto mt-6 max-w-lg">
           <div className="md-card border-[var(--md-coral)] p-4">
-            <p className="font-display text-sm">Data error: {error}</p>
-            <p className="mt-2 text-xs text-[var(--md-ink-muted)]">
-              Check <code>MOTHERDUCK_TOKEN</code> in <code>.env.local</code>.
-            </p>
+            <p className="font-display text-sm">{error}</p>
           </div>
         </div>
       )}
@@ -316,7 +354,11 @@ export default function Home() {
       {/* ---------------- RESULT ---------------- */}
       {phase === "play" && result && (
         <section className="relative z-10 mx-auto mt-4 w-full max-w-lg">
-          <ResultsPanel roster={rosterEntries} result={result} onReset={backToMenu} />
+          <ResultsPanel
+            roster={resultRoster}
+            result={result}
+            onReset={backToMenu}
+          />
         </section>
       )}
 
@@ -333,7 +375,6 @@ export default function Home() {
               targets={targets}
               selected={selected}
               onSlotClick={onSlotClick}
-              onRemove={removeSlot}
             />
             <div className="mt-2 text-center font-display text-[11px] text-[var(--md-ink-muted)]">
               {pending
@@ -371,14 +412,14 @@ export default function Home() {
                 <button
                   className="md-btn md-btn--sm md-btn--secondary"
                   onClick={teamSkip}
-                  disabled={teamSkips <= 0}
+                  disabled={teamSkips <= 0 || rolling}
                 >
                   ↻ Team skip ({teamSkips})
                 </button>
                 <button
                   className="md-btn md-btn--sm md-btn--secondary"
                   onClick={decadeSkip}
-                  disabled={decadeSkips <= 0 || decades.length < 2}
+                  disabled={decadeSkips <= 0 || rolling || decades.length < 2}
                 >
                   ↻ Decade skip ({decadeSkips})
                 </button>
@@ -393,7 +434,7 @@ export default function Home() {
                     onPick={pick}
                     onNoneEligible={() =>
                       rollRound({
-                        decade: currentDecade,
+                        decade: currentDecade ?? undefined,
                         exclude: currentTeam ?? undefined,
                       })
                     }

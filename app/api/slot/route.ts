@@ -53,8 +53,9 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json({ team: weightedPick(pool), decade });
   } catch (err) {
+    console.error("[/api/slot]", err);
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: "Couldn't roll a team right now." },
       { status: 500 },
     );
   }

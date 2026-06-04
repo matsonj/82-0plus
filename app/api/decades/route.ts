@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDecades, warmPlayerIndex } from "@/lib/queries";
+import { getDecades } from "@/lib/queries";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,11 +7,11 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const decades = await getDecades();
-    warmPlayerIndex(); // start the expensive GQ precompute now; first team load awaits it
     return NextResponse.json({ decades });
   } catch (err) {
+    console.error("[/api/decades]", err);
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: "Couldn't load the league right now." },
       { status: 500 },
     );
   }

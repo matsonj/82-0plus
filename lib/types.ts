@@ -1,49 +1,41 @@
 // Shared types for the 82-0+ game.
 import type { Role } from "./positions";
 
-/** The 5 displayed box-score averages plus the hidden usage inputs the sim needs. */
-export interface PlayerLine {
+/**
+ * Public, client-safe player shape returned by /api/players. Deliberately omits
+ * Game Quality (`value`) and the scoring-only inputs (FGA/FG3A/FG3M/FTA/TOV) so
+ * those never reach the browser. Display stats + mpg are populated in Classic
+ * mode and null in HoopIQ.
+ */
+export interface PublicPlayer {
+  entity_id: string;
+  player_name: string;
+  best_season: number;
+  positions: Role[]; // eligible lineup roles, computed server-side
+  mpg: number | null;
+  pts: number | null;
+  reb: number | null;
+  ast: number | null;
+  stl: number | null;
+  blk: number | null;
+}
+
+/** What the client submits to /api/simulate — identifiers only, never stats. */
+export interface SimPick {
+  entity_id: string;
+  team: string;
+  decade: number;
+}
+
+/** Server-hydrated roster line returned by /api/simulate for the results display. */
+export interface SimRosterLine {
+  entity_id: string;
+  player_name: string;
+  team: string;
+  best_season: number;
   pts: number;
   reb: number;
   ast: number;
-  stl: number;
-  blk: number;
-  fga: number;
-  fg3a: number;
-  fg3m: number;
-  fta: number;
-  tov: number;
-}
-
-/** A selectable player for a given team+decade. `value` = peak season-median Game Quality. */
-export interface PlayerOption extends PlayerLine {
-  entity_id: string;
-  player_name: string;
-  best_season: number;
-  value: number; // peak season-median Game Quality — used for scoring, never shown
-  gp: number;
-  mpg: number; // minutes per game — the visible sort key
-}
-
-/**
- * A slot the user is drafting: a decade, a required position, the rolled team,
- * and (once picked) the player. The position plan guarantees the final roster
- * has ≥1 G/W/B and ≤3 of any one position.
- */
-export interface DraftSlot {
-  decade: number;
-  pos: Role;
-  team: string | null;
-  player: PlayerOption | null;
-}
-
-/** A filled roster entry handed to the simulation. */
-export interface RosterEntry extends PlayerLine {
-  entity_id: string;
-  player_name: string;
-  best_season: number;
-  decade: number;
-  team: string;
 }
 
 /** Output of the bespoke scoring model. */
