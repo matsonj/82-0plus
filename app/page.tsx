@@ -386,6 +386,10 @@ export default function Home() {
     }
   };
 
+  // Whether the data needed to play has loaded (a failed initial fetch leaves
+  // this false → we show a failed-start state instead of an empty board).
+  const loaded = gameType === "daily" ? dailySlots.length > 0 : decades.length > 0;
+
   const modeLabel =
     gameType === "daily"
       ? `Daily ${dailyDate}`
@@ -527,7 +531,36 @@ export default function Home() {
         </section>
       )}
 
-      {error && phase === "play" && (
+      {/* Failed to load the game data — recoverable. */}
+      {phase === "play" && !booting && !result && !loaded && (
+        <section className="relative z-10 mx-auto mt-6 w-full max-w-lg">
+          <div className="md-card md-card--lift p-5 text-center">
+            <p className="font-display text-base font-bold">
+              Couldn&rsquo;t start the game.
+            </p>
+            <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
+              {error ?? "Something went wrong loading the league."}
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <button
+                className="md-btn md-btn--sm md-btn--teal"
+                onClick={() => startGame(mode, gameType)}
+              >
+                Try again
+              </button>
+              <button
+                className="md-btn md-btn--sm md-btn--secondary"
+                onClick={backToMenu}
+              >
+                Back to menu
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Transient in-game error (e.g. a failed roll/simulate) while playing. */}
+      {phase === "play" && loaded && !result && error && (
         <div className="relative z-10 mx-auto mt-6 max-w-lg">
           <div className="md-card border-[var(--md-coral)] p-4">
             <p className="font-display text-sm">{error}</p>
@@ -549,7 +582,7 @@ export default function Home() {
       )}
 
       {/* ---------------- GAME ---------------- */}
-      {phase === "play" && !result && !booting && (
+      {phase === "play" && !result && !booting && loaded && (
         <section className="relative z-10 mt-4 flex flex-col gap-5">
           <div>
             <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
@@ -618,6 +651,7 @@ export default function Home() {
                     team={currentTeam}
                     decade={currentDecade}
                     mode={mode}
+                    allowRespin={gameType === "free"}
                     draftable={draftable}
                     onPick={pick}
                     onNoneEligible={() =>

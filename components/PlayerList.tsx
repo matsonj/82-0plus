@@ -53,6 +53,7 @@ export function PlayerList({
   team,
   decade,
   mode,
+  allowRespin,
   draftable,
   onPick,
   onNoneEligible,
@@ -60,6 +61,7 @@ export function PlayerList({
   team: string;
   decade: number;
   mode: GameMode;
+  allowRespin: boolean;
   draftable: (p: PublicPlayer) => boolean;
   onPick: (p: PublicPlayer) => void;
   onNoneEligible: () => void;
@@ -185,9 +187,18 @@ export function PlayerList({
             <div className="font-display text-sm text-[var(--md-ink-muted)]">
               No one here fits your open slots.
             </div>
-            <button className="md-btn md-btn--sm" onClick={onNoneEligible}>
-              ↻ Respin team (free)
-            </button>
+            {allowRespin ? (
+              <button className="md-btn md-btn--sm" onClick={onNoneEligible}>
+                ↻ Respin team (free)
+              </button>
+            ) : (
+              // Daily mode is a fixed, seeded challenge — no random respin. Move
+              // an already-drafted player to free up a slot {team} can fill.
+              <div className="max-w-[16rem] font-display text-xs text-[var(--md-ink-muted)]">
+                Tap a drafted player, then an open slot, to rearrange and free a
+                spot {team} can fill.
+              </div>
+            )}
           </div>
         )}
         {status === "ok" && available.length > 0 && rows.length === 0 && (
