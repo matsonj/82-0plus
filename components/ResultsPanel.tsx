@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { SimRosterLine, SimResult } from "@/lib/types";
+import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
 
 // One line of the net-rating breakdown: a label (+ optional detail) and the
@@ -39,12 +39,14 @@ export function ResultsPanel({
   result,
   shareText,
   modeLabel,
+  mode,
   onReset,
 }: {
   roster: SimRosterLine[];
   result: SimResult;
   shareText: string;
   modeLabel: string;
+  mode: GameMode;
   onReset: () => void;
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
@@ -240,7 +242,7 @@ export function ResultsPanel({
             <span>
               <span className="text-[var(--md-orange-deep)]">{r.team}</span> &rsquo;
               {String(r.best_season).slice(2)} · {r.player_name}
-              {modeLabel !== "HoopIQ" &&
+              {mode === "classic" &&
                 (r.allDef === 1 ? " 🥇" : r.allDef === 2 ? " 🥈" : "")}
             </span>
             <span className="text-[var(--md-ink-muted)]">

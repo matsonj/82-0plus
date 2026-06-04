@@ -118,7 +118,7 @@ export default function Home() {
 
   const startGame = useCallback(async (m: GameMode, type: GameType) => {
     if (type === "daily" && dailyResultRef.current) return; // already played today
-    setMode(type === "daily" ? "classic" : m);
+    setMode(type === "daily" ? "hoopiq" : m); // daily hides stats like HoopIQ
     setGameType(type);
     setResult(null);
     setResultRoster([]);
@@ -599,6 +599,7 @@ export default function Home() {
             result={result}
             shareText={shareText}
             modeLabel={modeLabel}
+            mode={mode}
             onReset={backToMenu}
           />
         </section>
