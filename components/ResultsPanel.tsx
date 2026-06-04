@@ -209,7 +209,7 @@ export function ResultsPanel({
             ["Lineup balance", -result.balancePen],
             ["Size", -result.sizePen],
             ["Defense", result.defBuff],
-            ["Construction synergy", result.synergyBonus],
+            ["Synergy", result.synergyBonus],
           ] as const
         )
           .filter(([, v]) => Math.round(v * 10) / 10 !== 0)
@@ -226,8 +226,11 @@ export function ResultsPanel({
       </div>
 
       <div className="grid gap-1">
-        <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          Your roster
+        <div className="flex items-baseline justify-between font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+          <span>Your roster</span>
+          <span className="text-[10px]">
+            PTS/REB/AST · <span className="text-[var(--md-teal)]">[GQ]</span>
+          </span>
         </div>
         {roster.map((r) => (
           <div
@@ -245,9 +248,6 @@ export function ResultsPanel({
             </span>
           </div>
         ))}
-        <div className="mt-0.5 text-[10px] leading-snug text-[var(--md-ink-muted)]">
-          PTS/REB/AST · <span className="text-[var(--md-teal)]">[Game Quality 0–100]</span>
-        </div>
       </div>
 
       <div className="grid gap-1.5">
