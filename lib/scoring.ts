@@ -63,7 +63,7 @@ export const SCORING_CONFIG = {
   BASE_WINS: 41,
 
   // Fit penalties, in net-rating points subtracted at their worst.
-  USAGE_MAX_PEN: 20, // shot-overlap: stars must sacrifice usage to fit together
+  USAGE_MAX_PEN: 16, // shot-overlap: stars must sacrifice usage to fit together
   BALLHOG_MAX_PEN: 11, // iso-heavy, low assisted-FG%
   // Outside shooting (stepped): 0–1 non-shooters is fine, 2 hurts, 3+ is brutal.
   OUTSIDE_PEN_2: 5, // exactly two non-shooters
