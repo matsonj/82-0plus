@@ -13,6 +13,12 @@ const DB = "nba_box_scores_v2.main";
 // appear in the slot machine (keeps thin combos out of the rotation).
 const MIN_PLAYERS_PER_COMBO = 10;
 
+// A decade must have at least this many *playable* teams before it's offered in
+// rolls. Without it, a decade with only 2 qualifying teams (e.g. the 1950s:
+// BOS + SYR) makes one team appear ~50% of the time. Decades auto-return once
+// historical backfills make them broad enough.
+const MIN_PLAYABLE_TEAMS_PER_DECADE = 8;
+
 /** Full per-(player, team, decade) row — server-side only (carries GQ + sim inputs). */
 export interface IndexedPlayer {
   entity_id: string;
@@ -38,9 +44,10 @@ export interface IndexedPlayer {
 
 /**
  * Available decades — derived from the player index so every decade we offer
- * actually has draftable players. (The schedule has older seasons, e.g. the
- * 1940s, that are too sparse to produce any qualifying players; offering them
- * would dead-end the slot machine.)
+ * has enough *team variety* to roll fairly. A decade qualifies only if at least
+ * MIN_PLAYABLE_TEAMS_PER_DECADE teams clear MIN_PLAYERS_PER_COMBO. This excludes
+ * sparse decades (the schedule has thin older seasons, e.g. the 1940s/1950s)
+ * that would otherwise overrepresent their one or two qualifying teams.
  */
 export async function getDecades(
   options: QueryOptions = {},
@@ -51,11 +58,17 @@ export async function getDecades(
     const k = `${p.team}|${p.decade}`;
     counts.set(k, (counts.get(k) ?? 0) + 1);
   }
-  const decades = new Set<number>();
+  const playableTeams = new Map<number, number>(); // decade → # qualifying teams
   for (const [k, c] of counts) {
-    if (c >= MIN_PLAYERS_PER_COMBO) decades.add(Number(k.split("|")[1]));
+    if (c >= MIN_PLAYERS_PER_COMBO) {
+      const decade = Number(k.split("|")[1]);
+      playableTeams.set(decade, (playableTeams.get(decade) ?? 0) + 1);
+    }
   }
-  return [...decades].sort((a, b) => a - b);
+  return [...playableTeams]
+    .filter(([, teams]) => teams >= MIN_PLAYABLE_TEAMS_PER_DECADE)
+    .map(([decade]) => decade)
+    .sort((a, b) => a - b);
 }
 
 /** Teams in a decade with enough players to be offered (≥ MIN_PLAYERS_PER_COMBO). */
@@ -310,6 +323,7 @@ export async function hydrateRoster(
     lines.push({
       entity_id: p.entity_id, player_name: p.player_name, team: p.team,
       best_season: p.best_season, pts: p.pts, reb: p.reb, ast: p.ast,
+      gq: Math.round((p.value ?? 0) * 100), // 0–100, revealed only post-sim
     });
   }
   return { scoring, lines, players };

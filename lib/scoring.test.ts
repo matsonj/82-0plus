@@ -82,6 +82,16 @@ describe("simulateRoster", () => {
     expect(r.usagePen).toBeGreaterThan(2);
   });
 
+  it("teamBox aggregates the five starters' per-game lines", () => {
+    const five = Array.from({ length: 5 }, () =>
+      p({ gq: 0.7, pts: 20, reb: 6, ast: 4, stl: 1, blk: 0.5, fg3m: 2, tov: 2.5, fga: 14, fta: 4 }),
+    );
+    const r = simulateRoster(five);
+    expect(r.teamBox).toEqual({
+      pts: 100, reb: 30, ast: 20, stl: 5, blk: 2.5, fg3m: 10, tov: 12.5,
+    });
+  });
+
   it("better players (higher GQ) win more, all else equal", () => {
     const lo = simulateRoster(balancedRoster(0.6));
     const hi = simulateRoster(balancedRoster(0.8));

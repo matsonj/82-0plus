@@ -312,7 +312,9 @@ export default function Home() {
     setRolling(true);
     setPending(null);
     setSelected(null);
-    setCurrentTeam(null);
+    // Keep the team set the whole time — only the decade reel should spin. The
+    // player list is hidden during the in-flight roll via `rolling`, not by
+    // nulling the team (which would make the team reel spin too).
     try {
       const res = await fetch(`/api/team-decades?team=${team}`);
       if (!res.ok) throw new Error("skip failed");
@@ -321,7 +323,6 @@ export default function Home() {
       const others = (teamDecades ?? []).filter((d) => d !== cur);
       if (others.length === 0) {
         setError(`${team} only has players in the ${cur}s.`);
-        setCurrentTeam(team); // restore — keep the skip
         return;
       }
       setDecadeSkips((n) => n - 1);
@@ -329,12 +330,10 @@ export default function Home() {
       for (const e of lineupRef.current) {
         if (e) usage[e.decade] = (usage[e.decade] ?? 0) + 1;
       }
-      setCurrentDecade(pickWeightedDecade(others, usage));
-      setCurrentTeam(team); // same team, new era
+      setCurrentDecade(pickWeightedDecade(others, usage)); // same team, new era
     } catch {
       if (rollSeq.current === myId) {
         setError("Couldn't skip the decade. Try again.");
-        setCurrentTeam(team);
       }
     } finally {
       if (rollSeq.current === myId) {
@@ -668,7 +667,7 @@ export default function Home() {
                 </div>
               )}
               <div className="w-full">
-                {currentTeam ? (
+                {currentTeam && !rolling ? (
                   <PlayerList
                     team={currentTeam}
                     decade={currentDecade}

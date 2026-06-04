@@ -40,6 +40,7 @@ export interface SimRosterLine {
   pts: number;
   reb: number;
   ast: number;
+  gq: number; // Game Quality as a 0–100 integer (revealed only on the summary)
 }
 
 /** Output of the bespoke scoring model. */
@@ -62,6 +63,18 @@ export interface SimResult {
   synergyBonus: number;
   roleCounts: { G: number; W: number; B: number };
   totalPoss: number;
+  // Aggregate team box score (sum of the five starters' per-game lines, using
+  // the same era-adjusted inputs that feed the model). FG/FT are represented by
+  // the model's efficiency metric (teamTsPlus) rather than raw percentages.
+  teamBox: {
+    pts: number;
+    reb: number;
+    ast: number;
+    stl: number;
+    blk: number;
+    fg3m: number;
+    tov: number;
+  };
 }
 
 export type GameMode = "classic" | "hoopiq";

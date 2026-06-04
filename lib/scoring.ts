@@ -105,6 +105,7 @@ export function simulateRoster(
       usagePen: 0, effPen: 0, balancePen: 0, synergyBonus: 0,
       roleCounts: { G: 0, W: 0, B: 0 },
       totalPoss: 0,
+      teamBox: { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fg3m: 0, tov: 0 },
     };
   }
 
@@ -189,5 +190,14 @@ export function simulateRoster(
     synergyBonus: round1(synergyBonus),
     roleCounts,
     totalPoss: round1(totalPoss),
+    teamBox: {
+      pts: round1(sum((p) => p.pts)),
+      reb: round1(sum((p) => p.reb)),
+      ast: round1(sum((p) => p.ast)),
+      stl: round1(sum((p) => p.stl)),
+      blk: round1(sum((p) => p.blk)),
+      fg3m: round1(sum((p) => p.fg3m)),
+      tov: round1(sum((p) => p.tov)),
+    },
   };
 }

@@ -245,10 +245,41 @@ export function ResultsPanel({
               {String(r.best_season).slice(2)} · {r.player_name}
             </span>
             <span className="text-[var(--md-ink-muted)]">
-              {r.pts}/{r.reb}/{r.ast}
+              {r.pts}/{r.reb}/{r.ast}{" "}
+              <span className="text-[var(--md-teal)]">[{r.gq}]</span>
             </span>
           </div>
         ))}
+        <div className="mt-0.5 text-[10px] leading-snug text-[var(--md-ink-muted)]">
+          PTS/REB/AST · <span className="text-[var(--md-teal)]">[Game Quality 0–100]</span>
+        </div>
+      </div>
+
+      <div className="grid gap-1">
+        <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+          Team box · per game
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 font-display text-sm">
+          {(
+            [
+              ["PTS", result.teamBox.pts],
+              ["REB", result.teamBox.reb],
+              ["AST", result.teamBox.ast],
+              ["STL", result.teamBox.stl],
+              ["BLK", result.teamBox.blk],
+              ["3PM", result.teamBox.fg3m],
+              ["TOV", result.teamBox.tov],
+            ] as const
+          ).map(([label, value]) => (
+            <span key={label}>
+              <span className="text-[var(--md-ink-muted)]">{label}</span> {value}
+            </span>
+          ))}
+          <span>
+            <span className="text-[var(--md-ink-muted)]">TS+</span>{" "}
+            {result.teamTsPlus.toFixed(2)}
+          </span>
+        </div>
       </div>
 
       <div className="flex flex-wrap justify-center gap-2">
