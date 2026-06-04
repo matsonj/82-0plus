@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SimRosterLine, SimResult } from "@/lib/types";
+import { buildShareImage } from "@/lib/shareImage";
 
 function Bar({
   label,
@@ -39,27 +40,54 @@ export function ResultsPanel({
   roster,
   result,
   shareText,
+  modeLabel,
   onReset,
 }: {
   roster: SimRosterLine[];
   result: SimResult;
   shareText: string;
+  modeLabel: string;
   onReset: () => void;
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
-  const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<"idle" | "working" | "done">("idle");
 
   const share = async () => {
+    setStatus("working");
     try {
-      if (navigator.share) {
-        await navigator.share({ text: shareText });
+      const blob = await buildShareImage(result, roster, modeLabel);
+      const file = blob
+        ? new File([blob], "82-0-season.png", { type: "image/png" })
+        : null;
+
+      // Mobile: share the image card + the link text via the native sheet.
+      const nav = navigator as Navigator & {
+        canShare?: (d: ShareData) => boolean;
+      };
+      if (file && nav.canShare?.({ files: [file] }) && nav.share) {
+        await nav.share({ files: [file], text: shareText, title: "82-0+" });
+        setStatus("idle");
         return;
       }
-      await navigator.clipboard.writeText(shareText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+
+      // Desktop fallback: download the image and copy the link text.
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "82-0-season.png";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      try {
+        await navigator.clipboard.writeText(shareText);
+      } catch {
+        /* clipboard blocked */
+      }
+      setStatus("done");
+      setTimeout(() => setStatus("idle"), 2200);
     } catch {
-      /* user dismissed / clipboard blocked */
+      setStatus("idle"); // user dismissed the share sheet
     }
   };
 
@@ -165,8 +193,16 @@ export function ResultsPanel({
       </div>
 
       <div className="flex flex-wrap justify-center gap-2">
-        <button className="md-btn md-btn--lg md-btn--teal" onClick={share}>
-          {copied ? "Copied!" : "Share result"}
+        <button
+          className="md-btn md-btn--lg md-btn--teal"
+          onClick={share}
+          disabled={status === "working"}
+        >
+          {status === "working"
+            ? "Building…"
+            : status === "done"
+              ? "Saved + copied!"
+              : "Share result"}
         </button>
         <button className="md-btn md-btn--lg md-btn--ink" onClick={onReset}>
           Play again

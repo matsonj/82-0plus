@@ -542,6 +542,7 @@ export default function Home() {
             roster={resultRoster}
             result={result}
             shareText={shareText}
+            modeLabel={modeLabel}
             onReset={backToMenu}
           />
         </section>
