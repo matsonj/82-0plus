@@ -15,15 +15,18 @@ import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
+import { encodeShare } from "@/lib/shareCode";
+import { SITE_URL } from "@/lib/site";
+import { pacificDate } from "@/lib/dailyDate";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play";
 type GameType = "free" | "daily";
-const SITE_URL = "https://82-0plus.vercel.app";
 
-// Each time a decade is used its odds drop 30% (weight × 0.7 per use).
+// Each time a decade is used its odds drop 90% (weight × 0.1 per use) so the
+// draft spreads across eras instead of clustering in the same time period.
 function pickWeightedDecade(pool: number[], usage: Record<number, number>): number {
-  const weights = pool.map((d) => Math.pow(0.7, usage[d] ?? 0));
+  const weights = pool.map((d) => Math.pow(0.1, usage[d] ?? 0));
   const total = weights.reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
   for (let i = 0; i < pool.length; i++) {
@@ -115,7 +118,7 @@ export default function Home() {
 
   const startGame = useCallback(async (m: GameMode, type: GameType) => {
     if (type === "daily" && dailyResultRef.current) return; // already played today
-    setMode(type === "daily" ? "classic" : m);
+    setMode(type === "daily" ? "hoopiq" : m); // daily hides stats like HoopIQ
     setGameType(type);
     setResult(null);
     setResultRoster([]);
@@ -184,9 +187,9 @@ export default function Home() {
     currentTeam, currentDecade, decades, rollRound,
   ]);
 
-  // First-visit how-to + today's daily lock (one challenge per UTC day).
+  // First-visit how-to + today's daily lock (one challenge per Pacific day).
   useEffect(() => {
-    const d = new Date().toISOString().slice(0, 10);
+    const d = pacificDate();
     setToday(d);
     try {
       const stored = localStorage.getItem(`md820-daily-${d}`);
@@ -311,7 +314,9 @@ export default function Home() {
     setRolling(true);
     setPending(null);
     setSelected(null);
-    setCurrentTeam(null);
+    // Keep the team set the whole time — only the decade reel should spin. The
+    // player list is hidden during the in-flight roll via `rolling`, not by
+    // nulling the team (which would make the team reel spin too).
     try {
       const res = await fetch(`/api/team-decades?team=${team}`);
       if (!res.ok) throw new Error("skip failed");
@@ -320,7 +325,6 @@ export default function Home() {
       const others = (teamDecades ?? []).filter((d) => d !== cur);
       if (others.length === 0) {
         setError(`${team} only has players in the ${cur}s.`);
-        setCurrentTeam(team); // restore — keep the skip
         return;
       }
       setDecadeSkips((n) => n - 1);
@@ -328,12 +332,10 @@ export default function Home() {
       for (const e of lineupRef.current) {
         if (e) usage[e.decade] = (usage[e.decade] ?? 0) + 1;
       }
-      setCurrentDecade(pickWeightedDecade(others, usage));
-      setCurrentTeam(team); // same team, new era
+      setCurrentDecade(pickWeightedDecade(others, usage)); // same team, new era
     } catch {
       if (rollSeq.current === myId) {
         setError("Couldn't skip the decade. Try again.");
-        setCurrentTeam(team);
       }
     } finally {
       if (rollSeq.current === myId) {
@@ -396,13 +398,34 @@ export default function Home() {
       : mode === "hoopiq"
         ? "HoopIQ"
         : "Classic";
+  // Encode the finished season into a shareable link that renders a rich
+  // preview (dynamic OG image) when pasted into Slack/Twitter/etc.
+  const shareUrl = result
+    ? `${SITE_URL}/s?r=${encodeURIComponent(
+        encodeShare({
+          w: result.wins,
+          l: result.losses,
+          n: result.netRating,
+          p: result.perfect,
+          m: modeLabel,
+          r: resultRoster.map((r) => ({
+            t: r.team,
+            s: r.best_season,
+            name: r.player_name,
+            pts: r.pts,
+            reb: r.reb,
+            ast: r.ast,
+          })),
+        }),
+      )}`
+    : SITE_URL;
   const shareText = result
     ? [
         `82-0+ 🏀 ${result.wins}-${result.losses} (${result.netRating >= 0 ? "+" : ""}${result.netRating} net) · ${modeLabel}`,
         ...resultRoster.map(
           (r) => `${r.team} '${String(r.best_season).slice(2)} ${r.player_name}`,
         ),
-        SITE_URL,
+        shareUrl,
       ].join("\n")
     : "";
 
@@ -576,6 +599,7 @@ export default function Home() {
             result={result}
             shareText={shareText}
             modeLabel={modeLabel}
+            mode={mode}
             onReset={backToMenu}
           />
         </section>
@@ -646,7 +670,7 @@ export default function Home() {
                 </div>
               )}
               <div className="w-full">
-                {currentTeam ? (
+                {currentTeam && !rolling ? (
                   <PlayerList
                     team={currentTeam}
                     decade={currentDecade}

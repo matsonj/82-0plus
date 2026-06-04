@@ -11,7 +11,9 @@ export interface PublicPlayer {
   entity_id: string;
   player_name: string;
   best_season: number;
-  positions: Role[]; // eligible lineup roles, computed server-side
+  positions: Role[]; // eligible lineup roles (G/W/B), computed server-side
+  pos: string | null; // real b-ref position label for display (e.g. "C-F")
+  allDef: number | null; // All-Defensive team that season (1/2/0); Classic only
   mpg: number | null;
   pts: number | null;
   reb: number | null;
@@ -40,6 +42,8 @@ export interface SimRosterLine {
   pts: number;
   reb: number;
   ast: number;
+  gq: number; // Game Quality as a 0–100 integer (revealed only on the summary)
+  allDef: number; // All-Defensive team that season: 1 (1st), 2 (2nd), 0 (none)
 }
 
 /** Output of the bespoke scoring model. */
@@ -47,27 +51,41 @@ export interface SimResult {
   wins: number;
   losses: number;
   perfect: boolean;
-  netRating: number; // team point differential per game
+  netRating: number; // team point differential per game (after all adjustments)
+  baseNet: number; // GQ-derived net rating BEFORE construction adjustments
   meanGQ: number; // era-neutral team quality (avg peak GQ)
   pf: number; // implied points for (display)
   pa: number; // implied points allowed (display)
-  // fit factors in [0,1]
-  usageFactor: number;
-  pAst: number;
-  p3: number;
-  defenseFactor: number;
-  // net-rating points each penalty cost (and the synergy bonus)
+  // fit factors / counts
+  usageFactor: number; // possession-budget headroom (1 = no shot-overlap problem)
+  assistFactor: number; // assisted-FG% vs target (1 = shares the ball)
+  nonShooters: number; // count of FT/3P "non-shooters" in the five
+  totalAst: number; // team assists (for display)
+  assistedPct: number; // share of made FGs that were assisted (0–1)
+  // net-rating points each adjustment moved (penalties subtract, synergy adds)
   usagePen: number;
-  spacingPen: number;
-  playmakingPen: number;
-  defensePen: number;
+  outsidePen: number;
+  ballhogPen: number;
   balancePen: number;
+  sizePen: number; // too-short penalty (total height, All-Def adds effective inches)
+  defBuff: number; // All-Defense margin bonus (GQ undercounts defense)
   synergyBonus: number;
+  avgHeight: number; // team average height in inches (display)
+  allDefCount: number; // # All-Defensive selections on the five (display)
   roleCounts: { G: number; W: number; B: number };
   totalPoss: number;
-  totalAst: number;
-  total3m: number;
-  totalStocks: number;
+  // Aggregate team box score (sum of the five starters' per-game lines), all
+  // whole integers. fgPct/ftPct are attempt-weighted whole percentages.
+  teamBox: {
+    pts: number;
+    reb: number;
+    ast: number;
+    stl: number;
+    blk: number;
+    fgPct: number;
+    ftPct: number;
+    tov: number;
+  };
 }
 
 export type GameMode = "classic" | "hoopiq";

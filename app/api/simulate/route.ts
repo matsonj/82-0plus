@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { simulateRoster } from "@/lib/scoring";
 import { hydrateRoster } from "@/lib/queries";
 import { canPlay, type SlotKind } from "@/lib/positions";
+import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import type { SimPick } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -41,25 +42,36 @@ function parsePicks(raw: unknown): SimPick[] | null {
 }
 
 export async function POST(req: NextRequest) {
+  const sessionHint = getSessionHint(req);
+  const queryOptions = { sessionHint: sessionHint.value };
   try {
     const body = await req.json();
     const picks = parsePicks(body?.roster);
     if (!picks) {
-      return NextResponse.json({ error: "invalid roster" }, { status: 400 });
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "invalid roster" },
+        { status: 400 },
+      );
     }
 
     // Stats + Game Quality come from the server-side index, not the client.
     let scoring, lines, players;
     try {
-      ({ scoring, lines, players } = await hydrateRoster(picks));
+      ({ scoring, lines, players } = await hydrateRoster(picks, queryOptions));
     } catch {
-      return NextResponse.json({ error: "unknown roster pick" }, { status: 400 });
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "unknown roster pick" },
+        { status: 400 },
+      );
     }
 
     // Every player must actually be eligible for the lineup slot they claim.
     for (let i = 0; i < picks.length; i++) {
       if (!canPlay(players[i], KINDS[picks[i].slot])) {
-        return NextResponse.json(
+        return jsonWithSessionHint(
+          sessionHint,
           { error: "illegal lineup" },
           { status: 400 },
         );
@@ -67,10 +79,11 @@ export async function POST(req: NextRequest) {
     }
 
     const result = simulateRoster(scoring);
-    return NextResponse.json({ result, roster: lines });
+    return jsonWithSessionHint(sessionHint, { result, roster: lines });
   } catch (err) {
     console.error("[/api/simulate]", err);
-    return NextResponse.json(
+    return jsonWithSessionHint(
+      sessionHint,
       { error: "Couldn't simulate that season right now." },
       { status: 500 },
     );

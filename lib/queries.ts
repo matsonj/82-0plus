@@ -1,4 +1,4 @@
-import { query } from "./motherduck";
+import { query, type QueryOptions } from "./motherduck";
 import { eligiblePositions } from "./positions";
 import type { GameMode, PublicPlayer, SimPick, SimRosterLine } from "./types";
 import type { ScoringPlayer } from "./scoring";
@@ -12,6 +12,12 @@ const DB = "nba_box_scores_v2.main";
 // A team+decade combo must have at least this many drafted-eligible players to
 // appear in the slot machine (keeps thin combos out of the rotation).
 const MIN_PLAYERS_PER_COMBO = 10;
+
+// A decade must have at least this many *playable* teams before it's offered in
+// rolls. Without it, a decade with only 2 qualifying teams (e.g. the 1950s:
+// BOS + SYR) makes one team appear ~50% of the time. Decades auto-return once
+// historical backfills make them broad enough.
+const MIN_PLAYABLE_TEAMS_PER_DECADE = 8;
 
 /** Full per-(player, team, decade) row — server-side only (carries GQ + sim inputs). */
 export interface IndexedPlayer {
@@ -33,31 +39,49 @@ export interface IndexedPlayer {
   fg3m: number;
   fta: number;
   tov: number;
+  fgm: number;
+  ftm: number;
+  tsplus: number; // era-relative true-shooting (player TS% / league TS% that season), clamped
+  height_in: number; // real height in inches (default ~league avg if bio missing)
+  pos: string | null; // real basketball-reference position (null → derive from box line)
+  all_def: number; // All-Defensive team on best_season: 1 (1st), 2 (2nd), 0 (none)
 }
 
 /**
  * Available decades — derived from the player index so every decade we offer
- * actually has draftable players. (The schedule has older seasons, e.g. the
- * 1940s, that are too sparse to produce any qualifying players; offering them
- * would dead-end the slot machine.)
+ * has enough *team variety* to roll fairly. A decade qualifies only if at least
+ * MIN_PLAYABLE_TEAMS_PER_DECADE teams clear MIN_PLAYERS_PER_COMBO. This excludes
+ * sparse decades (the schedule has thin older seasons, e.g. the 1940s/1950s)
+ * that would otherwise overrepresent their one or two qualifying teams.
  */
-export async function getDecades(): Promise<number[]> {
-  const index = await getPlayerIndex();
+export async function getDecades(
+  options: QueryOptions = {},
+): Promise<number[]> {
+  const index = await getPlayerIndex(options);
   const counts = new Map<string, number>(); // "team|decade" → player count
   for (const p of index) {
     const k = `${p.team}|${p.decade}`;
     counts.set(k, (counts.get(k) ?? 0) + 1);
   }
-  const decades = new Set<number>();
+  const playableTeams = new Map<number, number>(); // decade → # qualifying teams
   for (const [k, c] of counts) {
-    if (c >= MIN_PLAYERS_PER_COMBO) decades.add(Number(k.split("|")[1]));
+    if (c >= MIN_PLAYERS_PER_COMBO) {
+      const decade = Number(k.split("|")[1]);
+      playableTeams.set(decade, (playableTeams.get(decade) ?? 0) + 1);
+    }
   }
-  return [...decades].sort((a, b) => a - b);
+  return [...playableTeams]
+    .filter(([, teams]) => teams >= MIN_PLAYABLE_TEAMS_PER_DECADE)
+    .map(([decade]) => decade)
+    .sort((a, b) => a - b);
 }
 
 /** Teams in a decade with enough players to be offered (≥ MIN_PLAYERS_PER_COMBO). */
-export async function getPlayableTeams(decade: number): Promise<Set<string>> {
-  const index = await getPlayerIndex();
+export async function getPlayableTeams(
+  decade: number,
+  options: QueryOptions = {},
+): Promise<Set<string>> {
+  const index = await getPlayerIndex(options);
   const counts = new Map<string, number>();
   for (const p of index) {
     if (p.decade === decade) counts.set(p.team, (counts.get(p.team) ?? 0) + 1);
@@ -70,6 +94,7 @@ export async function getPlayableTeams(decade: number): Promise<Set<string>> {
 /** Teams that appear in a decade, with a weight = number of seasons present. */
 export async function getTeamWeights(
   decade: number,
+  options: QueryOptions = {},
 ): Promise<{ team: string; weight: number }[]> {
   return query<{ team: string; weight: number }>(
     `SELECT b.team_abbreviation AS team,
@@ -82,6 +107,7 @@ export async function getTeamWeights(
       GROUP BY 1
       ORDER BY weight DESC`,
     [decade],
+    options,
   );
 }
 
@@ -96,20 +122,25 @@ declare global {
  * a backfill with the CREATE OR REPLACE of computePlayerIndexLive's SQL), and
  * falls back to computing it live if the table is missing or empty.
  */
-export function getPlayerIndex(): Promise<IndexedPlayer[]> {
+export function getPlayerIndex(
+  options: QueryOptions = {},
+): Promise<IndexedPlayer[]> {
   if (!globalThis.__player_index__) {
     globalThis.__player_index__ = (async () => {
       try {
         const rows = await query<IndexedPlayer>(
           `SELECT entity_id, player_name, team, decade, best_season, value, gp, mpg,
-                  pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m
+                  pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m, fgm, ftm, tsplus,
+                  height_in, pos, all_def
              FROM ${DB}.player_index`,
+          [],
+          options,
         );
         if (rows.length > 0) return rows;
       } catch {
         // table missing → fall through to live compute
       }
-      return computePlayerIndexLive();
+      return computePlayerIndexLive(options);
     })().catch((err) => {
       globalThis.__player_index__ = undefined; // allow retry on failure
       throw err;
@@ -119,7 +150,9 @@ export function getPlayerIndex(): Promise<IndexedPlayer[]> {
 }
 
 /** Compute the index from scratch (the source query the materialized table uses). */
-function computePlayerIndexLive(): Promise<IndexedPlayer[]> {
+function computePlayerIndexLive(
+  options: QueryOptions = {},
+): Promise<IndexedPlayer[]> {
   return query<IndexedPlayer>(
     `WITH per_season AS (
          SELECT b.entity_id, b.player_name,
@@ -135,7 +168,8 @@ function computePlayerIndexLive(): Promise<IndexedPlayer[]> {
                 avg(b.steals)   AS stl, avg(b.blocks)   AS blk,
                 avg(b.fg_attempted)  AS fga, avg(b.fg3_attempted) AS fg3a,
                 avg(b.fg3_made)      AS fg3m, avg(b.ft_attempted) AS fta,
-                avg(b.ft_made)       AS ftm, avg(b.turnovers) AS tov
+                avg(b.fg_made)       AS fgm, avg(b.ft_made) AS ftm,
+                avg(b.turnovers) AS tov
            FROM ${DB}.game_quality g
            JOIN ${DB}.box_scores b
              ON g.game_id = b.game_id AND g.entity_id = b.entity_id AND b.period = 'FullGame'
@@ -145,6 +179,18 @@ function computePlayerIndexLive(): Promise<IndexedPlayer[]> {
           GROUP BY 1, 2, 3, 4, 5
          HAVING count(*) >= 20
        ),
+       -- League true-shooting per season. Old-era absolute TS% is unreliable
+       -- (incomplete box-score coverage), but a player's TS+ (his TS% over the
+       -- league's, same source) is era-fair, so a 1962 volume scorer isn't
+       -- penalized against a 2016 league he never played in.
+       league_ts AS (
+         SELECT s.season_year,
+                sum(b.points) / (2 * (sum(b.fg_attempted) + 0.44 * sum(b.ft_attempted))) AS lg_ts
+           FROM ${DB}.box_scores b
+           JOIN ${DB}.schedule s ON b.game_id = s.game_id
+          WHERE b.period = 'FullGame' AND s.season_type = 'Regular Season'
+          GROUP BY 1
+       ),
        ranked AS (
          SELECT *,
                 row_number() OVER (
@@ -152,39 +198,55 @@ function computePlayerIndexLive(): Promise<IndexedPlayer[]> {
                 ) AS rn
            FROM per_season
        )
-       SELECT entity_id, player_name, team, decade,
-              season_year AS best_season,
+       SELECT r.entity_id, player_name, team, decade,
+              r.season_year AS best_season,
               round(med_gq, 3) AS value, gp, round(mpg, 1) AS mpg,
               round(pts, 1) AS pts, round(reb, 1) AS reb, round(ast, 1) AS ast,
               round(fga, 1) AS fga, round(fg3a, 1) AS fg3a, round(fta, 1) AS fta,
               -- Era backfill: estimate stats the NBA didn't record from what it did.
               -- Steals/blocks: not tracked before 1973-74.
-              round(CASE WHEN season_year < 1974
+              round(CASE WHEN r.season_year < 1974
                     THEN 0.7 + 0.6 * greatest(0, least(1, (ast - 2) / 6.0))
                              + 0.2 * (1 - greatest(0, least(1, (reb - 4) / 8.0)))
                     ELSE stl END, 2) AS stl,
-              round(CASE WHEN season_year < 1974
+              round(CASE WHEN r.season_year < 1974
                     THEN 0.3 + 1.6 * greatest(0, least(1, (reb - 4) / 8.0))
                     ELSE blk END, 2) AS blk,
               -- Turnovers: not tracked before 1977-78. From usage + playmaking.
-              round(CASE WHEN season_year < 1978
+              round(CASE WHEN r.season_year < 1978
                     THEN 0.5 + 0.09 * (fga + 0.44 * fta) + 0.18 * ast
                     ELSE tov END, 1) AS tov,
               -- 3PM: no line before 1979-80 → estimate; 1980-99 bigs get a modest floor.
               round(CASE
-                    WHEN season_year < 1980
+                    WHEN r.season_year < 1980
                     THEN (fga * CASE WHEN reb >= 9 THEN 0.10
                                      WHEN ast >= 4.5 AND reb <= 5 THEN 0.42
                                      ELSE 0.30 END)
                          * greatest(0.22, least(0.42,
                              0.5 * (CASE WHEN fta > 0 THEN ftm / fta ELSE 0.5 END) + 0.03))
-                    WHEN season_year < 2000 AND reb >= 9
+                    WHEN r.season_year < 2000 AND reb >= 9
                     THEN greatest(fg3m, fga * 0.10
                          * greatest(0.22, least(0.42,
                              0.5 * (CASE WHEN fta > 0 THEN ftm / fta ELSE 0.5 END) + 0.03)))
-                    ELSE fg3m END, 1) AS fg3m
-         FROM ranked
+                    ELSE fg3m END, 1) AS fg3m,
+              round(fgm, 1) AS fgm, round(ftm, 1) AS ftm,
+              -- Era-relative true-shooting (TS+), clamped to a sane band so noisy
+              -- old-era league denominators can't produce extreme modifiers.
+              round(greatest(0.80, least(1.30,
+                CASE WHEN (fga + 0.44 * fta) > 0 AND lt.lg_ts > 0
+                     THEN (pts / (2 * (fga + 0.44 * fta))) / lt.lg_ts
+                     ELSE 1.0 END)), 3) AS tsplus,
+              -- Real height/position (b-ref) + All-Defense on the card's season.
+              COALESCE(pb.height_in, 79) AS height_in,
+              pb.pos AS pos,
+              COALESCE(ad.all_team, 0) AS all_def
+         FROM ranked r
+         JOIN league_ts lt ON lt.season_year = r.season_year
+         LEFT JOIN ${DB}.player_bio pb ON pb.entity_id = r.entity_id
+         LEFT JOIN ${DB}.all_defense ad ON ad.entity_id = r.entity_id AND ad.season_year = r.season_year
         WHERE rn = 1`,
+    [],
+    options,
   );
 }
 
@@ -201,6 +263,8 @@ function toPublic(p: IndexedPlayer, mode: GameMode): PublicPlayer {
     player_name: p.player_name,
     best_season: p.best_season,
     positions: eligiblePositions(p),
+    pos: p.pos ?? null, // real position label (shown in both modes)
+    allDef: classic ? p.all_def : null, // award reveal — Classic only
     mpg: classic ? p.mpg : null,
     pts: classic ? p.pts : null,
     reb: classic ? p.reb : null,
@@ -215,8 +279,9 @@ export async function getPlayers(
   team: string,
   decade: number,
   mode: GameMode,
+  options: QueryOptions = {},
 ): Promise<PublicPlayer[]> {
-  const index = await getPlayerIndex();
+  const index = await getPlayerIndex(options);
   return index
     .filter((p) => p.team === team && p.decade === decade)
     .sort((a, b) => b.mpg - a.mpg)
@@ -225,8 +290,11 @@ export async function getPlayers(
 }
 
 /** Decades where a team has enough players to be offered (for the decade skip). */
-export async function getTeamDecades(team: string): Promise<number[]> {
-  const index = await getPlayerIndex();
+export async function getTeamDecades(
+  team: string,
+  options: QueryOptions = {},
+): Promise<number[]> {
+  const index = await getPlayerIndex(options);
   const counts = new Map<number, number>();
   for (const p of index) {
     if (p.team === team) counts.set(p.decade, (counts.get(p.decade) ?? 0) + 1);
@@ -244,12 +312,13 @@ export async function getTeamDecades(team: string): Promise<number[]> {
  */
 export async function hydrateRoster(
   picks: SimPick[],
+  options: QueryOptions = {},
 ): Promise<{
   scoring: ScoringPlayer[];
   lines: SimRosterLine[];
   players: IndexedPlayer[];
 }> {
-  const index = await getPlayerIndex();
+  const index = await getPlayerIndex(options);
   const byKey = new Map(
     index.map((p) => [`${p.entity_id}|${p.team}|${p.decade}`, p]),
   );
@@ -261,13 +330,21 @@ export async function hydrateRoster(
     if (!p) throw new Error(`unknown roster pick: ${pick.entity_id}`);
     players.push(p);
     scoring.push({
-      gq: p.value,
+      gq: p.value, mpg: p.mpg,
       pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
       fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
+      fgm: p.fgm, ftm: p.ftm,
+      // Default to league-average if a stale/old index row lacks tsplus.
+      tsplus: Number.isFinite(p.tsplus) ? p.tsplus : 1,
+      height_in: Number.isFinite(p.height_in) ? p.height_in : 79,
+      pos: p.pos ?? null,
+      allDef: p.all_def ?? 0,
     });
     lines.push({
       entity_id: p.entity_id, player_name: p.player_name, team: p.team,
       best_season: p.best_season, pts: p.pts, reb: p.reb, ast: p.ast,
+      gq: Math.round((p.value ?? 0) * 100), // 0–100, revealed only post-sim
+      allDef: p.all_def ?? 0,
     });
   }
   return { scoring, lines, players };

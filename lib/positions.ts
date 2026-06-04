@@ -10,6 +10,22 @@ export interface RoleInput {
   reb: number;
   blk: number;
   ast: number;
+  // Real basketball-reference position ("G", "F", "C", "G-F", "F-C", …) when we
+  // have it; null/undefined falls back to the box-derived heuristic below.
+  pos?: string | null;
+}
+
+// b-ref position letters → our three lineup roles.
+const LETTER_ROLE: Record<string, Role> = { G: "G", F: "W", C: "B" };
+
+/** Roles a b-ref position string implies, in listed order (primary first). */
+export function rolesFromPos(pos: string): Role[] {
+  const roles: Role[] = [];
+  for (const tok of pos.split("-")) {
+    const r = LETTER_ROLE[tok.trim().toUpperCase()];
+    if (r && !roles.includes(r)) roles.push(r);
+  }
+  return roles;
 }
 
 export const ALL_ROLES: Role[] = ["G", "W", "B"];
@@ -47,6 +63,12 @@ export function frontcourtIndex(p: RoleInput): number {
 
 /** The set of positions a player can fill (overlapping zones → dual eligibility). */
 export function eligiblePositions(p: RoleInput): Role[] {
+  // Prefer real positions when we have them.
+  if (p.pos) {
+    const roles = rolesFromPos(p.pos);
+    if (roles.length) return roles;
+  }
+  // Fallback: derive from the box line.
   const fc = frontcourtIndex(p);
   const roles: Role[] = [];
   if (fc <= 3) roles.push("G"); // guards + combo guards
@@ -62,6 +84,11 @@ export function isEligible(p: RoleInput, pos: Role): boolean {
 
 /** A single role for compact display (the player's most natural spot). */
 export function primaryRole(p: RoleInput): Role {
+  // Real position's primary (first listed) letter wins when available.
+  if (p.pos) {
+    const roles = rolesFromPos(p.pos);
+    if (roles.length) return roles[0];
+  }
   const fc = frontcourtIndex(p);
   if (fc <= 1.5) return "G";
   if (fc >= 7) return "B";

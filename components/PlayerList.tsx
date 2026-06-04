@@ -131,32 +131,32 @@ export function PlayerList({
       />
 
       {mode === "classic" && status === "ok" && (
-        <div className="flex flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-1">
-            {POS_FILTERS.map((p) => (
-              <Chip
-                key={p}
-                active={posFilter === p}
-                onClick={() => setPosFilter(p)}
-              >
-                {p === "all" ? "All" : p}
-              </Chip>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="mr-0.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
-              Sort
-            </span>
-            {SORTS.map((s) => (
-              <Chip
-                key={s.key}
-                active={sortKey === s.key}
-                onClick={() => setSortKey(s.key)}
-              >
-                {s.label}
-              </Chip>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-center gap-1">
+          {POS_FILTERS.map((p) => (
+            <Chip
+              key={p}
+              active={posFilter === p}
+              onClick={() => setPosFilter(p)}
+            >
+              {p === "all" ? "All" : p}
+            </Chip>
+          ))}
+          <span
+            className="mx-1 h-4 w-px self-center bg-[var(--md-ink)] opacity-30"
+            aria-hidden
+          />
+          <span className="mr-0.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+            Sort
+          </span>
+          {SORTS.map((s) => (
+            <Chip
+              key={s.key}
+              active={sortKey === s.key}
+              onClick={() => setSortKey(s.key)}
+            >
+              {s.label}
+            </Chip>
+          ))}
         </div>
       )}
 
@@ -231,6 +231,11 @@ export function PlayerList({
                   </span>
                   <span className="truncate font-display text-sm font-bold">
                     {p.player_name}
+                    {p.allDef === 1 ? (
+                      <span title="All-Defense 1st Team"> 🥇</span>
+                    ) : p.allDef === 2 ? (
+                      <span title="All-Defense 2nd Team"> 🥈</span>
+                    ) : null}
                   </span>
                   <span className="font-display text-xs text-[var(--md-ink-muted)]">
                     &rsquo;{String(p.best_season).slice(2)}

@@ -1,37 +1,35 @@
 "use client";
 
 import { useState } from "react";
-import type { SimRosterLine, SimResult } from "@/lib/types";
+import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
 
-function Bar({
+// One line of the net-rating breakdown: a label (+ optional detail) and the
+// signed net-rating points the factor moved.
+function Adj({
   label,
+  detail,
   value,
-  hint,
 }: {
   label: string;
+  detail?: string;
   value: number;
-  hint: string;
 }) {
-  const pct = Math.round(value * 100);
+  const v = Math.round(value * 10) / 10;
   const color =
-    value >= 0.95
-      ? "var(--md-teal-bright)"
-      : value >= 0.8
-        ? "var(--md-yellow)"
-        : "var(--md-coral)";
+    v > 0 ? "var(--md-teal)" : v < 0 ? "var(--md-coral)" : "var(--md-ink-muted)";
   return (
-    <div>
-      <div className="flex items-baseline justify-between font-display text-xs font-bold uppercase tracking-wide">
-        <span>{label}</span>
-        <span>{pct}%</span>
-      </div>
-      <div className="mt-0.5 h-2.5 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)]">
-        <div className="h-full" style={{ width: `${pct}%`, background: color }} />
-      </div>
-      <div className="mt-0.5 text-[10px] leading-snug text-[var(--md-ink-muted)]">
-        {hint}
-      </div>
+    <div className="flex items-baseline justify-between gap-2 font-display text-sm">
+      <span>
+        {label}
+        {detail ? (
+          <span className="text-[var(--md-ink-muted)]"> · {detail}</span>
+        ) : null}
+      </span>
+      <span style={{ color }}>
+        {v > 0 ? "+" : v < 0 ? "−" : ""}
+        {Math.abs(v).toFixed(1)}
+      </span>
     </div>
   );
 }
@@ -41,12 +39,14 @@ export function ResultsPanel({
   result,
   shareText,
   modeLabel,
+  mode,
   onReset,
 }: {
   roster: SimRosterLine[];
   result: SimResult;
   shareText: string;
   modeLabel: string;
+  mode: GameMode;
   onReset: () => void;
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
@@ -62,11 +62,17 @@ export function ResultsPanel({
         ? new File([blob], "82-0-season.png", { type: "image/png" })
         : null;
 
-      // Mobile: share the image card + the link text via the native sheet.
+      // Mobile only: the native share sheet. Desktop browsers (incl. macOS
+      // Safari/Chrome) now support Web Share too, but there it pops a clunky
+      // sheet (Notes, etc.) — so gate on a touch-primary device and let desktop
+      // fall through to the right-click overlay below.
       const nav = navigator as Navigator & {
         canShare?: (d: ShareData) => boolean;
       };
-      if (file && nav.canShare?.({ files: [file] }) && nav.share) {
+      const touchPrimary =
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(pointer: coarse)").matches;
+      if (touchPrimary && file && nav.canShare?.({ files: [file] }) && nav.share) {
         await nav.share({ files: [file], text: shareText, title: "82-0+" });
         setStatus("idle");
         return;
@@ -126,9 +132,9 @@ export function ResultsPanel({
             alt="Your 82-0+ result card"
             className="mt-3 w-full border-2 border-[var(--md-ink)]"
           />
-          <p className="mt-2 text-[13px] leading-snug text-[var(--md-ink-muted)]">
-            Right-click the image to <strong>copy</strong> or save it, then paste
-            it anywhere. The link is already on your clipboard.
+          <p className="mt-2 text-center text-[13px] leading-snug text-[var(--md-ink-muted)]">
+            <strong>Right-click to copy and share.</strong> The link is already on
+            your clipboard.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <a
@@ -190,58 +196,43 @@ export function ResultsPanel({
         </div>
       </div>
 
-      <div className="grid gap-2.5">
-        <Bar
-          label="Usage fit"
-          value={result.usageFactor}
-          hint="How well your scorers share one ball. Stacking ball-dominant stars throttles this."
-        />
-        <Bar
-          label="Ball-handling"
-          value={result.pAst}
-          hint={`Playmaking vs. target. ${result.totalAst} combined assists.`}
-        />
-        <Bar
-          label="3pt spacing"
-          value={result.p3}
-          hint={`Floor spacing vs. target. ${result.total3m} combined made 3s.`}
-        />
-        <Bar
-          label="Defense"
-          value={result.defenseFactor}
-          hint={`Steals + blocks vs. target. ${result.totalStocks} combined stocks.`}
-        />
-        <div>
-          <div className="flex items-baseline justify-between font-display text-xs font-bold uppercase tracking-wide">
-            <span>Lineup</span>
-            <span>
-              {result.roleCounts.G}G · {result.roleCounts.W}W ·{" "}
-              {result.roleCounts.B}B
-            </span>
-          </div>
-          <div className="mt-1 text-[11px] leading-snug text-[var(--md-ink-muted)]">
-            {result.balancePen > 0 ? (
-              <span style={{ color: "var(--md-coral)" }}>
-                −{result.balancePen} net — lopsided lineup
-                {result.roleCounts.G === 0 ? " (no true guard)" : ""}
-                {result.roleCounts.B === 0 ? " (no true big)" : ""}. A combo player
-                can fill the slot, but you still need real backcourt and frontcourt.
-              </span>
-            ) : result.synergyBonus > 0 ? (
-              <span style={{ color: "var(--md-teal)" }}>
-                +{result.synergyBonus} net — flawless construction bonus. Clean,
-                balanced fit amplifies your talent.
-              </span>
-            ) : (
-              "Balance the lineup and push every fit bar to 100% to unlock the construction bonus that reaches 82-0."
-            )}
-          </div>
+      <div className="grid gap-1">
+        <div className="flex items-baseline justify-between font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+          <span>Score breakdown</span>
+          <span>net rating</span>
+        </div>
+        {/* Talent is the base; the rest only appear when they actually moved net. */}
+        <Adj label="Talent" value={result.baseNet} />
+        {(
+          [
+            ["Usage fit", -result.usagePen],
+            ["Outside shooting", -result.outsidePen],
+            ["Ball movement", -result.ballhogPen],
+            ["Lineup balance", -result.balancePen],
+            ["Size", -result.sizePen],
+            ["Defense", result.defBuff],
+            ["Synergy", result.synergyBonus],
+          ] as const
+        )
+          .filter(([, v]) => Math.round(v * 10) / 10 !== 0)
+          .map(([label, v]) => (
+            <Adj key={label} label={label} value={v} />
+          ))}
+        <div className="mt-0.5 flex items-baseline justify-between border-t-2 border-[var(--md-ink)] pt-1 font-display text-sm font-bold">
+          <span>Net rating</span>
+          <span style={{ color: netRating >= 0 ? "var(--md-teal)" : "var(--md-coral)" }}>
+            {netRating >= 0 ? "+" : "−"}
+            {Math.abs(netRating).toFixed(1)}
+          </span>
         </div>
       </div>
 
       <div className="grid gap-1">
-        <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          Your roster
+        <div className="flex items-baseline justify-between font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+          <span>Your roster</span>
+          <span className="text-[10px]">
+            PTS/REB/AST · <span className="text-[var(--md-teal)]">[GQ]</span>
+          </span>
         </div>
         {roster.map((r) => (
           <div
@@ -251,10 +242,46 @@ export function ResultsPanel({
             <span>
               <span className="text-[var(--md-orange-deep)]">{r.team}</span> &rsquo;
               {String(r.best_season).slice(2)} · {r.player_name}
+              {mode === "classic" &&
+                (r.allDef === 1 ? " 🥇" : r.allDef === 2 ? " 🥈" : "")}
             </span>
             <span className="text-[var(--md-ink-muted)]">
-              {r.pts}/{r.reb}/{r.ast}
+              {r.pts}/{r.reb}/{r.ast}{" "}
+              <span className="text-[var(--md-teal)]">[{r.gq}]</span>
             </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-1.5">
+        <div className="text-center font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+          Team box · per game
+        </div>
+        {(
+          [
+            [
+              ["PTS", result.teamBox.pts],
+              ["REB", result.teamBox.reb],
+              ["AST", result.teamBox.ast],
+              ["STL", result.teamBox.stl],
+              ["BLK", result.teamBox.blk],
+            ],
+            [
+              ["FG%", `${result.teamBox.fgPct}%`],
+              ["FT%", `${result.teamBox.ftPct}%`],
+              ["TO", result.teamBox.tov],
+            ],
+          ] as const
+        ).map((row, i) => (
+          <div key={i} className="flex justify-center gap-4 font-display text-sm">
+            {row.map(([label, value]) => (
+              <span key={label} className="flex flex-col items-center">
+                <span className="text-base font-bold leading-none">{value}</span>
+                <span className="text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  {label}
+                </span>
+              </span>
+            ))}
           </div>
         ))}
       </div>
