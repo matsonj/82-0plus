@@ -50,7 +50,9 @@ export function ResultsPanel({
   onReset: () => void;
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
-  const [status, setStatus] = useState<"idle" | "working" | "done">("idle");
+  const [status, setStatus] = useState<"idle" | "working">("idle");
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const share = async () => {
     setStatus("working");
@@ -70,28 +72,93 @@ export function ResultsPanel({
         return;
       }
 
-      // Desktop fallback: download the image and copy the link text.
-      if (blob) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "82-0-season.png";
-        a.click();
-        URL.revokeObjectURL(url);
-      }
+      // Desktop: pop up the image so the user can right-click to copy/save it.
+      // (Copy the link to the clipboard quietly too.)
       try {
         await navigator.clipboard.writeText(shareText);
       } catch {
         /* clipboard blocked */
       }
-      setStatus("done");
-      setTimeout(() => setStatus("idle"), 2200);
+      if (blob) {
+        setShareUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(blob);
+        });
+      }
+      setStatus("idle");
     } catch {
       setStatus("idle"); // user dismissed the share sheet
     }
   };
 
+  const closeShare = () => {
+    if (shareUrl) URL.revokeObjectURL(shareUrl);
+    setShareUrl(null);
+    setLinkCopied(false);
+  };
+
   return (
+    <>
+    {shareUrl && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background: "rgba(56,56,56,0.55)" }}
+        onClick={closeShare}
+      >
+        <div
+          className="md-card md-card--lift w-full max-w-sm p-5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="font-display text-lg font-bold">Share your season</h3>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={closeShare}
+              className="font-display text-lg text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
+            >
+              ✕
+            </button>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={shareUrl}
+            alt="Your 82-0+ result card"
+            className="mt-3 w-full border-2 border-[var(--md-ink)]"
+          />
+          <p className="mt-2 text-[13px] leading-snug text-[var(--md-ink-muted)]">
+            Right-click the image to <strong>copy</strong> or save it, then paste
+            it anywhere. The link is already on your clipboard.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a
+              className="md-btn md-btn--sm md-btn--secondary"
+              href={shareUrl}
+              download="82-0-season.png"
+            >
+              Download
+            </a>
+            <button
+              className="md-btn md-btn--sm md-btn--secondary"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(shareText);
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 1500);
+                } catch {
+                  /* clipboard blocked */
+                }
+              }}
+            >
+              {linkCopied ? "Link copied!" : "Copy link"}
+            </button>
+            <button className="md-btn md-btn--sm md-btn--ink" onClick={closeShare}>
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="md-card md-card--lift flex flex-col gap-4 p-4 sm:p-5">
       <div className="text-center">
         {perfect ? (
@@ -198,16 +265,13 @@ export function ResultsPanel({
           onClick={share}
           disabled={status === "working"}
         >
-          {status === "working"
-            ? "Building…"
-            : status === "done"
-              ? "Saved + copied!"
-              : "Share result"}
+          {status === "working" ? "Building…" : "Share result"}
         </button>
         <button className="md-btn md-btn--lg md-btn--ink" onClick={onReset}>
           Play again
         </button>
       </div>
     </div>
+    </>
   );
 }
