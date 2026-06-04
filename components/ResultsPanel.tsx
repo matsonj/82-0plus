@@ -60,11 +60,17 @@ export function ResultsPanel({
         ? new File([blob], "82-0-season.png", { type: "image/png" })
         : null;
 
-      // Mobile: share the image card + the link text via the native sheet.
+      // Mobile only: the native share sheet. Desktop browsers (incl. macOS
+      // Safari/Chrome) now support Web Share too, but there it pops a clunky
+      // sheet (Notes, etc.) — so gate on a touch-primary device and let desktop
+      // fall through to the right-click overlay below.
       const nav = navigator as Navigator & {
         canShare?: (d: ShareData) => boolean;
       };
-      if (file && nav.canShare?.({ files: [file] }) && nav.share) {
+      const touchPrimary =
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(pointer: coarse)").matches;
+      if (touchPrimary && file && nav.canShare?.({ files: [file] }) && nav.share) {
         await nav.share({ files: [file], text: shareText, title: "82-0+" });
         setStatus("idle");
         return;
@@ -124,9 +130,9 @@ export function ResultsPanel({
             alt="Your 82-0+ result card"
             className="mt-3 w-full border-2 border-[var(--md-ink)]"
           />
-          <p className="mt-2 text-[13px] leading-snug text-[var(--md-ink-muted)]">
-            Right-click the image to <strong>copy</strong> or save it, then paste
-            it anywhere. The link is already on your clipboard.
+          <p className="mt-2 text-center text-[13px] leading-snug text-[var(--md-ink-muted)]">
+            <strong>Right-click to copy and share.</strong> The link is already on
+            your clipboard.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <a
@@ -193,48 +199,23 @@ export function ResultsPanel({
           <span>Score breakdown</span>
           <span>net rating</span>
         </div>
-        <Adj label="Talent" detail={`avg GQ ${result.meanGQ.toFixed(3)}`} value={result.baseNet} />
-        <Adj
-          label="Usage fit"
-          detail={`${Math.round(result.usageFactor * 100)}% — shot overlap`}
-          value={-result.usagePen}
-        />
-        <Adj
-          label="Outside shooting"
-          detail={
-            result.nonShooters > 1
-              ? `${result.nonShooters} non-shooters`
-              : `${result.nonShooters} non-shooter`
-          }
-          value={-result.outsidePen}
-        />
-        <Adj
-          label="Ball movement"
-          detail={`${Math.round(result.assistedPct * 100)}% assisted`}
-          value={-result.ballhogPen}
-        />
-        <Adj
-          label="Lineup balance"
-          detail={`${result.roleCounts.G}G · ${result.roleCounts.W}W · ${result.roleCounts.B}B${
-            result.roleCounts.G === 0 ? " — no guard" : ""
-          }`}
-          value={-result.balancePen}
-        />
-        <Adj
-          label="Size"
-          detail={`${Math.floor(result.avgHeight / 12)}'${result.avgHeight % 12}" avg`}
-          value={-result.sizePen}
-        />
-        <Adj
-          label="Defense"
-          detail={
-            result.allDefCount > 0
-              ? `${result.allDefCount} All-Defensive`
-              : "no All-Defensive"
-          }
-          value={result.defBuff}
-        />
-        <Adj label="Construction synergy" value={result.synergyBonus} />
+        {/* Talent is the base; the rest only appear when they actually moved net. */}
+        <Adj label="Talent" value={result.baseNet} />
+        {(
+          [
+            ["Usage fit", -result.usagePen],
+            ["Outside shooting", -result.outsidePen],
+            ["Ball movement", -result.ballhogPen],
+            ["Lineup balance", -result.balancePen],
+            ["Size", -result.sizePen],
+            ["Defense", result.defBuff],
+            ["Construction synergy", result.synergyBonus],
+          ] as const
+        )
+          .filter(([, v]) => Math.round(v * 10) / 10 !== 0)
+          .map(([label, v]) => (
+            <Adj key={label} label={label} value={v} />
+          ))}
         <div className="mt-0.5 flex items-baseline justify-between border-t-2 border-[var(--md-ink)] pt-1 font-display text-sm font-bold">
           <span>Net rating</span>
           <span style={{ color: netRating >= 0 ? "var(--md-teal)" : "var(--md-coral)" }}>

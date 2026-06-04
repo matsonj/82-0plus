@@ -91,9 +91,9 @@ export const SCORING_CONFIG = {
 
   // Defense margin bonus (GQ undercounts defense): net rating added per All-Def
   // selection on the drafted season.
-  DEF_MARGIN_1ST: 2,
-  DEF_MARGIN_2ND: 1,
-  DEF_MARGIN_CAP: 7, // soft cap on the total defensive buff
+  DEF_MARGIN_1ST: 1.5,
+  DEF_MARGIN_2ND: 0.75,
+  DEF_MARGIN_CAP: 5, // soft cap on the total defensive buff
 
   // Construction synergy: a well-spaced, ball-moving, non-overloaded AND balanced
   // roster amplifies talent — the upside that lets a great team reach 82-0.

@@ -239,7 +239,6 @@ export function PlayerList({
                   </span>
                   <span className="font-display text-xs text-[var(--md-ink-muted)]">
                     &rsquo;{String(p.best_season).slice(2)}
-                    {p.pos ? ` · ${p.pos}` : ""}
                   </span>
                 </div>
                 {mode === "classic" && p.pts !== null && (
