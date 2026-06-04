@@ -14,6 +14,7 @@ import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { HowToPlay } from "@/components/HowToPlay";
+import { Countdown } from "@/components/Countdown";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play";
@@ -38,6 +39,10 @@ export default function Home() {
   const [gameType, setGameType] = useState<GameType>("free");
   const [dailySlots, setDailySlots] = useState<{ team: string; decade: number }[]>([]);
   const [dailyDate, setDailyDate] = useState<string>("");
+  const [today, setToday] = useState<string>("");
+  const [dailyResult, setDailyResult] = useState<
+    { wins: number; losses: number; perfect: boolean } | null
+  >(null);
   const [showHowTo, setShowHowTo] = useState(false);
   const [decades, setDecades] = useState<number[]>([]);
   const [lineup, setLineup] = useState<(LineupEntry | null)[]>(
@@ -60,6 +65,8 @@ export default function Home() {
   const rollActive = useRef(false); // synchronous in-flight flag for the auto-start effect
   const lineupRef = useRef(lineup); // latest lineup for rollRound (avoids stale closure)
   lineupRef.current = lineup;
+  const dailyResultRef = useRef(dailyResult); // latest daily lock for startGame guard
+  dailyResultRef.current = dailyResult;
 
   const draftedCount = lineup.filter(Boolean).length;
   const draftDone = draftedCount === KINDS.length;
@@ -107,6 +114,7 @@ export default function Home() {
   );
 
   const startGame = useCallback(async (m: GameMode, type: GameType) => {
+    if (type === "daily" && dailyResultRef.current) return; // already played today
     setMode(type === "daily" ? "classic" : m);
     setGameType(type);
     setResult(null);
@@ -176,9 +184,13 @@ export default function Home() {
     currentTeam, currentDecade, decades, rollRound,
   ]);
 
-  // First-visit how-to.
+  // First-visit how-to + today's daily lock (one challenge per UTC day).
   useEffect(() => {
+    const d = new Date().toISOString().slice(0, 10);
+    setToday(d);
     try {
+      const stored = localStorage.getItem(`md820-daily-${d}`);
+      if (stored) setDailyResult(JSON.parse(stored));
       if (!localStorage.getItem("md820-seen-howto")) {
         setShowHowTo(true);
         localStorage.setItem("md820-seen-howto", "1");
@@ -353,8 +365,19 @@ export default function Home() {
       });
       if (!res.ok) throw new Error("simulate failed");
       const data = await res.json();
-      setResult(data.result as SimResult);
+      const r = data.result as SimResult;
+      setResult(r);
       setResultRoster((data.roster as SimRosterLine[]) ?? []);
+      if (gameType === "daily") {
+        const rec = { wins: r.wins, losses: r.losses, perfect: r.perfect };
+        const key = `md820-daily-${today || dailyDate}`;
+        try {
+          localStorage.setItem(key, JSON.stringify(rec));
+        } catch {
+          /* localStorage unavailable */
+        }
+        setDailyResult(rec);
+      }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
       setError("Couldn't simulate that season. Try again.");
@@ -425,23 +448,49 @@ export default function Home() {
             the season.
           </p>
 
-          <button
-            className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5"
-            style={{ background: "var(--md-yellow)" }}
-            onClick={() => startGame("classic", "daily")}
-          >
-            <div className="flex items-center justify-between">
-              <div className="font-display text-xl font-bold">
-                Daily Challenge
+          {dailyResult ? (
+            <div
+              className="md-card mt-8 w-full max-w-md p-5 text-left"
+              style={{ background: "var(--md-paper-2)" }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="font-display text-xl font-bold">
+                  Daily Challenge
+                </div>
+                <span className="text-2xl" aria-hidden>
+                  {dailyResult.perfect ? "🏆" : "✓"}
+                </span>
               </div>
-              <span className="text-2xl" aria-hidden>
-                🏆
-              </span>
+              <p className="mt-1 text-[13px] text-[var(--md-ink)]">
+                Today&rsquo;s result:{" "}
+                <strong>
+                  {dailyResult.wins}&ndash;{dailyResult.losses}
+                </strong>
+                {dailyResult.perfect ? " — perfect season!" : ""}. One per day.
+              </p>
+              <p className="mt-1 font-display text-[12px] text-[var(--md-ink-muted)]">
+                Next challenge in <Countdown />
+              </p>
             </div>
-            <p className="mt-1 text-[13px] text-[var(--md-ink)]">
-              The same five team/era rolls for everyone today. Compare records.
-            </p>
-          </button>
+          ) : (
+            <button
+              className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5"
+              style={{ background: "var(--md-yellow)" }}
+              onClick={() => startGame("classic", "daily")}
+            >
+              <div className="flex items-center justify-between">
+                <div className="font-display text-xl font-bold">
+                  Daily Challenge
+                </div>
+                <span className="text-2xl" aria-hidden>
+                  🏆
+                </span>
+              </div>
+              <p className="mt-1 text-[13px] text-[var(--md-ink)]">
+                The same five team/era rolls for everyone today. Compare records.
+              </p>
+            </button>
+          )}
 
           <div className="mt-6 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
             or free play
