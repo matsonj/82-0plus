@@ -11,7 +11,9 @@ export interface PublicPlayer {
   entity_id: string;
   player_name: string;
   best_season: number;
-  positions: Role[]; // eligible lineup roles, computed server-side
+  positions: Role[]; // eligible lineup roles (G/W/B), computed server-side
+  pos: string | null; // real b-ref position label for display (e.g. "C-F")
+  allDef: number | null; // All-Defensive team that season (1/2/0); Classic only
   mpg: number | null;
   pts: number | null;
   reb: number | null;
@@ -41,6 +43,7 @@ export interface SimRosterLine {
   reb: number;
   ast: number;
   gq: number; // Game Quality as a 0–100 integer (revealed only on the summary)
+  allDef: number; // All-Defensive team that season: 1 (1st), 2 (2nd), 0 (none)
 }
 
 /** Output of the bespoke scoring model. */
@@ -64,7 +67,11 @@ export interface SimResult {
   outsidePen: number;
   ballhogPen: number;
   balancePen: number;
+  sizePen: number; // too-short penalty (total height, All-Def adds effective inches)
+  defBuff: number; // All-Defense margin bonus (GQ undercounts defense)
   synergyBonus: number;
+  avgHeight: number; // team average height in inches (display)
+  allDefCount: number; // # All-Defensive selections on the five (display)
   roleCounts: { G: number; W: number; B: number };
   totalPoss: number;
   // Aggregate team box score (sum of the five starters' per-game lines), all

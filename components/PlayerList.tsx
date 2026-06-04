@@ -231,9 +231,15 @@ export function PlayerList({
                   </span>
                   <span className="truncate font-display text-sm font-bold">
                     {p.player_name}
+                    {p.allDef === 1 ? (
+                      <span title="All-Defense 1st Team"> 🥇</span>
+                    ) : p.allDef === 2 ? (
+                      <span title="All-Defense 2nd Team"> 🥈</span>
+                    ) : null}
                   </span>
                   <span className="font-display text-xs text-[var(--md-ink-muted)]">
                     &rsquo;{String(p.best_season).slice(2)}
+                    {p.pos ? ` · ${p.pos}` : ""}
                   </span>
                 </div>
                 {mode === "classic" && p.pts !== null && (

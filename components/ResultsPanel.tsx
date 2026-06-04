@@ -256,6 +256,7 @@ export function ResultsPanel({
             <span>
               <span className="text-[var(--md-orange-deep)]">{r.team}</span> &rsquo;
               {String(r.best_season).slice(2)} · {r.player_name}
+              {r.allDef === 1 ? " 🥇" : r.allDef === 2 ? " 🥈" : ""}
             </span>
             <span className="text-[var(--md-ink-muted)]">
               {r.pts}/{r.reb}/{r.ast}{" "}

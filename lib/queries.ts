@@ -263,6 +263,8 @@ function toPublic(p: IndexedPlayer, mode: GameMode): PublicPlayer {
     player_name: p.player_name,
     best_season: p.best_season,
     positions: eligiblePositions(p),
+    pos: p.pos ?? null, // real position label (shown in both modes)
+    allDef: classic ? p.all_def : null, // award reveal — Classic only
     mpg: classic ? p.mpg : null,
     pts: classic ? p.pts : null,
     reb: classic ? p.reb : null,
@@ -342,6 +344,7 @@ export async function hydrateRoster(
       entity_id: p.entity_id, player_name: p.player_name, team: p.team,
       best_season: p.best_season, pts: p.pts, reb: p.reb, ast: p.ast,
       gq: Math.round((p.value ?? 0) * 100), // 0–100, revealed only post-sim
+      allDef: p.all_def ?? 0,
     });
   }
   return { scoring, lines, players };
