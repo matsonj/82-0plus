@@ -1,20 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { msUntilPacificMidnight } from "@/lib/dailyDate";
 
-// Time until the next daily resets (00:00 UTC — matches /api/daily's date).
+// Time until the next daily resets (midnight Pacific — matches /api/daily's date).
 export function Countdown() {
   const [left, setLeft] = useState("");
 
   useEffect(() => {
     const tick = () => {
-      const now = new Date();
-      const next = Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate() + 1,
-      );
-      const ms = Math.max(0, next - now.getTime());
+      const ms = Math.max(0, msUntilPacificMidnight());
       const h = Math.floor(ms / 3_600_000);
       const m = Math.floor((ms % 3_600_000) / 60_000);
       const s = Math.floor((ms % 60_000) / 1000);

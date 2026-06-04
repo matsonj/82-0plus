@@ -17,6 +17,7 @@ import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
 import { encodeShare } from "@/lib/shareCode";
 import { SITE_URL } from "@/lib/site";
+import { pacificDate } from "@/lib/dailyDate";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play";
@@ -186,9 +187,9 @@ export default function Home() {
     currentTeam, currentDecade, decades, rollRound,
   ]);
 
-  // First-visit how-to + today's daily lock (one challenge per UTC day).
+  // First-visit how-to + today's daily lock (one challenge per Pacific day).
   useEffect(() => {
-    const d = new Date().toISOString().slice(0, 10);
+    const d = pacificDate();
     setToday(d);
     try {
       const stored = localStorage.getItem(`md820-daily-${d}`);

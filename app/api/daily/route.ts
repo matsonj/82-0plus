@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getDecades, getPlayableTeams, getTeamWeights } from "@/lib/queries";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
+import { pacificDate } from "@/lib/dailyDate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,13 +36,12 @@ function weightedPick<T>(items: T[], weights: number[], rng: () => number): T {
   return items[items.length - 1];
 }
 
-const todayUtc = () => new Date().toISOString().slice(0, 10);
-
 export async function GET(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   const queryOptions = { sessionHint: sessionHint.value };
   try {
-    const date = (req.nextUrl.searchParams.get("date") ?? todayUtc()).slice(0, 10);
+    // Daily resets at midnight Pacific (see lib/dailyDate).
+    const date = (req.nextUrl.searchParams.get("date") ?? pacificDate()).slice(0, 10);
     const rng = mulberry32(hashStr(`82-0+:${date}`));
 
     const decades = await getDecades(queryOptions);
