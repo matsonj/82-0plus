@@ -40,14 +40,16 @@ cp .env.example .env.local   # then add your MotherDuck token
 npm run dev                  # http://localhost:3000
 ```
 
-`MOTHERDUCK_TOKEN` is required — get one from
+`MOTHERDUCK_TOKEN` is required — create a **Read Scaling Token** in
 [app.motherduck.com](https://app.motherduck.com) (Settings → Access Tokens). The
 token's account must have access to the `nba_box_scores_v2` database. The app
 queries `nba_box_scores_v2` live at runtime via the pure-JS `pg` driver against
 MotherDuck's PostgreSQL wire endpoint (it still runs DuckDB SQL — no native
 bindings needed). Tables are referenced fully-qualified as
 `nba_box_scores_v2.main.<table>` because read-only tokens can't switch the active
-workspace.
+workspace. API routes set an anonymous HTTP-only session GUID cookie and pass it
+as MotherDuck's `session_hint`, so read-scaling replicas can preserve per-user
+affinity.
 
 ## Scripts
 
@@ -58,7 +60,9 @@ workspace.
 ## Architecture
 
 - `lib/motherduck.ts` — `query()` helper backed by a cached `pg` Pool against
-  MotherDuck's PostgreSQL endpoint
+  MotherDuck's PostgreSQL endpoint. Pool cache entries are keyed by
+  `session_hint`; `MOTHERDUCK_PG_POOL_MAX` and `MOTHERDUCK_PG_POOL_CACHE_MAX`
+  tune local Node connection reuse, not the MotherDuck read-scaling pool size.
 - `lib/queries.ts` — decades, season-weighted team pool, peak-season player list.
   Reads the materialized `nba_box_scores_v2.main.player_index` table for fast cold
   starts (falls back to live compute if missing) — refresh it after backfilling
@@ -69,11 +73,11 @@ workspace.
 
 ## Deploying to Vercel
 
-Set `MOTHERDUCK_TOKEN` in the project's environment variables (the token's
-account must have access to `nba_box_scores_v2`). The data layer is the pure-JS
-`pg` driver, so there are no native binaries to bundle — `next.config.ts` is
-intentionally empty (no `serverExternalPackages`, no `outputFileTracingIncludes`).
-Routes run on the Node.js runtime.
+Set `MOTHERDUCK_TOKEN` in the project's environment variables using a Read
+Scaling token whose account can access `nba_box_scores_v2`. The data layer is
+the pure-JS `pg` driver, so there are no native binaries to bundle —
+`next.config.ts` is intentionally empty (no `serverExternalPackages`, no
+`outputFileTracingIncludes`). Routes run on the Node.js runtime.
 
 ---
 

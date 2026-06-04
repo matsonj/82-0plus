@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getTeamWeights, getPlayableTeams } from "@/lib/queries";
+import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,11 +21,17 @@ function weightedPick(items: { team: string; weight: number }[]): string {
 }
 
 export async function GET(req: NextRequest) {
+  const sessionHint = getSessionHint(req);
+  const queryOptions = { sessionHint: sessionHint.value };
   try {
     const sp = req.nextUrl.searchParams;
     const decade = Number(sp.get("decade"));
     if (!Number.isInteger(decade) || decade < 1900 || decade > 2100) {
-      return NextResponse.json({ error: "invalid decade" }, { status: 400 });
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "invalid decade" },
+        { status: 400 },
+      );
     }
     // Teams to exclude (comma-separated): already-drafted teams never repeat,
     // plus the current team on a team-skip re-roll.
@@ -36,12 +43,13 @@ export async function GET(req: NextRequest) {
     // Only offer teams with enough players this decade (≥ MIN_PLAYERS_PER_COMBO),
     // weighted by their season-count.
     const [teamWeights, playable] = await Promise.all([
-      getTeamWeights(decade),
-      getPlayableTeams(decade),
+      getTeamWeights(decade, queryOptions),
+      getPlayableTeams(decade, queryOptions),
     ]);
     const teams = teamWeights.filter((t) => playable.has(t.team));
     if (teams.length === 0) {
-      return NextResponse.json(
+      return jsonWithSessionHint(
+        sessionHint,
         { error: "no teams for decade" },
         { status: 404 },
       );
@@ -53,10 +61,11 @@ export async function GET(req: NextRequest) {
       // (a sparse decade whose teams are all used) — otherwise never repeat.
       if (filtered.length > 0) pool = filtered;
     }
-    return NextResponse.json({ team: weightedPick(pool), decade });
+    return jsonWithSessionHint(sessionHint, { team: weightedPick(pool), decade });
   } catch (err) {
     console.error("[/api/slot]", err);
-    return NextResponse.json(
+    return jsonWithSessionHint(
+      sessionHint,
       { error: "Couldn't roll a team right now." },
       { status: 500 },
     );

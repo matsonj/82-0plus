@@ -1,4 +1,4 @@
-import { query } from "./motherduck";
+import { query, type QueryOptions } from "./motherduck";
 import { eligiblePositions } from "./positions";
 import type { GameMode, PublicPlayer, SimPick, SimRosterLine } from "./types";
 import type { ScoringPlayer } from "./scoring";
@@ -41,8 +41,10 @@ export interface IndexedPlayer {
  * 1940s, that are too sparse to produce any qualifying players; offering them
  * would dead-end the slot machine.)
  */
-export async function getDecades(): Promise<number[]> {
-  const index = await getPlayerIndex();
+export async function getDecades(
+  options: QueryOptions = {},
+): Promise<number[]> {
+  const index = await getPlayerIndex(options);
   const counts = new Map<string, number>(); // "team|decade" → player count
   for (const p of index) {
     const k = `${p.team}|${p.decade}`;
@@ -56,8 +58,11 @@ export async function getDecades(): Promise<number[]> {
 }
 
 /** Teams in a decade with enough players to be offered (≥ MIN_PLAYERS_PER_COMBO). */
-export async function getPlayableTeams(decade: number): Promise<Set<string>> {
-  const index = await getPlayerIndex();
+export async function getPlayableTeams(
+  decade: number,
+  options: QueryOptions = {},
+): Promise<Set<string>> {
+  const index = await getPlayerIndex(options);
   const counts = new Map<string, number>();
   for (const p of index) {
     if (p.decade === decade) counts.set(p.team, (counts.get(p.team) ?? 0) + 1);
@@ -70,6 +75,7 @@ export async function getPlayableTeams(decade: number): Promise<Set<string>> {
 /** Teams that appear in a decade, with a weight = number of seasons present. */
 export async function getTeamWeights(
   decade: number,
+  options: QueryOptions = {},
 ): Promise<{ team: string; weight: number }[]> {
   return query<{ team: string; weight: number }>(
     `SELECT b.team_abbreviation AS team,
@@ -82,6 +88,7 @@ export async function getTeamWeights(
       GROUP BY 1
       ORDER BY weight DESC`,
     [decade],
+    options,
   );
 }
 
@@ -96,7 +103,9 @@ declare global {
  * a backfill with the CREATE OR REPLACE of computePlayerIndexLive's SQL), and
  * falls back to computing it live if the table is missing or empty.
  */
-export function getPlayerIndex(): Promise<IndexedPlayer[]> {
+export function getPlayerIndex(
+  options: QueryOptions = {},
+): Promise<IndexedPlayer[]> {
   if (!globalThis.__player_index__) {
     globalThis.__player_index__ = (async () => {
       try {
@@ -104,12 +113,14 @@ export function getPlayerIndex(): Promise<IndexedPlayer[]> {
           `SELECT entity_id, player_name, team, decade, best_season, value, gp, mpg,
                   pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m
              FROM ${DB}.player_index`,
+          [],
+          options,
         );
         if (rows.length > 0) return rows;
       } catch {
         // table missing → fall through to live compute
       }
-      return computePlayerIndexLive();
+      return computePlayerIndexLive(options);
     })().catch((err) => {
       globalThis.__player_index__ = undefined; // allow retry on failure
       throw err;
@@ -119,7 +130,9 @@ export function getPlayerIndex(): Promise<IndexedPlayer[]> {
 }
 
 /** Compute the index from scratch (the source query the materialized table uses). */
-function computePlayerIndexLive(): Promise<IndexedPlayer[]> {
+function computePlayerIndexLive(
+  options: QueryOptions = {},
+): Promise<IndexedPlayer[]> {
   return query<IndexedPlayer>(
     `WITH per_season AS (
          SELECT b.entity_id, b.player_name,
@@ -185,6 +198,8 @@ function computePlayerIndexLive(): Promise<IndexedPlayer[]> {
                     ELSE fg3m END, 1) AS fg3m
          FROM ranked
         WHERE rn = 1`,
+    [],
+    options,
   );
 }
 
@@ -215,8 +230,9 @@ export async function getPlayers(
   team: string,
   decade: number,
   mode: GameMode,
+  options: QueryOptions = {},
 ): Promise<PublicPlayer[]> {
-  const index = await getPlayerIndex();
+  const index = await getPlayerIndex(options);
   return index
     .filter((p) => p.team === team && p.decade === decade)
     .sort((a, b) => b.mpg - a.mpg)
@@ -225,8 +241,11 @@ export async function getPlayers(
 }
 
 /** Decades where a team has enough players to be offered (for the decade skip). */
-export async function getTeamDecades(team: string): Promise<number[]> {
-  const index = await getPlayerIndex();
+export async function getTeamDecades(
+  team: string,
+  options: QueryOptions = {},
+): Promise<number[]> {
+  const index = await getPlayerIndex(options);
   const counts = new Map<number, number>();
   for (const p of index) {
     if (p.team === team) counts.set(p.decade, (counts.get(p.decade) ?? 0) + 1);
@@ -244,12 +263,13 @@ export async function getTeamDecades(team: string): Promise<number[]> {
  */
 export async function hydrateRoster(
   picks: SimPick[],
+  options: QueryOptions = {},
 ): Promise<{
   scoring: ScoringPlayer[];
   lines: SimRosterLine[];
   players: IndexedPlayer[];
 }> {
-  const index = await getPlayerIndex();
+  const index = await getPlayerIndex(options);
   const byKey = new Map(
     index.map((p) => [`${p.entity_id}|${p.team}|${p.decade}`, p]),
   );

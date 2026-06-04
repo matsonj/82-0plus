@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getDecades, getPlayableTeams, getTeamWeights } from "@/lib/queries";
+import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,21 +38,29 @@ function weightedPick<T>(items: T[], weights: number[], rng: () => number): T {
 const todayUtc = () => new Date().toISOString().slice(0, 10);
 
 export async function GET(req: NextRequest) {
+  const sessionHint = getSessionHint(req);
+  const queryOptions = { sessionHint: sessionHint.value };
   try {
     const date = (req.nextUrl.searchParams.get("date") ?? todayUtc()).slice(0, 10);
     const rng = mulberry32(hashStr(`82-0+:${date}`));
 
-    const decades = await getDecades();
+    const decades = await getDecades(queryOptions);
     const playableByDecade = new Map(
       await Promise.all(
         decades.map(
-          async (d) => [d, await getPlayableTeams(d)] as [number, Set<string>],
+          async (d) =>
+            [d, await getPlayableTeams(d, queryOptions)] as [
+              number,
+              Set<string>,
+            ],
         ),
       ),
     );
     const teamWeightsCache = new Map<number, { team: string; weight: number }[]>();
     const teamWeightsFor = async (d: number) => {
-      if (!teamWeightsCache.has(d)) teamWeightsCache.set(d, await getTeamWeights(d));
+      if (!teamWeightsCache.has(d)) {
+        teamWeightsCache.set(d, await getTeamWeights(d, queryOptions));
+      }
       return teamWeightsCache.get(d)!;
     };
 
@@ -88,10 +97,11 @@ export async function GET(req: NextRequest) {
       slots.push({ team, decade });
     }
 
-    return NextResponse.json({ date, slots });
+    return jsonWithSessionHint(sessionHint, { date, slots });
   } catch (err) {
     console.error("[/api/daily]", err);
-    return NextResponse.json(
+    return jsonWithSessionHint(
+      sessionHint,
       { error: "Couldn't load today's challenge." },
       { status: 500 },
     );
