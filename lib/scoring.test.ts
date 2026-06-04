@@ -9,7 +9,7 @@ import {
 function p(over: Partial<ScoringPlayer>): ScoringPlayer {
   return {
     gq: 0.5, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0,
-    fga: 0, fg3a: 0, fg3m: 0, fta: 0, tov: 0, tsplus: 1.0,
+    fga: 0, fg3a: 0, fg3m: 0, fta: 0, tov: 0, fgm: 0, ftm: 0, tsplus: 1.0,
     ...over,
   };
 }
@@ -82,13 +82,17 @@ describe("simulateRoster", () => {
     expect(r.usagePen).toBeGreaterThan(2);
   });
 
-  it("teamBox aggregates the five starters' per-game lines", () => {
+  it("teamBox: integer totals + attempt-weighted FG%/FT%", () => {
     const five = Array.from({ length: 5 }, () =>
-      p({ gq: 0.7, pts: 20, reb: 6, ast: 4, stl: 1, blk: 0.5, fg3m: 2, tov: 2.5, fga: 14, fta: 4 }),
+      p({ gq: 0.7, pts: 20, reb: 6, ast: 4, stl: 1, blk: 0.5, tov: 2.5,
+          fga: 14, fgm: 7, fta: 4, ftm: 3 }),
     );
     const r = simulateRoster(five);
     expect(r.teamBox).toEqual({
-      pts: 100, reb: 30, ast: 20, stl: 5, blk: 2.5, fg3m: 10, tov: 12.5,
+      pts: 100, reb: 30, ast: 20, stl: 5, blk: 3, // whole integers (blk 2.5 → 3)
+      fgPct: 50, // 35/70
+      ftPct: 75, // 15/20
+      tov: 13, // 12.5 → 13
     });
   });
 

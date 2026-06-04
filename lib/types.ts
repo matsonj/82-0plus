@@ -63,16 +63,16 @@ export interface SimResult {
   synergyBonus: number;
   roleCounts: { G: number; W: number; B: number };
   totalPoss: number;
-  // Aggregate team box score (sum of the five starters' per-game lines, using
-  // the same era-adjusted inputs that feed the model). FG/FT are represented by
-  // the model's efficiency metric (teamTsPlus) rather than raw percentages.
+  // Aggregate team box score (sum of the five starters' per-game lines), all
+  // whole integers. fgPct/ftPct are attempt-weighted whole percentages.
   teamBox: {
     pts: number;
     reb: number;
     ast: number;
     stl: number;
     blk: number;
-    fg3m: number;
+    fgPct: number;
+    ftPct: number;
     tov: number;
   };
 }

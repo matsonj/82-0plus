@@ -14,6 +14,8 @@ export interface ScoringPlayer {
   fg3m: number;
   fta: number;
   tov: number;
+  fgm: number;
+  ftm: number;
   tsplus: number; // era-relative true-shooting (player TS% / league TS% that season)
 }
 
@@ -86,6 +88,9 @@ const clamp = (x: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, x));
 const round1 = (x: number) => Math.round(x * 10) / 10;
 const round2 = (x: number) => Math.round(x * 100) / 100;
+// Whole-integer percentage from summed makes / summed attempts (attempt-weighted).
+const pctOf = (made: number, att: number) =>
+  att > 0 ? Math.round((100 * made) / att) : 0;
 
 /** Net rating that, alone, would project to a perfect season. */
 export function netRatingForPerfect(cfg: ScoringConfig = SCORING_CONFIG): number {
@@ -105,7 +110,7 @@ export function simulateRoster(
       usagePen: 0, effPen: 0, balancePen: 0, synergyBonus: 0,
       roleCounts: { G: 0, W: 0, B: 0 },
       totalPoss: 0,
-      teamBox: { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fg3m: 0, tov: 0 },
+      teamBox: { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgPct: 0, ftPct: 0, tov: 0 },
     };
   }
 
@@ -191,13 +196,16 @@ export function simulateRoster(
     roleCounts,
     totalPoss: round1(totalPoss),
     teamBox: {
-      pts: round1(sum((p) => p.pts)),
-      reb: round1(sum((p) => p.reb)),
-      ast: round1(sum((p) => p.ast)),
-      stl: round1(sum((p) => p.stl)),
-      blk: round1(sum((p) => p.blk)),
-      fg3m: round1(sum((p) => p.fg3m)),
-      tov: round1(sum((p) => p.tov)),
+      // Whole-integer team line. FG%/FT% are attempt-weighted across the five
+      // (sum of makes / sum of attempts), in whole percentage points.
+      pts: Math.round(sum((p) => p.pts)),
+      reb: Math.round(sum((p) => p.reb)),
+      ast: Math.round(sum((p) => p.ast)),
+      stl: Math.round(sum((p) => p.stl)),
+      blk: Math.round(sum((p) => p.blk)),
+      fgPct: pctOf(sum((p) => p.fgm), sum((p) => p.fga)),
+      ftPct: pctOf(sum((p) => p.ftm), sum((p) => p.fta)),
+      tov: Math.round(sum((p) => p.tov)),
     },
   };
 }

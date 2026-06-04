@@ -39,6 +39,8 @@ export interface IndexedPlayer {
   fg3m: number;
   fta: number;
   tov: number;
+  fgm: number;
+  ftm: number;
   tsplus: number; // era-relative true-shooting (player TS% / league TS% that season), clamped
 }
 
@@ -125,7 +127,7 @@ export function getPlayerIndex(
       try {
         const rows = await query<IndexedPlayer>(
           `SELECT entity_id, player_name, team, decade, best_season, value, gp, mpg,
-                  pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m, tsplus
+                  pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m, fgm, ftm, tsplus
              FROM ${DB}.player_index`,
           [],
           options,
@@ -162,7 +164,8 @@ function computePlayerIndexLive(
                 avg(b.steals)   AS stl, avg(b.blocks)   AS blk,
                 avg(b.fg_attempted)  AS fga, avg(b.fg3_attempted) AS fg3a,
                 avg(b.fg3_made)      AS fg3m, avg(b.ft_attempted) AS fta,
-                avg(b.ft_made)       AS ftm, avg(b.turnovers) AS tov
+                avg(b.fg_made)       AS fgm, avg(b.ft_made) AS ftm,
+                avg(b.turnovers) AS tov
            FROM ${DB}.game_quality g
            JOIN ${DB}.box_scores b
              ON g.game_id = b.game_id AND g.entity_id = b.entity_id AND b.period = 'FullGame'
@@ -222,6 +225,7 @@ function computePlayerIndexLive(
                          * greatest(0.22, least(0.42,
                              0.5 * (CASE WHEN fta > 0 THEN ftm / fta ELSE 0.5 END) + 0.03)))
                     ELSE fg3m END, 1) AS fg3m,
+              round(fgm, 1) AS fgm, round(ftm, 1) AS ftm,
               -- Era-relative true-shooting (TS+), clamped to a sane band so noisy
               -- old-era league denominators can't produce extreme modifiers.
               round(greatest(0.80, least(1.30,
@@ -317,6 +321,7 @@ export async function hydrateRoster(
       gq: p.value,
       pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
       fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
+      fgm: p.fgm, ftm: p.ftm,
       // Default to league-average if a stale/old index row lacks tsplus.
       tsplus: Number.isFinite(p.tsplus) ? p.tsplus : 1,
     });

@@ -255,31 +255,37 @@ export function ResultsPanel({
         </div>
       </div>
 
-      <div className="grid gap-1">
-        <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+      <div className="grid gap-1.5">
+        <div className="text-center font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
           Team box · per game
         </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 font-display text-sm">
-          {(
+        {(
+          [
             [
               ["PTS", result.teamBox.pts],
               ["REB", result.teamBox.reb],
               ["AST", result.teamBox.ast],
               ["STL", result.teamBox.stl],
               ["BLK", result.teamBox.blk],
-              ["3PM", result.teamBox.fg3m],
-              ["TOV", result.teamBox.tov],
-            ] as const
-          ).map(([label, value]) => (
-            <span key={label}>
-              <span className="text-[var(--md-ink-muted)]">{label}</span> {value}
-            </span>
-          ))}
-          <span>
-            <span className="text-[var(--md-ink-muted)]">TS+</span>{" "}
-            {result.teamTsPlus.toFixed(2)}
-          </span>
-        </div>
+            ],
+            [
+              ["FG%", result.teamBox.fgPct],
+              ["FT%", result.teamBox.ftPct],
+              ["TO", result.teamBox.tov],
+            ],
+          ] as const
+        ).map((row, i) => (
+          <div key={i} className="flex justify-center gap-4 font-display text-sm">
+            {row.map(([label, value]) => (
+              <span key={label} className="flex flex-col items-center">
+                <span className="text-base font-bold leading-none">{value}</span>
+                <span className="text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  {label}
+                </span>
+              </span>
+            ))}
+          </div>
+        ))}
       </div>
 
       <div className="flex flex-wrap justify-center gap-2">
