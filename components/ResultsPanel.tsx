@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { SimRosterLine, SimResult } from "@/lib/types";
 
 function Bar({
@@ -37,13 +38,30 @@ function Bar({
 export function ResultsPanel({
   roster,
   result,
+  shareText,
   onReset,
 }: {
   roster: SimRosterLine[];
   result: SimResult;
+  shareText: string;
   onReset: () => void;
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
+  const [copied, setCopied] = useState(false);
+
+  const share = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: shareText });
+        return;
+      }
+      await navigator.clipboard.writeText(shareText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* user dismissed / clipboard blocked */
+    }
+  };
 
   return (
     <div className="md-card md-card--lift flex flex-col gap-6 p-6">
@@ -146,12 +164,14 @@ export function ResultsPanel({
         ))}
       </div>
 
-      <button
-        className="md-btn md-btn--lg md-btn--ink self-center"
-        onClick={onReset}
-      >
-        Play again
-      </button>
+      <div className="flex flex-wrap justify-center gap-2">
+        <button className="md-btn md-btn--lg md-btn--teal" onClick={share}>
+          {copied ? "Copied!" : "Share result"}
+        </button>
+        <button className="md-btn md-btn--lg md-btn--ink" onClick={onReset}>
+          Play again
+        </button>
+      </div>
     </div>
   );
 }

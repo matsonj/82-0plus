@@ -17,7 +17,20 @@ const sans = Inter({
 export const metadata: Metadata = {
   title: "82-0+ · Build an undefeated season",
   description:
-    "Draft a roster across the decades and see if it can go 82-0. Powered by MotherDuck Game Quality.",
+    "Draft a 5-man roster across the decades and see if it can go 82-0. Powered by MotherDuck Game Quality.",
+  openGraph: {
+    title: "82-0+ · Can you build the perfect season?",
+    description:
+      "Draft a 5-man roster across the decades and see if it can go 82-0.",
+    type: "website",
+    siteName: "82-0+",
+  },
+  twitter: {
+    card: "summary",
+    title: "82-0+ · Can you build the perfect season?",
+    description:
+      "Draft a 5-man roster across the decades and see if it can go 82-0.",
+  },
 };
 
 export default function RootLayout({

@@ -244,16 +244,22 @@ export async function getTeamDecades(team: string): Promise<number[]> {
  */
 export async function hydrateRoster(
   picks: SimPick[],
-): Promise<{ scoring: ScoringPlayer[]; lines: SimRosterLine[] }> {
+): Promise<{
+  scoring: ScoringPlayer[];
+  lines: SimRosterLine[];
+  players: IndexedPlayer[];
+}> {
   const index = await getPlayerIndex();
   const byKey = new Map(
     index.map((p) => [`${p.entity_id}|${p.team}|${p.decade}`, p]),
   );
   const scoring: ScoringPlayer[] = [];
   const lines: SimRosterLine[] = [];
+  const players: IndexedPlayer[] = [];
   for (const pick of picks) {
     const p = byKey.get(`${pick.entity_id}|${pick.team}|${pick.decade}`);
     if (!p) throw new Error(`unknown roster pick: ${pick.entity_id}`);
+    players.push(p);
     scoring.push({
       gq: p.value,
       pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
@@ -264,5 +270,5 @@ export async function hydrateRoster(
       best_season: p.best_season, pts: p.pts, reb: p.reb, ast: p.ast,
     });
   }
-  return { scoring, lines };
+  return { scoring, lines, players };
 }

@@ -1,25 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import { simulateRoster } from "@/lib/scoring";
 import { hydrateRoster } from "@/lib/queries";
+import { canPlay, type SlotKind } from "@/lib/positions";
 import type { SimPick } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Must mirror the client lineup board.
+const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
+
 function parsePicks(raw: unknown): SimPick[] | null {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 5) return null;
+  if (!Array.isArray(raw) || raw.length !== KINDS.length) return null;
   const picks: SimPick[] = [];
+  const slotsSeen = new Set<number>();
+  const idsSeen = new Set<string>();
   for (const item of raw) {
     const r = (item ?? {}) as Record<string, unknown>;
     const entity_id = String(r.entity_id ?? "");
     const team = String(r.team ?? "");
     const decade = Number(r.decade);
-    if (!entity_id || !/^[A-Z]{3}$/.test(team) || !Number.isInteger(decade)) {
+    const slot = Number(r.slot);
+    if (
+      !entity_id ||
+      !/^[A-Z]{3}$/.test(team) ||
+      !Number.isInteger(decade) ||
+      !Number.isInteger(slot) ||
+      slot < 0 ||
+      slot >= KINDS.length ||
+      slotsSeen.has(slot) || // one pick per lineup slot
+      idsSeen.has(entity_id) // no duplicate players
+    ) {
       return null;
     }
-    picks.push({ entity_id, team, decade });
+    slotsSeen.add(slot);
+    idsSeen.add(entity_id);
+    picks.push({ entity_id, team, decade, slot });
   }
-  return picks;
+  return picks; // length === 5, distinct slots (all of them), distinct players
 }
 
 export async function POST(req: NextRequest) {
@@ -31,11 +49,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Stats + Game Quality come from the server-side index, not the client.
-    let scoring, lines;
+    let scoring, lines, players;
     try {
-      ({ scoring, lines } = await hydrateRoster(picks));
+      ({ scoring, lines, players } = await hydrateRoster(picks));
     } catch {
       return NextResponse.json({ error: "unknown roster pick" }, { status: 400 });
+    }
+
+    // Every player must actually be eligible for the lineup slot they claim.
+    for (let i = 0; i < picks.length; i++) {
+      if (!canPlay(players[i], KINDS[picks[i].slot])) {
+        return NextResponse.json(
+          { error: "illegal lineup" },
+          { status: 400 },
+        );
+      }
     }
 
     const result = simulateRoster(scoring);

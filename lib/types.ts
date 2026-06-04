@@ -20,11 +20,15 @@ export interface PublicPlayer {
   blk: number | null;
 }
 
-/** What the client submits to /api/simulate — identifiers only, never stats. */
+/**
+ * What the client submits to /api/simulate — identifiers + the lineup slot the
+ * player fills (index into the fixed [G, FLEX, W, FLEX, B] board), never stats.
+ */
 export interface SimPick {
   entity_id: string;
   team: string;
   decade: number;
+  slot: number;
 }
 
 /** Server-hydrated roster line returned by /api/simulate for the results display. */

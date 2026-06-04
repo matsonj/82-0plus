@@ -13,9 +13,12 @@ import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
+import { HowToPlay } from "@/components/HowToPlay";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play";
+type GameType = "free" | "daily";
+const SITE_URL = "https://82-0plus.vercel.app";
 
 // Each time a decade is used its odds drop 30% (weight × 0.7 per use).
 function pickWeightedDecade(pool: number[], usage: Record<number, number>): number {
@@ -32,6 +35,10 @@ function pickWeightedDecade(pool: number[], usage: Record<number, number>): numb
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("menu");
   const [mode, setMode] = useState<GameMode>("classic");
+  const [gameType, setGameType] = useState<GameType>("free");
+  const [dailySlots, setDailySlots] = useState<{ team: string; decade: number }[]>([]);
+  const [dailyDate, setDailyDate] = useState<string>("");
+  const [showHowTo, setShowHowTo] = useState(false);
   const [decades, setDecades] = useState<number[]>([]);
   const [lineup, setLineup] = useState<(LineupEntry | null)[]>(
     KINDS.map(() => null),
@@ -99,8 +106,9 @@ export default function Home() {
     [decades],
   );
 
-  const startGame = useCallback(async (m: GameMode) => {
-    setMode(m);
+  const startGame = useCallback(async (m: GameMode, type: GameType) => {
+    setMode(type === "daily" ? "classic" : m);
+    setGameType(type);
     setResult(null);
     setResultRoster([]);
     setLineup(KINDS.map(() => null));
@@ -110,14 +118,26 @@ export default function Home() {
     setSelected(null);
     setTeamSkips(1);
     setDecadeSkips(1);
+    setDailySlots([]);
     setError(null);
     setPhase("play");
     setBooting(true);
     try {
-      const res = await fetch("/api/decades");
-      if (!res.ok) throw new Error("load failed");
-      const { decades: ds } = (await res.json()) as { decades: number[] };
-      setDecades(ds);
+      if (type === "daily") {
+        const res = await fetch("/api/daily");
+        if (!res.ok) throw new Error("load failed");
+        const { date, slots } = (await res.json()) as {
+          date: string;
+          slots: { team: string; decade: number }[];
+        };
+        setDailyDate(date);
+        setDailySlots(slots);
+      } else {
+        const res = await fetch("/api/decades");
+        if (!res.ok) throw new Error("load failed");
+        const { decades: ds } = (await res.json()) as { decades: number[] };
+        setDecades(ds);
+      }
     } catch {
       setError("Couldn't load the league. Try again.");
     } finally {
@@ -129,18 +149,44 @@ export default function Home() {
     setPhase("menu");
     setResult(null);
     setResultRoster([]);
+    setDailySlots([]);
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
   };
 
-  // Start a new round whenever there's an open slot and no active round.
+  // Advance the round. Daily mode uses fixed, seeded slots; free play rolls.
   useEffect(() => {
-    if (phase !== "play" || booting || result || draftDone) return;
-    if (currentDecade !== null || rollActive.current) return;
+    if (phase !== "play" || result || draftDone) return;
+    if (gameType === "daily") {
+      const slot = dailySlots[draftedCount];
+      if (slot && (currentTeam !== slot.team || currentDecade !== slot.decade)) {
+        setPending(null);
+        setSelected(null);
+        setCurrentDecade(slot.decade);
+        setCurrentTeam(slot.team);
+      }
+      return;
+    }
+    if (booting || currentDecade !== null || rollActive.current) return;
     if (decades.length === 0) return;
     rollRound({});
-  }, [phase, booting, result, draftDone, currentDecade, decades, rollRound]);
+  }, [
+    phase, booting, result, draftDone, gameType, dailySlots, draftedCount,
+    currentTeam, currentDecade, decades, rollRound,
+  ]);
+
+  // First-visit how-to.
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("md820-seen-howto")) {
+        setShowHowTo(true);
+        localStorage.setItem("md820-seen-howto", "1");
+      }
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
 
   const draftable = useCallback(
     (p: PublicPlayer) => {
@@ -244,14 +290,26 @@ export default function Home() {
       rolling
     )
       return;
+    const team = currentTeam;
+    const cur = currentDecade;
+    // Run through the same guard as a roll: mark in-flight and hide the player
+    // list so a pick can't land mid-request and strand the UI.
+    const myId = ++rollSeq.current;
+    rollActive.current = true;
+    setRolling(true);
+    setPending(null);
+    setSelected(null);
+    setCurrentTeam(null);
     try {
-      const res = await fetch(`/api/team-decades?team=${currentTeam}`);
-      if (!res.ok) return;
+      const res = await fetch(`/api/team-decades?team=${team}`);
+      if (!res.ok) throw new Error("skip failed");
       const { decades: teamDecades } = (await res.json()) as { decades: number[] };
-      const others = (teamDecades ?? []).filter((d) => d !== currentDecade);
+      if (rollSeq.current !== myId) return; // superseded
+      const others = (teamDecades ?? []).filter((d) => d !== cur);
       if (others.length === 0) {
-        setError(`${currentTeam} only has players in the ${currentDecade}s.`);
-        return; // keep the skip
+        setError(`${team} only has players in the ${cur}s.`);
+        setCurrentTeam(team); // restore — keep the skip
+        return;
       }
       setDecadeSkips((n) => n - 1);
       const usage: Record<number, number> = {};
@@ -259,22 +317,35 @@ export default function Home() {
         if (e) usage[e.decade] = (usage[e.decade] ?? 0) + 1;
       }
       setCurrentDecade(pickWeightedDecade(others, usage));
+      setCurrentTeam(team); // same team, new era
     } catch {
-      /* keep the skip on failure */
+      if (rollSeq.current === myId) {
+        setError("Couldn't skip the decade. Try again.");
+        setCurrentTeam(team);
+      }
+    } finally {
+      if (rollSeq.current === myId) {
+        rollActive.current = false;
+        setRolling(false);
+      }
     }
   };
 
   const simulate = async () => {
     setSimulating(true);
     try {
-      const picks: SimPick[] = lineup.filter(Boolean).map((e) => {
-        const entry = e as LineupEntry;
-        return {
-          entity_id: entry.player.entity_id,
-          team: entry.team,
-          decade: entry.decade,
-        };
-      });
+      const picks: SimPick[] = lineup
+        .map((e, i) =>
+          e
+            ? {
+                entity_id: e.player.entity_id,
+                team: e.team,
+                decade: e.decade,
+                slot: i,
+              }
+            : null,
+        )
+        .filter((p): p is SimPick => p !== null);
       const res = await fetch("/api/simulate", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -292,8 +363,25 @@ export default function Home() {
     }
   };
 
+  const modeLabel =
+    gameType === "daily"
+      ? `Daily ${dailyDate}`
+      : mode === "hoopiq"
+        ? "HoopIQ"
+        : "Classic";
+  const shareText = result
+    ? [
+        `82-0+ 🏀 ${result.wins}-${result.losses} (${result.netRating >= 0 ? "+" : ""}${result.netRating} net) · ${modeLabel}`,
+        ...resultRoster.map(
+          (r) => `${r.team} '${String(r.best_season).slice(2)} ${r.player_name}`,
+        ),
+        SITE_URL,
+      ].join("\n")
+    : "";
+
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
+      {showHowTo && <HowToPlay onClose={() => setShowHowTo(false)} />}
       <div className="md-sunbeam" />
 
       <header className="relative z-10 flex items-center justify-between py-4 sm:py-5">
@@ -337,13 +425,31 @@ export default function Home() {
             the season.
           </p>
 
-          <div className="mt-8 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Choose a mode
+          <button
+            className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5"
+            style={{ background: "var(--md-yellow)" }}
+            onClick={() => startGame("classic", "daily")}
+          >
+            <div className="flex items-center justify-between">
+              <div className="font-display text-xl font-bold">
+                Daily Challenge
+              </div>
+              <span className="text-2xl" aria-hidden>
+                🏆
+              </span>
+            </div>
+            <p className="mt-1 text-[13px] text-[var(--md-ink)]">
+              The same five team/era rolls for everyone today. Compare records.
+            </p>
+          </button>
+
+          <div className="mt-6 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+            or free play
           </div>
           <div className="mt-3 grid w-full max-w-md gap-3 sm:grid-cols-2">
             <button
               className="md-card md-card--lift p-5 text-left transition-transform hover:-translate-y-0.5"
-              onClick={() => startGame("classic")}
+              onClick={() => startGame("classic", "free")}
             >
               <div className="font-display text-xl font-bold">Classic</div>
               <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
@@ -353,7 +459,7 @@ export default function Home() {
             <button
               className="md-card md-card--lift p-5 text-left transition-transform hover:-translate-y-0.5"
               style={{ background: "var(--md-ink)" }}
-              onClick={() => startGame("hoopiq")}
+              onClick={() => startGame("hoopiq", "free")}
             >
               <div className="font-display text-xl font-bold text-[var(--md-white)]">
                 HoopIQ
@@ -363,9 +469,12 @@ export default function Home() {
               </p>
             </button>
           </div>
-          <p className="mt-6 text-[11px] text-[var(--md-ink-muted)]">
-            Players are sorted by minutes per game.
-          </p>
+          <button
+            className="mt-6 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+            onClick={() => setShowHowTo(true)}
+          >
+            How to play
+          </button>
         </section>
       )}
 
@@ -383,6 +492,7 @@ export default function Home() {
           <ResultsPanel
             roster={resultRoster}
             result={result}
+            shareText={shareText}
             onReset={backToMenu}
           />
         </section>
@@ -434,22 +544,24 @@ export default function Home() {
                 Round {draftedCount + 1} of {KINDS.length}
               </div>
               <SlotMachine team={currentTeam} decade={currentDecade} size="lg" />
-              <div className="flex flex-wrap justify-center gap-2">
-                <button
-                  className="md-btn md-btn--sm md-btn--secondary"
-                  onClick={teamSkip}
-                  disabled={teamSkips <= 0 || rolling}
-                >
-                  ↻ Team skip ({teamSkips})
-                </button>
-                <button
-                  className="md-btn md-btn--sm md-btn--secondary"
-                  onClick={decadeSkip}
-                  disabled={decadeSkips <= 0 || rolling || decades.length < 2}
-                >
-                  ↻ Decade skip ({decadeSkips})
-                </button>
-              </div>
+              {gameType === "free" && (
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button
+                    className="md-btn md-btn--sm md-btn--secondary"
+                    onClick={teamSkip}
+                    disabled={teamSkips <= 0 || rolling}
+                  >
+                    ↻ Team skip ({teamSkips})
+                  </button>
+                  <button
+                    className="md-btn md-btn--sm md-btn--secondary"
+                    onClick={decadeSkip}
+                    disabled={decadeSkips <= 0 || rolling || decades.length < 2}
+                  >
+                    ↻ Decade skip ({decadeSkips})
+                  </button>
+                </div>
+              )}
               <div className="w-full">
                 {currentTeam ? (
                   <PlayerList
