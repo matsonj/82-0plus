@@ -133,7 +133,6 @@ export interface StatNorms {
 export interface GameBreakdown {
   seedNet: number;
   gameScoreBuff: number;
-  sixthManBuff: number;
   heightBuff: number;
   homeBuff: number;
   fatigue: number;

@@ -8,15 +8,11 @@
 
 // ── Names ────────────────────────────────────────────────────────────────────
 
-// Allowed characters are ONLY: uppercase A–Z, digits 0–9, and the shift-symbols
-// of the number row 1–0, i.e. ! @ # $ % ^ & * ( ). Nothing else — no lowercase,
-// no spaces, no emoji, no other punctuation. Length 1–8.
-//
-// (The symbols are listed explicitly rather than via a range so the intent is
-// obvious and we don't accidentally let in neighbours like `+ - = [ ]`.)
-export const NAME_ALLOWED = /^[A-Z0-9!@#$%^&*()]{1,8}$/;
+// Allowed characters are ONLY uppercase A–Z. Nothing else — no lowercase, no
+// digits, no spaces, no symbols, no emoji. Length 1–16.
+export const NAME_ALLOWED = /^[A-Z]{1,16}$/;
 
-export const NAME_MAX_LEN = 8;
+export const NAME_MAX_LEN = 16;
 
 /**
  * Canonical storage form of a name: trim surrounding whitespace, then UPPERCASE.
@@ -33,7 +29,7 @@ export type ValidationResult = { ok: true } | { ok: false; reason: string };
 /**
  * Validate a display name. Normalizes first, then checks (in order):
  *   1. non-empty,
- *   2. length ≤ 8,
+ *   2. length ≤ 16,
  *   3. matches the allowed charset,
  *   4. is not profane (best-effort, see isProfane).
  * Returns a short, player-facing `reason` on the first failure.
@@ -45,10 +41,13 @@ export function validateName(s: string): ValidationResult {
     return { ok: false, reason: "please enter a name" };
   }
   if (name.length > NAME_MAX_LEN) {
-    return { ok: false, reason: "too long — 8 characters max" };
+    return { ok: false, reason: "too long — 16 characters max" };
   }
   if (!NAME_ALLOWED.test(name)) {
-    return { ok: false, reason: "only A–Z, 0–9 and !@#$%^&*() allowed" };
+    return {
+      ok: false,
+      reason: "letters A–Z only — no spaces, numbers or symbols",
+    };
   }
   if (isProfane(name)) {
     return { ok: false, reason: "please choose another name" };

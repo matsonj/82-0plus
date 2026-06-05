@@ -43,6 +43,7 @@ export interface TournamentTeam {
   sixthMan: ScoringPlayer;    // the bench player (NOT in the starting five)
   captainSlot: number;        // 0..4, index into starters
   ageAtPeak: number;          // team age proxy: AVERAGE of starters' age-at-peak
+  sixthManAge: number;        // sixth man's age proxy (experience at peak); drives recovery
   seedNet: number;            // netRating of the FIVE via simulateRoster — NO buffs.
   // OPTIONAL display fields threaded into the stored bracket for the expandable
   // team panel. Optional so the test factory / any caller still compiles.
@@ -52,7 +53,7 @@ export interface TournamentTeam {
 
 /**
  * Tunable knobs. Every game's adjusted net is:
- *   adj = seedNet + gameScoreBuff + sixthManBuff + heightBuff + homeBuff
+ *   adj = seedNet + gameScoreBuff + heightBuff + homeBuff
  *         - fatigue - recoveryCarry + randomFactor
  * The buffs are deliberately small relative to a seedNet spread (which can be
  * tens of points): a better team should usually win, but a fresh underdog with
@@ -83,9 +84,14 @@ export const TOURNAMENT_CONFIG = {
   // the knob stays explicit for tuning / to document the assumption.
   SIXTH_MAN_FATIGUE_MULT: 0.5,
 
-  // Bench depth bonus: a strong sixth man steadies the team. Capped low — depth
-  // helps, it doesn't carry a roster.
-  SIXTH_DEPTH_MAX: 3,
+  // Recovery between rounds is the SIXTH MAN's job: a better and younger bench
+  // shortens the carried fatigue. recoveryFactor (0..1 — the fraction of the
+  // carry relieved) = BASE + (sixthGQ − 0.5)·GQ_WEIGHT + (LEAGUE_AVG_EXP −
+  // sixthAge)·AGE_WEIGHT, clamped. An average bench at league-average age
+  // relieves half; an elite young bench nearly all; a poor old bench none.
+  BENCH_RECOVERY_BASE: 0.5,
+  BENCH_RECOVERY_GQ_WEIGHT: 1.5,
+  BENCH_RECOVERY_AGE_WEIGHT: 0.05,
 
   // Per-game luck, bounded ±, drawn from a seeded PRNG (never Math.random).
   RANDOM_FACTOR_MAX: 1.5,
@@ -265,15 +271,6 @@ export function gameScoreCompare(
 // Per-team game modifiers (pure).
 // ---------------------------------------------------------------------------
 
-/** Bench-depth net bonus: clamp((gq - 0.5) * 8, 0, SIXTH_DEPTH_MAX). A league-
- *  average bench (gq .5) adds nothing; an elite one tops out at the cap. */
-export function sixthManBuff(
-  team: TournamentTeam,
-  cfg: TournamentConfig = TOURNAMENT_CONFIG,
-): number {
-  return clamp((team.sixthMan.gq - 0.5) * 8, 0, cfg.SIXTH_DEPTH_MAX);
-}
-
 /** Age factor scaling fatigue: 1 at LEAGUE_AVG_EXP, rising for older teams (they
  *  decay faster across a series), falling for younger ones. Bounded [-0.4, 0.8]. */
 export function ageFactor(
@@ -301,19 +298,29 @@ export function fatigue(
 
 /**
  * Recovery carry (a POSITIVE amount SUBTRACTED, constant within a series) from
- * how the team's PREVIOUS series ended. Keyed off games-over-the-minimum:
+ * how the team's PREVIOUS series ended. Base, keyed off games-over-the-minimum:
  *   swept (0 over) → 0, +1 → 0.5, +2 → 1.2, +3 (best-of-7 only) → 2.0.
- * A sixth man reduces the carry by ONE tier (min 0) — depth recovers faster.
- * Round 1 has no previous series → 0.
+ * The SIXTH MAN then relieves a fraction of that base: a better (higher GQ) and
+ * YOUNGER bench recovers more. recoveryFactor ∈ [0,1] = BASE + (sixthGQ − .5)·
+ * GQ_WEIGHT + (LEAGUE_AVG_EXP − sixthAge)·AGE_WEIGHT. Round 1 has no previous
+ * series → base 0 → returns 0.
  */
 export function recoveryCarry(
   gamesOverMin: number,
-  hasSixthMan: boolean,
+  sixthGQ: number,
+  sixthAge: number,
+  cfg: TournamentConfig = TOURNAMENT_CONFIG,
 ): number {
   const tiers = [0, 0.5, 1.2, 2.0];
-  let tier = clamp(Math.round(gamesOverMin), 0, 3);
-  if (hasSixthMan) tier = Math.max(0, tier - 1);
-  return tiers[tier];
+  const base = tiers[clamp(Math.round(gamesOverMin), 0, 3)];
+  const recoveryFactor = clamp(
+    cfg.BENCH_RECOVERY_BASE +
+      (sixthGQ - 0.5) * cfg.BENCH_RECOVERY_GQ_WEIGHT +
+      (cfg.LEAGUE_AVG_EXP - sixthAge) * cfg.BENCH_RECOVERY_AGE_WEIGHT,
+    0,
+    1,
+  );
+  return base * (1 - recoveryFactor);
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +388,6 @@ const HOME_OWNER: Record<5 | 7, ("hi" | "lo")[]> = {
 interface SeriesStatics {
   gameScoreBuff: Record<string, number>; // teamId → 0 or GAME_SCORE_BUFF
   heightBuff: Record<string, number>;    // teamId → ± capped height edge
-  sixthBuff: Record<string, number>;     // teamId → bench depth bonus
   carry: Record<string, number>;         // teamId → recovery carry (from prev series)
 }
 
@@ -430,7 +436,6 @@ function playSeries(
       const adj =
         team.seedNet +
         statics.gameScoreBuff[team.id] +
-        statics.sixthBuff[team.id] +
         statics.heightBuff[team.id] +
         homeBuff -
         fat -
@@ -439,7 +444,6 @@ function playSeries(
       return {
         seedNet: team.seedNet,
         gameScoreBuff: statics.gameScoreBuff[team.id],
-        sixthManBuff: statics.sixthBuff[team.id],
         heightBuff: statics.heightBuff[team.id],
         homeBuff,
         fatigue: fat,          // positive; subtracted above
@@ -570,12 +574,7 @@ export function simulateBracket(
     const hiHeight = clamp(diff * cfg.HEIGHT_PER_INCH, -cfg.HEIGHT_CAP, cfg.HEIGHT_CAP);
     const heightBuff: Record<string, number> = { [hi.id]: hiHeight, [lo.id]: -hiHeight };
 
-    const sixthBuff: Record<string, number> = {
-      [hi.id]: sixthManBuff(hi, cfg),
-      [lo.id]: sixthManBuff(lo, cfg),
-    };
-
-    return { gameScoreBuff, heightBuff, sixthBuff, carry };
+    return { gameScoreBuff, heightBuff, carry };
   };
 
   // ---- 2/3. Play each conference's bracket, then the Final. ----
@@ -605,8 +604,12 @@ export function simulateBracket(
       const [hi, lo] =
         byStrength(sa.team, sb.team) <= 0 ? [sa.team, sb.team] : [sb.team, sa.team];
       const carry: Record<string, number> = {
-        [hi.id]: recoveryCarry(lastGamesOver.get(hi.id) ?? 0, true),
-        [lo.id]: recoveryCarry(lastGamesOver.get(lo.id) ?? 0, true),
+        [hi.id]: recoveryCarry(
+          lastGamesOver.get(hi.id) ?? 0, hi.sixthMan.gq, hi.sixthManAge, cfg,
+        ),
+        [lo.id]: recoveryCarry(
+          lastGamesOver.get(lo.id) ?? 0, lo.sixthMan.gq, lo.sixthManAge, cfg,
+        ),
       };
       const statics = computeStatics(hi, lo, carry);
       const { result, gamesOverMin } = playSeries(

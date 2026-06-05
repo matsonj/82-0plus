@@ -450,10 +450,10 @@ export function TournamentEntry({
                   maxLength={NAME_MAX_LEN}
                   autoCapitalize="characters"
                   onChange={(e) => {
-                    setName(e.target.value.toUpperCase());
+                    setName(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""));
                     setNameTaken(false);
                   }}
-                  placeholder="MJ23"
+                  placeholder="DREAMTEAM"
                   style={
                     nameTaken ? { borderColor: "var(--md-coral)" } : undefined
                   }
@@ -461,7 +461,7 @@ export function TournamentEntry({
                 <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
                   {name.length > 0 && !nameCheck.ok
                     ? nameCheck.reason
-                    : "Allowed: A–Z, 0–9, !@#$%^&*() · 8 max"}
+                    : "A–Z only · 16 max"}
                 </span>
               </label>
 

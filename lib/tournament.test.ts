@@ -9,7 +9,6 @@ import {
   per36Totals,
   captainMultipliers,
   gameScoreCompare,
-  sixthManBuff,
   fatigue,
   recoveryCarry,
   regionScore,
@@ -52,6 +51,7 @@ function team(over: Partial<TournamentTeam> = {}): TournamentTeam {
     sixthMan: over.sixthMan ?? p(),
     captainSlot,
     ageAtPeak: over.ageAtPeak ?? C.LEAGUE_AVG_EXP,
+    sixthManAge: over.sixthManAge ?? C.LEAGUE_AVG_EXP,
     seedNet: over.seedNet ?? 0,
     roster,
     sixthManInfo,
@@ -178,15 +178,6 @@ describe("gameScoreCompare", () => {
   });
 });
 
-describe("sixth man buff", () => {
-  it("clamps to [0, MAX]: avg bench = 0, elite bench = cap", () => {
-    expect(sixthManBuff(team({ sixthMan: p({ gq: 0.5 }) }))).toBe(0);
-    expect(sixthManBuff(team({ sixthMan: p({ gq: 0.4 }) }))).toBe(0); // below avg → 0
-    expect(sixthManBuff(team({ sixthMan: p({ gq: 0.9 }) }))).toBe(C.SIXTH_DEPTH_MAX); // (0.4*8)=3.2→cap
-    expect(sixthManBuff(team({ sixthMan: p({ gq: 0.625 }) }))).toBeCloseTo(1, 6);
-  });
-});
-
 describe("fatigue", () => {
   it("is zero in game 1 and grows with game number", () => {
     const t = team({ ageAtPeak: C.LEAGUE_AVG_EXP });
@@ -213,21 +204,36 @@ describe("fatigue", () => {
   });
 });
 
-describe("recovery carry", () => {
-  it("swept → 0, and longer previous series → more carry", () => {
-    // Without the sixth-man reduction (pass false) to see the raw tiers.
-    expect(recoveryCarry(0, false)).toBe(0);   // swept
-    expect(recoveryCarry(1, false)).toBe(0.5);
-    expect(recoveryCarry(2, false)).toBe(1.2);
-    expect(recoveryCarry(3, false)).toBe(2.0);
-    expect(recoveryCarry(2, false)).toBeGreaterThan(recoveryCarry(1, false));
+describe("recovery carry (driven by the sixth man's quality + age)", () => {
+  const AVG = C.LEAGUE_AVG_EXP; // a league-average-age bench
+
+  it("swept → 0 regardless of the bench", () => {
+    expect(recoveryCarry(0, 0.5, AVG)).toBe(0);
+    expect(recoveryCarry(0, 0.9, 1)).toBe(0);
   });
 
-  it("a sixth man reduces carry by one tier (min 0)", () => {
-    expect(recoveryCarry(0, true)).toBe(0);   // already min
-    expect(recoveryCarry(1, true)).toBe(0);   // tier 1 → 0
-    expect(recoveryCarry(2, true)).toBe(0.5); // tier 2 → 1
-    expect(recoveryCarry(3, true)).toBe(1.2); // tier 3 → 2
+  it("an average bench at league age relieves half the base carry", () => {
+    // recoveryFactor = BASE (0.5) → carry = base × 0.5.
+    expect(recoveryCarry(1, 0.5, AVG)).toBeCloseTo(0.5 * 0.5, 6);
+    expect(recoveryCarry(2, 0.5, AVG)).toBeCloseTo(1.2 * 0.5, 6);
+    expect(recoveryCarry(3, 0.5, AVG)).toBeCloseTo(2.0 * 0.5, 6);
+  });
+
+  it("a longer previous series carries more (same bench)", () => {
+    expect(recoveryCarry(3, 0.5, AVG)).toBeGreaterThan(recoveryCarry(1, 0.5, AVG));
+  });
+
+  it("a better sixth man recovers more (less carry)", () => {
+    expect(recoveryCarry(3, 0.8, AVG)).toBeLessThan(recoveryCarry(3, 0.4, AVG));
+  });
+
+  it("a younger sixth man recovers more (less carry)", () => {
+    expect(recoveryCarry(3, 0.5, 2)).toBeLessThan(recoveryCarry(3, 0.5, 12));
+  });
+
+  it("an elite, young bench fully recovers; a poor, old bench gets no relief", () => {
+    expect(recoveryCarry(3, 0.9, 1)).toBe(0); // recoveryFactor clamps to 1
+    expect(recoveryCarry(3, 0.35, 14)).toBeCloseTo(2.0, 6); // factor clamps to 0 → full base
   });
 });
 
@@ -319,7 +325,7 @@ describe("simulateBracket: buffs in the breakdown", () => {
           // adj reconstructs from the parts.
           const bd = g.breakdown[a];
           const recomputed =
-            bd.seedNet + bd.gameScoreBuff + bd.sixthManBuff + bd.heightBuff +
+            bd.seedNet + bd.gameScoreBuff + bd.heightBuff +
             bd.homeBuff - bd.fatigue - bd.recoveryCarry + bd.randomFactor;
           expect(bd.adj).toBeCloseTo(recomputed, 9);
         }

@@ -48,7 +48,6 @@ const BASE_SEED = process.argv[3] ?? "tune";
 // signed. We re-derive adj with each one zeroed to test if the winner flips.
 const ADD_MODS = [
   "gameScoreBuff",
-  "sixthManBuff",
   "heightBuff",
   "homeBuff",
   "randomFactor",
@@ -72,7 +71,6 @@ function adjFrom(b: GameBreakdown): number {
   return (
     b.seedNet +
     b.gameScoreBuff +
-    b.sixthManBuff +
     b.heightBuff +
     b.homeBuff -
     b.fatigue -
@@ -223,7 +221,6 @@ function printBracketTables(
     seed: number;
     seedNet: string;
     gameScore: string;
-    sixthMan: string;
     height: string;
     home: string;
     fatigue: string;
@@ -256,7 +253,6 @@ function printBracketTables(
             seed: ident?.seed ?? 0,
             seedNet: fmt(bd.seedNet),
             gameScore: fmt(bd.gameScoreBuff),
-            sixthMan: fmt(bd.sixthManBuff),
             height: fmt(bd.heightBuff),
             home: fmt(bd.homeBuff),
             fatigue: fmt(bd.fatigue),

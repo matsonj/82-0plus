@@ -67,7 +67,6 @@ function TeamBreakdown({
       {/* fatigue & recoveryCarry are stored positive and SUBTRACTED. */}
       <BreakLine label="seed net" value={b.seedNet} />
       <BreakLine label="game score" value={b.gameScoreBuff} />
-      <BreakLine label="sixth man" value={b.sixthManBuff} />
       <BreakLine label="height" value={b.heightBuff} />
       <BreakLine label="home" value={b.homeBuff} />
       <BreakLine label="fatigue" value={-b.fatigue} />

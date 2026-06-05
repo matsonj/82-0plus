@@ -152,6 +152,7 @@ export interface HydratedTournamentRoster {
   lines: Awaited<ReturnType<typeof hydrateRoster>>["lines"];
   players: IndexedPlayer[];
   ageAtPeak: number;
+  sixthManAge: number; // sixth man's experience-at-peak (drives recovery)
   heightTotal: number;
   // Display info for the expandable team panel (names, not stats).
   starterInfo: BracketPlayer[]; // 5 starters in slot order (captain flagged later)
@@ -188,18 +189,21 @@ export async function hydrateTournamentRoster(
     season: sixthRow.best_season,
   };
 
-  // Age proxy: average years of experience at the drafted (best) season across
-  // the five starters. Missing debut → NEUTRAL_EXP.
+  // Age proxy: years of experience at the drafted (best) season. Average across
+  // the five starters for the team; the sixth man's own age drives recovery.
+  // Missing debut → NEUTRAL_EXP.
   const debuts = await getDebutSeasons(
-    players.map((p) => p.entity_id),
+    [...players.map((p) => p.entity_id), sixthRow.entity_id],
     options,
   );
+  const expAt = (entityId: string, bestSeason: number) => {
+    const debut = debuts.get(entityId);
+    return debut ? bestSeason - debut : NEUTRAL_EXP;
+  };
   let expSum = 0;
-  for (const p of players) {
-    const debut = debuts.get(p.entity_id);
-    expSum += debut ? p.best_season - debut : NEUTRAL_EXP;
-  }
+  for (const p of players) expSum += expAt(p.entity_id, p.best_season);
   const ageAtPeak = players.length > 0 ? expSum / players.length : NEUTRAL_EXP;
+  const sixthManAge = expAt(sixthRow.entity_id, sixthRow.best_season);
 
   const heightTotal = players.reduce(
     (acc, p) => acc + (Number.isFinite(p.height_in) ? p.height_in : 79),
@@ -214,7 +218,7 @@ export async function hydrateTournamentRoster(
   }));
 
   return {
-    scoring, sixthMan, lines, players, ageAtPeak, heightTotal,
+    scoring, sixthMan, lines, players, ageAtPeak, sixthManAge, heightTotal,
     starterInfo, sixthInfo,
   };
 }
@@ -248,6 +252,7 @@ export function buildTournamentTeam(args: BuildTournamentTeamArgs): TournamentTe
     sixthMan: hydrated.sixthMan,
     captainSlot: args.captainSlot,
     ageAtPeak: hydrated.ageAtPeak,
+    sixthManAge: hydrated.sixthManAge,
     seedNet: args.seedNet,
     roster,
     sixthManInfo: hydrated.sixthInfo,

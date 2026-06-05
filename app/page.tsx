@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type {
   GameMode,
   PublicPlayer,
@@ -553,6 +554,12 @@ export default function Home() {
             >
               How to play
             </button>
+            <Link
+              href="/tournament"
+              className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+            >
+              My teams →
+            </Link>
           </div>
         </section>
       )}

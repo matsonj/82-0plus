@@ -276,8 +276,10 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
           value={name}
           maxLength={NAME_MAX_LEN}
           autoCapitalize="characters"
-          onChange={(e) => setName(e.target.value.toUpperCase())}
-          placeholder="MJ23"
+          onChange={(e) =>
+            setName(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))
+          }
+          placeholder="DREAMTEAM"
         />
       </label>
 

@@ -9,50 +9,49 @@ import {
 
 describe("normalizeName", () => {
   it("trims and uppercases", () => {
-    expect(normalizeName("  mj23  ")).toBe("MJ23");
+    expect(normalizeName("  dreamteam  ")).toBe("DREAMTEAM");
     expect(normalizeName("ballers")).toBe("BALLERS");
   });
 });
 
 describe("NAME_ALLOWED charset", () => {
-  it("accepts uppercase, digits and the number-row shift symbols", () => {
-    expect(NAME_ALLOWED.test("MJ23")).toBe(true);
-    expect(NAME_ALLOWED.test("!@#$%^&*")).toBe(true); // all 8 shift-symbols
+  it("accepts uppercase letters A–Z only", () => {
+    expect(NAME_ALLOWED.test("DREAMTEAM")).toBe(true);
     expect(NAME_ALLOWED.test("GOAT")).toBe(true);
-    expect(NAME_ALLOWED.test("$$$")).toBe(true);
-    expect(NAME_ALLOWED.test("mj23")).toBe(false); // raw regex rejects lowercase
+    expect(NAME_ALLOWED.test("ABCDEFGHIJKLMNOP")).toBe(true); // 16
+    expect(NAME_ALLOWED.test("MJ23")).toBe(false); // digits rejected
+    expect(NAME_ALLOWED.test("!@#$%^&*")).toBe(false); // symbols rejected
+    expect(NAME_ALLOWED.test("mj")).toBe(false); // raw regex rejects lowercase
   });
 });
 
 describe("validateName — charset", () => {
   it("allowed names pass", () => {
-    expect(validateName("MJ23")).toEqual({ ok: true });
+    expect(validateName("DREAMTEAM")).toEqual({ ok: true });
     expect(validateName("GOAT")).toEqual({ ok: true });
-    expect(validateName("$WISH$")).toEqual({ ok: true });
-    expect(validateName("&*()")).toEqual({ ok: true });
+    expect(validateName("BALLERS")).toEqual({ ok: true });
   });
 
   it("is case-insensitive on input (normalizes first)", () => {
-    expect(validateName("mj23")).toEqual({ ok: true });
+    expect(validateName("dreamteam")).toEqual({ ok: true });
     expect(validateName("  baller ")).toEqual({ ok: true });
   });
 
-  it("rejects lowercase, space, emoji and stray punctuation", () => {
-    // After normalize, lowercase is uppercased — so to truly test "lowercase
-    // rejected" we use a char with no uppercase form is not possible; instead
-    // test chars that survive uppercasing and are illegal.
-    expect(validateName("MJ 23").ok).toBe(false); // space
+  it("rejects digits, space, emoji and stray punctuation", () => {
+    expect(validateName("MJ23").ok).toBe(false); // digits
+    expect(validateName("DREAM TEAM").ok).toBe(false); // space
     expect(validateName("MJ-23").ok).toBe(false); // hyphen
     expect(validateName("MJ.23").ok).toBe(false); // dot
     expect(validateName("MJ+23").ok).toBe(false); // plus
-    expect(validateName("MJ😀").ok).toBe(false); // emoji
-    expect(validateName("MJ_23").ok).toBe(false); // underscore
+    expect(validateName("GOAT😀").ok).toBe(false); // emoji
+    expect(validateName("DREAM_TEAM").ok).toBe(false); // underscore
+    expect(validateName("$WISH$").ok).toBe(false); // symbols
   });
 
   it("the illegal-charset failure carries the friendly reason", () => {
-    const r = validateName("MJ-23");
+    const r = validateName("MJ23");
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toContain("!@#$%^&*()");
+    if (!r.ok) expect(r.reason).toContain("letters A–Z only");
   });
 });
 
@@ -63,9 +62,9 @@ describe("validateName — length bounds", () => {
     if (!r.ok) expect(r.reason).toContain("enter a name");
   });
 
-  it("8 chars ok, 9 chars too long", () => {
-    expect(validateName("ABCD1234")).toEqual({ ok: true }); // 8
-    const r = validateName("ABCD12345"); // 9
+  it("16 chars ok, 17 chars too long", () => {
+    expect(validateName("ABCDEFGHIJKLMNOP")).toEqual({ ok: true }); // 16
+    const r = validateName("ABCDEFGHIJKLMNOPQ"); // 17
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toContain("too long");
   });
@@ -112,11 +111,19 @@ describe("isProfane", () => {
 });
 
 describe("validateName — profanity", () => {
-  it("rejects profane names (raw and leet) with the friendly reason", () => {
-    for (const bad of ["CRAP", "CR@P", "CR4P", "$HIT"]) {
+  it("rejects letters-only profane names with the friendly reason", () => {
+    for (const bad of ["CRAP", "XCRAPX", "SHIT", "ASS"]) {
       const r = validateName(bad);
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.reason).toContain("another name");
+    }
+  });
+
+  it("leet/symbol profanity is rejected (on charset, before the filter)", () => {
+    // Symbols/digits are no longer allowed, so these fail the charset gate. The
+    // isProfane suite separately confirms the leet-fold still catches them.
+    for (const bad of ["CR@P", "CR4P", "$HIT"]) {
+      expect(validateName(bad).ok).toBe(false);
     }
   });
 
