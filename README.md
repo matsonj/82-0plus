@@ -63,7 +63,7 @@ affinity.
 
 ## Tournament Edition
 
-Submit a drafted team (under an 8-char NBA-Jam name + PIN) into a 16-team, East/West
+Submit a drafted team (under an 8-char arcade name + PIN) into a 16-team, East/West
 single-elimination bracket that's simulated instantly and stored so you can return with
 NAME+PIN to watch your run. This is the app's only **write** path, so it needs a
 read-write token:

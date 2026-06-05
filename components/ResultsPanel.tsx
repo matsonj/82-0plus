@@ -41,6 +41,7 @@ export function ResultsPanel({
   modeLabel,
   mode,
   onReset,
+  onEnterTournament,
 }: {
   roster: SimRosterLine[];
   result: SimResult;
@@ -48,6 +49,7 @@ export function ResultsPanel({
   modeLabel: string;
   mode: GameMode;
   onReset: () => void;
+  onEnterTournament?: () => void;
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
   const [status, setStatus] = useState<"idle" | "working">("idle");
@@ -286,17 +288,28 @@ export function ResultsPanel({
         ))}
       </div>
 
-      <div className="flex flex-wrap justify-center gap-2">
-        <button
-          className="md-btn md-btn--lg md-btn--teal"
-          onClick={share}
-          disabled={status === "working"}
-        >
-          {status === "working" ? "Building…" : "Share result"}
-        </button>
-        <button className="md-btn md-btn--lg md-btn--ink" onClick={onReset}>
-          Play again
-        </button>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            className="md-btn md-btn--lg md-btn--teal"
+            onClick={share}
+            disabled={status === "working"}
+          >
+            {status === "working" ? "Building…" : "Share result"}
+          </button>
+          <button className="md-btn md-btn--lg md-btn--ink" onClick={onReset}>
+            Play again
+          </button>
+        </div>
+        {onEnterTournament && (
+          <button
+            className="md-btn md-btn--lg w-full"
+            style={{ background: "var(--md-orange)" }}
+            onClick={onEnterTournament}
+          >
+            🏀 Enter this team in the Tournament
+          </button>
+        )}
       </div>
     </div>
     </>

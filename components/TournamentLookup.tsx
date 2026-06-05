@@ -9,7 +9,7 @@ import {
 } from "@/lib/tournamentValidation";
 import { TournamentResults } from "@/components/TournamentResults";
 
-export function TournamentLookup({ onBack }: { onBack: () => void }) {
+export function TournamentLookup({ onBack }: { onBack?: () => void }) {
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +46,10 @@ export function TournamentLookup({ onBack }: { onBack: () => void }) {
   };
 
   if (result) {
-    return <TournamentResults data={result} onReset={onBack} />;
+    // Standalone (no onBack) → "reset" returns to the lookup form.
+    return (
+      <TournamentResults data={result} onReset={onBack ?? (() => setResult(null))} />
+    );
   }
 
   return (
@@ -103,13 +106,15 @@ export function TournamentLookup({ onBack }: { onBack: () => void }) {
         >
           {submitting ? "Checking…" : "Find my team"}
         </button>
-        <button
-          type="button"
-          className="md-btn md-btn--secondary"
-          onClick={onBack}
-        >
-          Back
-        </button>
+        {onBack && (
+          <button
+            type="button"
+            className="md-btn md-btn--secondary"
+            onClick={onBack}
+          >
+            Back
+          </button>
+        )}
       </div>
     </form>
   );

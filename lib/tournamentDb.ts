@@ -83,7 +83,7 @@ export function ensureSchema(): Promise<void> {
       await queryRW(
         `CREATE TABLE IF NOT EXISTS ${TDB}.submissions (
            submission_id UUID DEFAULT uuid(), name VARCHAR, name_norm VARCHAR,
-           pin_hash VARCHAR, pin_salt VARCHAR, roster_json JSON, sixth_json JSON,
+           pin_hash VARCHAR, pin_salt VARCHAR, mode VARCHAR, roster_json JSON, sixth_json JSON,
            captain_slot INTEGER, seed_net DOUBLE, created_at TIMESTAMP DEFAULT now())`,
       );
       await queryRW(

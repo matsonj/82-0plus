@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import type {
   GameMode,
   PublicPlayer,
@@ -14,6 +13,7 @@ import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
+import { TournamentEntry } from "@/components/TournamentEntry";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
 import { encodeShare } from "@/lib/shareCode";
@@ -21,7 +21,7 @@ import { SITE_URL } from "@/lib/site";
 import { pacificDate } from "@/lib/dailyDate";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
-type Phase = "menu" | "play";
+type Phase = "menu" | "play" | "tournament";
 type GameType = "free" | "daily";
 
 // Each time a decade is used its odds drop 90% (weight × 0.1 per use) so the
@@ -546,24 +546,6 @@ export default function Home() {
               </p>
             </button>
           </div>
-          <Link
-            href="/tournament"
-            className="md-card md-card--lift mt-6 block w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5"
-            style={{ background: "var(--md-orange)" }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="font-display text-xl font-bold">
-                Tournament — NBA Jam Edition
-              </div>
-              <span className="text-2xl" aria-hidden>
-                🏀
-              </span>
-            </div>
-            <p className="mt-1 text-[13px] text-[var(--md-ink)]">
-              Draft six, name a captain, get seeded into a 16-team bracket.
-            </p>
-          </Link>
-
           <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
             <button
               className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
@@ -571,12 +553,6 @@ export default function Home() {
             >
               How to play
             </button>
-            <Link
-              href="/tournament"
-              className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-            >
-              Check your team →
-            </Link>
           </div>
         </section>
       )}
@@ -628,6 +604,20 @@ export default function Home() {
             modeLabel={modeLabel}
             mode={mode}
             onReset={backToMenu}
+            onEnterTournament={
+              gameType === "free" ? () => setPhase("tournament") : undefined
+            }
+          />
+        </section>
+      )}
+
+      {/* ---------------- TOURNAMENT ENTRY ---------------- */}
+      {phase === "tournament" && (
+        <section className="relative z-10 mx-auto mt-4 w-full max-w-lg">
+          <TournamentEntry
+            initialLineup={lineup}
+            mode={mode}
+            onBack={backToMenu}
           />
         </section>
       )}

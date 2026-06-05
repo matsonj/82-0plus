@@ -276,12 +276,14 @@ async function hydrateStoredTeam(
 
 /**
  * Draw up to 15 opponents to fill a 16-team field: random real submissions from
- * the last hour (excluding the human's own name), topped up with random ghosts.
- * Each is re-hydrated through hydrateTournamentRoster so it can actually play.
- * Ids are unique: `sub:<name_norm>` / `ghost:<ghost_id>`.
+ * the last hour IN THE SAME MODE (excluding the human's own name), topped up with
+ * random ghosts (ghosts are mode-agnostic — they fill either bracket). Each is
+ * re-hydrated through hydrateTournamentRoster so it can actually play. Ids are
+ * unique: `sub:<name_norm>` / `ghost:<ghost_id>`.
  */
 export async function drawOpponents(
   myNameNorm: string,
+  mode: string,
   options: QueryOptions = {},
   field = 15,
 ): Promise<TournamentTeam[]> {
@@ -290,10 +292,11 @@ export async function drawOpponents(
     `SELECT name, name_norm, roster_json, sixth_json, captain_slot, seed_net
        FROM nba_tournament.main.submissions
       WHERE created_at >= now() - INTERVAL 1 HOUR
+        AND mode = $2
         AND name_norm <> $1
       ORDER BY random()
       LIMIT ${FIELD}`,
-    [myNameNorm],
+    [myNameNorm, mode],
   );
 
   const teams: TournamentTeam[] = [];
@@ -349,6 +352,7 @@ export interface InsertSubmissionArgs {
   nameNorm: string;
   pinHash: string;
   pinSalt: string;
+  mode: string; // "classic" | "hoopiq" — segregates the bracket pool
   rosterJson: unknown;
   sixthJson: unknown;
   captainSlot: number;
@@ -369,14 +373,15 @@ export async function insertSubmission(
   await queryRW(
     `INSERT INTO nba_tournament.main.submissions
        (submission_id, name, name_norm, pin_hash, pin_salt,
-        roster_json, sixth_json, captain_slot, seed_net)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        mode, roster_json, sixth_json, captain_slot, seed_net)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       submissionId,
       args.name,
       args.nameNorm,
       args.pinHash,
       args.pinSalt,
+      args.mode,
       JSON.stringify(args.rosterJson),
       JSON.stringify(args.sixthJson),
       args.captainSlot,

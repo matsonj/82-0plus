@@ -187,6 +187,7 @@ export interface TournamentYou {
 export interface TournamentSubmitRequest {
   name: string;
   pin: string;
+  mode: GameMode; // which tournament: classic teams play classic, hoopiq play hoopiq
   roster: SimPick[]; // the five starters (slots 0..4 = [G,FLEX,W,FLEX,B])
   captainSlot: number; // 0..4, index into the five
   sixthPick: { entity_id: string; team: string; decade: number }; // bench player (no slot)

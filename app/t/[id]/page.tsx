@@ -53,7 +53,7 @@ export default function PublicBracketPage({
           </span>
         </Link>
         <span className="md-capsule" style={{ background: "var(--md-orange)" }}>
-          NBA JAM Edition
+          Tournament Edition
         </span>
       </header>
 

@@ -108,6 +108,16 @@ export async function POST(req: NextRequest) {
     const name = String(body.name);
     const nameNorm = normalizeName(name);
 
+    // ---- Tournament mode (classic teams play classic, hoopiq play hoopiq) ----
+    const mode = String(body?.mode ?? "");
+    if (mode !== "classic" && mode !== "hoopiq") {
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "invalid mode" },
+        { status: 400 },
+      );
+    }
+
     // ---- Roster shape ----
     const picks = parsePicks(body?.roster);
     if (!picks) {
@@ -191,6 +201,7 @@ export async function POST(req: NextRequest) {
       nameNorm,
       pinHash,
       pinSalt: salt,
+      mode,
       rosterJson: picks,
       sixthJson: sixthPick,
       captainSlot,
@@ -207,7 +218,7 @@ export async function POST(req: NextRequest) {
       captainSlot,
     });
 
-    const opponents = await drawOpponents(nameNorm, queryOptions);
+    const opponents = await drawOpponents(nameNorm, mode, queryOptions);
     const field = [myTeam, ...opponents];
     if (field.length !== 16) {
       return jsonWithSessionHint(

@@ -36,7 +36,7 @@ const SLOT_ORDER: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 // How many ghosts to seed.
 const GHOST_COUNT = 60;
 
-// NBA-Jam-flavored names. We need GHOST_COUNT unique names; the base list below
+// Arcade-flavored names. We need GHOST_COUNT unique names; the base list below
 // is long enough, but we suffix numbers if it ever runs short, so the field is
 // always exactly GHOST_COUNT and always uniquely named.
 const NAME_POOL = [

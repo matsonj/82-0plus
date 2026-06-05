@@ -1,8 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PublicPlayer, SimPick, TournamentRunResponse } from "@/lib/types";
-import { canFill, type SlotKind } from "@/lib/positions";
+import type {
+  GameMode,
+  PublicPlayer,
+  SimPick,
+  TournamentRunResponse,
+} from "@/lib/types";
+import { type SlotKind } from "@/lib/positions";
 import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
@@ -13,11 +18,13 @@ import {
   NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
 
-// The starting five board — identical to the main game.
+// The starting five board — identical to the main game. The five are carried in
+// from the just-played Classic/HoopIQ game and locked; the tournament only adds
+// a sixth man + a captain on top.
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 
-// Down-weight a decade each time it's used so the draft spreads across eras.
-// (Copied from app/page.tsx — same mechanic.)
+// Down-weight a decade each time it's used so the bench roll lands in a fresh era
+// (copied from app/page.tsx — same mechanic).
 function pickWeightedDecade(
   pool: number[],
   usage: Record<number, number>,
@@ -32,28 +39,33 @@ function pickWeightedDecade(
   return pool[pool.length - 1];
 }
 
-type Step = "draft" | "sixth" | "finalize";
+type Step = "sixth" | "finalize";
 
-export function TournamentEntry({ onBack }: { onBack: () => void }) {
-  // ----- league data -----
+export function TournamentEntry({
+  initialLineup,
+  mode,
+  onBack,
+}: {
+  initialLineup: (LineupEntry | null)[];
+  mode: GameMode;
+  onBack: () => void;
+}) {
+  // ----- league data (for the bench roll) -----
   const [decades, setDecades] = useState<number[]>([]);
   const [booting, setBooting] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // ----- starting-five draft state (mirrors app/page.tsx, free-play) -----
-  const [lineup, setLineup] = useState<(LineupEntry | null)[]>(
-    KINDS.map(() => null),
-  );
+  // ----- the starting five, carried in from the just-played game (locked) -----
+  const lineup = initialLineup;
+  const starters = lineup.filter(Boolean) as LineupEntry[];
+
+  // ----- sixth man (bench round) -----
+  const [sixth, setSixth] = useState<LineupEntry | null>(null);
   const [currentDecade, setCurrentDecade] = useState<number | null>(null);
   const [currentTeam, setCurrentTeam] = useState<string | null>(null);
-  const [pending, setPending] = useState<PublicPlayer | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
   const [teamSkips, setTeamSkips] = useState(1);
   const [rolling, setRolling] = useState(false);
   const [rollError, setRollError] = useState<string | null>(null);
-
-  // ----- sixth man (bench) -----
-  const [sixth, setSixth] = useState<LineupEntry | null>(null);
 
   // ----- finalize -----
   const [captainSlot, setCaptainSlot] = useState<number | null>(null);
@@ -66,19 +78,16 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
 
   const rollSeq = useRef(0);
   const rollActive = useRef(false);
-  const lineupRef = useRef(lineup);
-  lineupRef.current = lineup;
 
-  const draftedCount = lineup.filter(Boolean).length;
-  const draftDone = draftedCount === KINDS.length;
-  const step: Step = !draftDone ? "draft" : !sixth ? "sixth" : "finalize";
+  const step: Step = sixth ? "finalize" : "sixth";
 
-  const draftedIds = [
-    ...lineup.filter(Boolean).map((e) => (e as LineupEntry).player.entity_id),
+  // Players/teams already on the roster (so the bench roll never repeats them).
+  const usedIds = [
+    ...starters.map((e) => e.player.entity_id),
     ...(sixth ? [sixth.player.entity_id] : []),
   ];
   const usedTeams = [
-    ...lineup.filter(Boolean).map((e) => (e as LineupEntry).team),
+    ...starters.map((e) => e.team),
     ...(sixth ? [sixth.team] : []),
   ];
 
@@ -108,25 +117,22 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
     };
   }, []);
 
-  // Roll a team for the next round. `forSixth` rolls the bench round (no team
-  // exclusion against decade weighting differs only in commit handling).
+  // Roll a team for the bench round. Excludes every team already on the roster
+  // and down-weights eras the five already cover.
   const rollRound = useCallback(
     (opts: { decade?: number; excludeTeam?: string } = {}) => {
       if (decades.length === 0) return;
-      const committed = lineupRef.current.filter(Boolean) as LineupEntry[];
       const usage: Record<number, number> = {};
-      for (const e of committed) usage[e.decade] = (usage[e.decade] ?? 0) + 1;
+      for (const e of starters) usage[e.decade] = (usage[e.decade] ?? 0) + 1;
       const excludes = [
         ...new Set([
-          ...committed.map((e) => e.team),
+          ...usedTeams,
           ...(opts.excludeTeam ? [opts.excludeTeam] : []),
         ]),
       ];
       const myId = ++rollSeq.current;
       rollActive.current = true;
       setRolling(true);
-      setPending(null);
-      setSelected(null);
       const decade = opts.decade ?? pickWeightedDecade(decades, usage);
       setCurrentDecade(decade);
       setCurrentTeam(null);
@@ -153,115 +159,39 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
           }
         });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [decades],
   );
 
-  // Auto-roll the next round while drafting (starters) or the bench round.
+  // Auto-roll the bench round until a sixth man is chosen.
   useEffect(() => {
-    if (booting || decades.length === 0) return;
-    if (result) return;
-    if (step === "finalize") return;
+    if (booting || decades.length === 0 || result) return;
+    if (step !== "sixth") return;
     if (currentDecade !== null || rollActive.current) return;
     rollRound({});
   }, [booting, decades, result, step, currentDecade, rollRound]);
 
-  // ----- draft helpers (starters) -----
   const draftable = useCallback(
-    (p: PublicPlayer) => {
-      if (draftedIds.includes(p.entity_id)) return false;
-      if (step === "sixth") return true; // bench: any unused player
-      return KINDS.some((kind, i) => lineup[i] === null && canFill(p.positions, kind));
-    },
+    (p: PublicPlayer) => !usedIds.includes(p.entity_id),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lineup, sixth, step],
+    [sixth],
   );
 
-  const commitRoll = () => {
-    setPending(null);
-    setSelected(null);
+  const pickSixth = (player: PublicPlayer) => {
+    if (currentTeam === null || currentDecade === null) return;
+    setSixth({ player, team: currentTeam, decade: currentDecade });
     setCurrentDecade(null);
     setCurrentTeam(null);
   };
 
-  const placeAt = (player: PublicPlayer, i: number) => {
-    if (currentTeam === null || currentDecade === null) return;
-    const entry: LineupEntry = { player, team: currentTeam, decade: currentDecade };
-    setLineup((prev) => prev.map((s, idx) => (idx === i ? entry : s)));
-    commitRoll();
+  const repickSixth = () => {
+    setSixth(null);
+    setCurrentDecade(null);
+    setCurrentTeam(null);
   };
-
-  const pick = (player: PublicPlayer) => {
-    if (step === "sixth") {
-      if (currentTeam === null || currentDecade === null) return;
-      setSixth({ player, team: currentTeam, decade: currentDecade });
-      commitRoll();
-      return;
-    }
-    const eligible = KINDS.map((kind, i) => ({ kind, i }))
-      .filter(({ i }) => lineup[i] === null)
-      .filter(({ kind }) => canFill(player.positions, kind))
-      .map(({ i }) => i);
-    if (eligible.length === 0) return;
-    if (eligible.length === 1) placeAt(player, eligible[0]);
-    else setPending(player);
-  };
-
-  // Slot clicks: place pending, or move/swap committed starters (same as game).
-  const onSlotClick = (i: number) => {
-    if (pending) {
-      if (lineup[i] === null && canFill(pending.positions, KINDS[i]))
-        placeAt(pending, i);
-      return;
-    }
-    if (selected === null) {
-      if (lineup[i]) setSelected(i);
-      return;
-    }
-    if (i === selected) {
-      setSelected(null);
-      return;
-    }
-    const sel = lineup[selected] as LineupEntry;
-    const target = lineup[i];
-    if (target === null) {
-      if (canFill(sel.player.positions, KINDS[i])) {
-        setLineup((prev) =>
-          prev.map((s, idx) => (idx === i ? sel : idx === selected ? null : s)),
-        );
-        setSelected(null);
-      }
-    } else if (
-      canFill(sel.player.positions, KINDS[i]) &&
-      canFill(target.player.positions, KINDS[selected])
-    ) {
-      setLineup((prev) =>
-        prev.map((s, idx) => (idx === i ? sel : idx === selected ? target : s)),
-      );
-      setSelected(null);
-    }
-  };
-
-  let targets: number[] = [];
-  if (pending) {
-    targets = KINDS.map((kind, i) => ({ kind, i }))
-      .filter(({ i }) => lineup[i] === null)
-      .filter(({ kind }) => canFill(pending.positions, kind))
-      .map(({ i }) => i);
-  } else if (selected !== null) {
-    const sel = lineup[selected] as LineupEntry;
-    targets = KINDS.map((_, i) => i).filter((i) => {
-      if (i === selected) return false;
-      const t = lineup[i];
-      if (t === null) return canFill(sel.player.positions, KINDS[i]);
-      return (
-        canFill(sel.player.positions, KINDS[i]) &&
-        canFill(t.player.positions, KINDS[selected])
-      );
-    });
-  }
 
   const teamSkip = () => {
-    if (teamSkips <= 0 || currentDecade === null || pending || rolling) return;
+    if (teamSkips <= 0 || currentDecade === null || rolling) return;
     setTeamSkips((n) => n - 1);
     rollRound({ decade: currentDecade, excludeTeam: currentTeam ?? undefined });
   };
@@ -270,12 +200,7 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
   const nameCheck = validateName(name);
   const pinOk = validatePin(pin);
   const canSubmit =
-    draftDone &&
-    sixth !== null &&
-    captainSlot !== null &&
-    nameCheck.ok &&
-    pinOk &&
-    !submitting;
+    sixth !== null && captainSlot !== null && nameCheck.ok && pinOk && !submitting;
 
   const submit = async () => {
     if (!canSubmit || captainSlot === null || !sixth) return;
@@ -301,6 +226,7 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
         body: JSON.stringify({
           name,
           pin,
+          mode,
           roster,
           captainSlot,
           sixthPick: {
@@ -353,7 +279,7 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
         </p>
         <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">{loadError}</p>
         <button className="md-btn md-btn--sm md-btn--secondary mt-4" onClick={onBack}>
-          Back to menu
+          Back
         </button>
       </div>
     );
@@ -361,21 +287,31 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Lineup board + a sixth-man slot beside it. */}
+      {/* The locked starting five, plus the sixth-man chip once chosen. */}
       <div>
-        <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          Your lineup · {draftedCount}/{KINDS.length} starters
-          {sixth ? " + 6th" : ""}
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+            Your starting five
+          </span>
+          <span
+            className="md-capsule"
+            style={
+              mode === "hoopiq"
+                ? { background: "var(--md-ink)", color: "var(--md-white)" }
+                : undefined
+            }
+          >
+            {mode === "hoopiq" ? "HoopIQ" : "Classic"} Tournament
+          </span>
         </div>
         <LineupBoard
           kinds={KINDS}
           entries={lineup}
-          targets={pending || selected !== null ? targets : []}
-          selected={selected}
-          onSlotClick={onSlotClick}
+          targets={[]}
+          selected={null}
+          onSlotClick={() => {}}
         />
 
-        {/* Sixth-man chip (once drafted). */}
         {sixth && (
           <div className="md-card mt-2 flex items-center justify-between gap-2 p-2">
             <div className="flex flex-col">
@@ -391,10 +327,7 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
             </div>
             <button
               className="md-btn md-btn--sm md-btn--secondary"
-              onClick={() => {
-                setSixth(null);
-                commitRoll();
-              }}
+              onClick={repickSixth}
             >
               Re-pick
             </button>
@@ -408,82 +341,62 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {/* ---- DRAFT: starters or the bench round ---- */}
-      {(step === "draft" || step === "sixth") && (
+      {/* ---- SIXTH MAN: the bench round ---- */}
+      {step === "sixth" && (
         <div className="md-card md-card--lift flex flex-col items-center gap-4 p-4 sm:p-5">
           <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            {step === "sixth"
-              ? "Round 6 of 6 · Sixth Man (any position)"
-              : `Round ${draftedCount + 1} of 6`}
+            Draft your Sixth Man · any position
           </div>
-
-          {pending ? (
-            <div className="flex flex-col items-center gap-2">
-              <div className="font-display text-sm">
-                Where does{" "}
-                <span className="font-bold">{pending.player_name}</span> play?
-              </div>
-              <div className="font-display text-[11px] text-[var(--md-ink-muted)]">
-                Tap a glowing slot to place him.
-              </div>
-              <button
-                className="md-btn md-btn--sm md-btn--secondary"
-                onClick={() => setPending(null)}
-              >
-                Cancel pick
-              </button>
-            </div>
-          ) : (
-            <>
-              {currentDecade !== null && (
-                <SlotMachine team={currentTeam} decade={currentDecade} size="lg" />
-              )}
-              {step === "draft" && (
-                <div className="flex flex-wrap justify-center gap-2">
-                  <button
-                    className="md-btn md-btn--sm md-btn--secondary"
-                    onClick={teamSkip}
-                    disabled={teamSkips <= 0 || rolling}
-                  >
-                    ↻ Team skip ({teamSkips})
-                  </button>
-                </div>
-              )}
-              <div className="w-full">
-                {currentTeam && currentDecade !== null && !rolling ? (
-                  <PlayerList
-                    team={currentTeam}
-                    decade={currentDecade}
-                    mode="classic"
-                    allowRespin
-                    draftable={draftable}
-                    onPick={pick}
-                    onNoneEligible={() =>
-                      rollRound({
-                        decade: currentDecade ?? undefined,
-                        excludeTeam: currentTeam ?? undefined,
-                      })
-                    }
-                  />
-                ) : (
-                  <div className="py-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
-                    Spinning the reel…
-                  </div>
-                )}
-              </div>
-            </>
+          {currentDecade !== null && (
+            <SlotMachine team={currentTeam} decade={currentDecade} size="lg" />
           )}
+          <div className="flex flex-wrap justify-center gap-2">
+            <button
+              className="md-btn md-btn--sm md-btn--secondary"
+              onClick={teamSkip}
+              disabled={teamSkips <= 0 || rolling}
+            >
+              ↻ Team skip ({teamSkips})
+            </button>
+          </div>
+          <div className="w-full">
+            {currentTeam && currentDecade !== null && !rolling ? (
+              <PlayerList
+                team={currentTeam}
+                decade={currentDecade}
+                mode={mode}
+                allowRespin
+                draftable={draftable}
+                onPick={pickSixth}
+                onNoneEligible={() =>
+                  rollRound({
+                    decade: currentDecade ?? undefined,
+                    excludeTeam: currentTeam ?? undefined,
+                  })
+                }
+              />
+            ) : (
+              <div className="py-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
+                Spinning the reel…
+              </div>
+            )}
+          </div>
+          <button
+            className="md-btn md-btn--sm md-btn--secondary"
+            onClick={onBack}
+          >
+            Cancel
+          </button>
         </div>
       )}
 
       {/* ---- FINALIZE: captain + name + pin ---- */}
       {step === "finalize" && (
         <div className="md-card md-card--lift flex flex-col gap-4 p-4 sm:p-5">
-          <div className="font-display text-xl font-bold">
-            Pick your captain
-          </div>
+          <div className="font-display text-xl font-bold">Pick your captain</div>
           <p className="-mt-2 text-[13px] text-[var(--md-ink-muted)]">
-            Tap one of your five starters. Your captain anchors the team.
+            Tap one of your five starters. Your captain&rsquo;s two best stats lift
+            the whole team; their weakest drags a little.
           </p>
           <div className="grid grid-cols-5 gap-1.5">
             {lineup.map((e, i) => {
@@ -542,9 +455,7 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
                   }}
                   placeholder="MJ23"
                   style={
-                    nameTaken
-                      ? { borderColor: "var(--md-coral)" }
-                      : undefined
+                    nameTaken ? { borderColor: "var(--md-coral)" } : undefined
                   }
                 />
                 <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
@@ -589,10 +500,7 @@ export function TournamentEntry({ onBack }: { onBack: () => void }) {
             >
               {submitting ? "Running…" : "Enter the tournament"}
             </button>
-            <button
-              className="md-btn md-btn--lg md-btn--secondary"
-              onClick={onBack}
-            >
+            <button className="md-btn md-btn--lg md-btn--secondary" onClick={onBack}>
               Cancel
             </button>
           </div>
