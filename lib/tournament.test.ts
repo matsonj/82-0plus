@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { ScoringPlayer } from "./scoring";
-import type { StatNorms, BracketResult } from "./types";
+import type { StatNorms, BracketResult, BracketPlayer } from "./types";
 import { STAT_KEYS } from "./types";
 import {
   TOURNAMENT_CONFIG as C,
@@ -30,15 +30,30 @@ function p(over: Partial<ScoringPlayer> = {}): ScoringPlayer {
 let nextId = 0;
 function team(over: Partial<TournamentTeam> = {}): TournamentTeam {
   const id = over.id ?? `t${nextId++}`;
+  const captainSlot = over.captainSlot ?? 0;
+  // Default display roster: 5 slot-ordered starters with the captain flagged,
+  // mirroring what buildTournamentTeam produces.
+  const roster: BracketPlayer[] =
+    over.roster ??
+    Array.from({ length: 5 }, (_, i) => ({
+      name: `${id}-p${i}`,
+      team: "ABC",
+      season: 1996,
+      ...(i === captainSlot ? { captain: true } : {}),
+    }));
+  const sixthManInfo: BracketPlayer =
+    over.sixthManInfo ?? { name: `${id}-p6`, team: "ABC", season: 1996 };
   return {
     id,
     name: over.name ?? id,
     isGhost: over.isGhost ?? false,
     starters: over.starters ?? Array.from({ length: 5 }, () => p()),
     sixthMan: over.sixthMan ?? p(),
-    captainSlot: over.captainSlot ?? 0,
+    captainSlot,
     ageAtPeak: over.ageAtPeak ?? C.LEAGUE_AVG_EXP,
     seedNet: over.seedNet ?? 0,
+    roster,
+    sixthManInfo,
     ...over,
   };
 }
@@ -246,6 +261,20 @@ describe("simulateBracket: structure", () => {
       for (const s of rd) expect(s.bestOf).toBe(7);
   });
 
+  it("threads each team's display roster (5 + captain flag) and sixth man into the bracket", () => {
+    // field() builds teams via the factory, which sets roster/sixthManInfo.
+    const r = simulateBracket(field(Array.from({ length: 16 }, (_, i) => i)), "k", norms());
+    expect(r.teams.length).toBe(16);
+    for (const t of r.teams) {
+      expect(t.roster).toBeDefined();
+      expect(t.roster!.length).toBe(5);
+      const captains = t.roster!.filter((pl) => pl.captain === true);
+      expect(captains.length).toBe(1); // exactly one captain
+      expect(t.sixthMan).toBeDefined();
+      expect(typeof t.sixthMan!.name).toBe("string");
+    }
+  });
+
   it("series stop at the clinch number (3 of 5, 4 of 7)", () => {
     const r = simulateBracket(field(Array.from({ length: 16 }, (_, i) => i)), "k", norms());
     for (const s of r.rounds[0]) {
@@ -357,5 +386,48 @@ describe("simulateBracket: determinism & competitive sanity", () => {
       champs.add(simulateBracket(teams, `flat-${i}`, norms()).championId);
     }
     expect(champs.size).toBeGreaterThan(3);
+  });
+});
+
+describe("simulateBracket: per-game box scores", () => {
+  const r = simulateBracket(
+    field([15, 12, 9, 6, 3, 1, 0, -2, -3, -5, -7, -9, -11, -13, -15, -18]),
+    "scores",
+    norms(),
+  );
+  const allGames = r.rounds.flat().flatMap((s) => s.games);
+
+  it("every game has a non-tied box score", () => {
+    expect(allGames.length).toBeGreaterThan(0);
+    for (const g of allGames) {
+      expect(g.homeScore).not.toBe(g.awayScore);
+    }
+  });
+
+  it("the game winner always has the higher score", () => {
+    for (const g of allGames) {
+      const winnerScore =
+        g.winnerId === g.homeId ? g.homeScore : g.awayScore;
+      const loserScore = g.winnerId === g.homeId ? g.awayScore : g.homeScore;
+      expect(winnerScore).toBeGreaterThan(loserScore);
+    }
+  });
+
+  it("scores sit in a believable arcade range", () => {
+    for (const g of allGames) {
+      expect(g.homeScore).toBeGreaterThan(70);
+      expect(g.homeScore).toBeLessThan(135);
+      expect(g.awayScore).toBeGreaterThan(70);
+      expect(g.awayScore).toBeLessThan(135);
+    }
+  });
+
+  it("the one luck draw is zero-sum: home.randomFactor === −away.randomFactor", () => {
+    for (const g of allGames) {
+      const hr = g.breakdown[g.homeId].randomFactor;
+      const ar = g.breakdown[g.awayId].randomFactor;
+      expect(hr + ar).toBeCloseTo(0, 6);
+      expect(Math.abs(hr)).toBeLessThanOrEqual(C.RANDOM_FACTOR_MAX + 1e-9);
+    }
   });
 });

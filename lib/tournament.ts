@@ -19,6 +19,7 @@
 
 import type { ScoringPlayer } from "./scoring";
 import type {
+  BracketPlayer,
   BracketResult,
   BracketTeam,
   Conference,
@@ -43,6 +44,10 @@ export interface TournamentTeam {
   captainSlot: number;        // 0..4, index into starters
   ageAtPeak: number;          // team age proxy: AVERAGE of starters' age-at-peak
   seedNet: number;            // netRating of the FIVE via simulateRoster — NO buffs.
+  // OPTIONAL display fields threaded into the stored bracket for the expandable
+  // team panel. Optional so the test factory / any caller still compiles.
+  roster?: BracketPlayer[];      // 5 starters, slot order [G,FLEX,W,FLEX,B], captain flagged
+  sixthManInfo?: BracketPlayer;  // bench player (named to avoid clashing with `sixthMan: ScoringPlayer`)
 }
 
 /**
@@ -83,7 +88,7 @@ export const TOURNAMENT_CONFIG = {
   SIXTH_DEPTH_MAX: 3,
 
   // Per-game luck, bounded ±, drawn from a seeded PRNG (never Math.random).
-  RANDOM_FACTOR_MAX: 3,
+  RANDOM_FACTOR_MAX: 1.5,
 } as const;
 
 export type TournamentConfig = typeof TOURNAMENT_CONFIG;
@@ -370,14 +375,19 @@ function playSeries(
     const home = homeIsHi ? hi : lo;
     const away = homeIsHi ? lo : hi;
 
+    // ONE zero-sum luck draw per game: +r to the home side, −r to the away side
+    // (not two independent draws). Seeded by the game so the bracket stays
+    // reproducible.
+    const gameRng = mulberry32(
+      hashSeed(`${seedKey}:${round}:${seriesIdx}:${g}`),
+    );
+    const r = (gameRng() * 2 - 1) * cfg.RANDOM_FACTOR_MAX;
+
     const build = (
       team: TournamentTeam,
       isHome: boolean,
+      randomFactor: number,
     ): GameBreakdown => {
-      const rng = mulberry32(
-        hashSeed(`${seedKey}:${round}:${seriesIdx}:${g}:${team.id}`),
-      );
-      const randomFactor = (rng() * 2 - 1) * cfg.RANDOM_FACTOR_MAX;
       const homeBuff = isHome ? cfg.HOME_BUFF / 2 : -cfg.HOME_BUFF / 2;
       const fat = fatigue(team, g, cfg);
       const carry = statics.carry[team.id];
@@ -403,17 +413,32 @@ function playSeries(
       };
     };
 
-    const homeBd = build(home, true);
-    const awayBd = build(away, false);
-    const winnerId = homeBd.adj >= awayBd.adj ? home.id : away.id;
+    const homeBd = build(home, true, r);
+    const awayBd = build(away, false, -r);
+    const homeWon = homeBd.adj >= awayBd.adj;
+    const winnerId = homeWon ? home.id : away.id;
     if (winnerId === hi.id) scoreHi++; else scoreLo++;
+
+    const margin = homeBd.adj - awayBd.adj; // positive ⇒ home won
+    // Arcade box score: a ~95–105 base, split by half the (net-rating) margin,
+    // rounded and nudged so the winner is always strictly ahead (never a tie).
+    const scoreRng = mulberry32(
+      hashSeed(`${seedKey}:${round}:${seriesIdx}:${g}:score`),
+    );
+    const base = 95 + Math.round(scoreRng() * 10); // 95..105
+    let homeScore = Math.round(base + margin / 2);
+    let awayScore = Math.round(base - margin / 2);
+    if (homeWon && homeScore <= awayScore) homeScore = awayScore + 1;
+    else if (!homeWon && awayScore <= homeScore) awayScore = homeScore + 1;
 
     games.push({
       gameNo: g,
       homeId: home.id,
       awayId: away.id,
       winnerId,
-      margin: homeBd.adj - awayBd.adj, // positive ⇒ home won
+      margin,
+      homeScore,
+      awayScore,
       breakdown: { [home.id]: homeBd, [away.id]: awayBd },
     });
   }
@@ -469,6 +494,8 @@ export function simulateBracket(
         conference,
         seed: i + 1, // 1..8
         seedNet: t.seedNet,
+        roster: t.roster,
+        sixthMan: t.sixthManInfo,
       } as BracketTeam,
     }));
   };

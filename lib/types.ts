@@ -142,6 +142,8 @@ export interface GameResult {
   awayId: string;
   winnerId: string;
   margin: number;
+  homeScore: number; // display box score (~95–105 base, split by the margin); never tied
+  awayScore: number;
   breakdown: Record<string, GameBreakdown>; // keyed by team id (home & away)
 }
 
@@ -156,6 +158,14 @@ export interface SeriesResult {
   scoreLo: number;
 }
 
+/** One player on a team's displayed roster (for the expandable team panel). */
+export interface BracketPlayer {
+  name: string;
+  team: string; // 3-letter franchise
+  season: number; // best_season year (e.g. 1996)
+  captain?: boolean; // true on the one starter designated captain
+}
+
 /** Lightweight team identity carried into the stored bracket for display. */
 export interface BracketTeam {
   id: string;
@@ -164,6 +174,10 @@ export interface BracketTeam {
   conference: Conference;
   seed: number; // 1..8 within conference
   seedNet: number; // seeding net rating (NO buffs)
+  // Roster for the expandable team panel. Optional: brackets stored before this
+  // field shipped won't carry it (the viewer degrades gracefully).
+  roster?: BracketPlayer[]; // the five starters, slot order [G,FLEX,W,FLEX,B]
+  sixthMan?: BracketPlayer; // the bench player
 }
 
 /** The full resolved bracket — the stored, immutable artifact (`bracket_json`). */

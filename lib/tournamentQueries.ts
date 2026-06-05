@@ -5,6 +5,7 @@ import { simulateRoster, type ScoringPlayer } from "./scoring";
 import { queryRW } from "./tournamentDb";
 import {
   STAT_KEYS,
+  type BracketPlayer,
   type SimPick,
   type StatKey,
   type StatNorms,
@@ -147,6 +148,9 @@ export interface HydratedTournamentRoster {
   players: IndexedPlayer[];
   ageAtPeak: number;
   heightTotal: number;
+  // Display info for the expandable team panel (names, not stats).
+  starterInfo: BracketPlayer[]; // 5 starters in slot order (captain flagged later)
+  sixthInfo: BracketPlayer;     // the bench player
 }
 
 /**
@@ -173,6 +177,11 @@ export async function hydrateTournamentRoster(
     throw new Error(`unknown sixth-man pick: ${sixthPick.entity_id}`);
   }
   const sixthMan = toScoring(sixthRow);
+  const sixthInfo: BracketPlayer = {
+    name: sixthRow.player_name,
+    team: sixthRow.team,
+    season: sixthRow.best_season,
+  };
 
   // Age proxy: average years of experience at the drafted (best) season across
   // the five starters. Missing debut → NEUTRAL_EXP.
@@ -192,7 +201,17 @@ export async function hydrateTournamentRoster(
     0,
   );
 
-  return { scoring, sixthMan, lines, players, ageAtPeak, heightTotal };
+  // Starter display info in slot order (players is IndexedPlayer[] slot-ordered).
+  const starterInfo: BracketPlayer[] = players.map((p) => ({
+    name: p.player_name,
+    team: p.team,
+    season: p.best_season,
+  }));
+
+  return {
+    scoring, sixthMan, lines, players, ageAtPeak, heightTotal,
+    starterInfo, sixthInfo,
+  };
 }
 
 // ── Tournament team assembly ─────────────────────────────────────────────────
@@ -212,6 +231,10 @@ export interface BuildTournamentTeamArgs {
  */
 export function buildTournamentTeam(args: BuildTournamentTeamArgs): TournamentTeam {
   const { hydrated } = args;
+  // Flag the captain on the starter slot (clone — don't mutate hydrated.starterInfo).
+  const roster: BracketPlayer[] = hydrated.starterInfo.map((p, i) =>
+    i === args.captainSlot ? { ...p, captain: true } : p,
+  );
   return {
     id: args.id,
     name: args.name,
@@ -221,6 +244,8 @@ export function buildTournamentTeam(args: BuildTournamentTeamArgs): TournamentTe
     captainSlot: args.captainSlot,
     ageAtPeak: hydrated.ageAtPeak,
     seedNet: args.seedNet,
+    roster,
+    sixthManInfo: hydrated.sixthInfo,
   };
 }
 

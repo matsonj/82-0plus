@@ -4,6 +4,7 @@ import { useState } from "react";
 import type {
   BracketResult,
   BracketTeam,
+  BracketPlayer,
   SeriesResult,
   GameResult,
   GameBreakdown,
@@ -103,8 +104,8 @@ function GameRow({
             {nameOf(game.awayId)}
           </span>
         </span>
-        <span className="shrink-0 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
-          by {round1(Math.abs(game.margin))}
+        <span className="shrink-0 font-display text-[12px] font-bold tabular-nums">
+          {game.homeScore}&ndash;{game.awayScore}
         </span>
       </div>
       {hb && ab && (
@@ -117,19 +118,71 @@ function GameRow({
   );
 }
 
-// One side of a series card: seed badge + name + score, winner bold / loser muted.
+// One player row in a roster panel: name + subtle "team 'season", captain chip.
+function PlayerRow({ p }: { p: BracketPlayer }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 py-0.5 font-display text-[11px]">
+      <span className="min-w-0 truncate">
+        {p.name}
+        {p.captain ? (
+          <span className="ml-1 inline-block border border-[var(--md-ink)] bg-[var(--md-yellow)] px-1 text-[8px] font-bold uppercase leading-tight tracking-wide align-middle">
+            C
+          </span>
+        ) : null}
+      </span>
+      <span className="shrink-0 text-[10px] text-[var(--md-orange-deep)]">
+        {p.team} &rsquo;{String(p.season).slice(2)}
+      </span>
+    </div>
+  );
+}
+
+// The expandable roster panel for one team: five starters, a divider, sixth man.
+// Degrades gracefully when the stored bracket predates the roster fields.
+function RosterPanel({ team }: { team: BracketTeam | undefined }) {
+  if (!team || team.roster === undefined) {
+    return (
+      <div className="border-t-2 border-dashed border-[var(--md-ink)] bg-[var(--md-paper)] px-2 py-1.5 font-display text-[10px] italic text-[var(--md-ink-muted)]">
+        roster unavailable
+      </div>
+    );
+  }
+  return (
+    <div className="border-t-2 border-dashed border-[var(--md-ink)] bg-[var(--md-paper)] px-2 py-1.5">
+      {team.roster.map((p, i) => (
+        <PlayerRow key={`${p.team}-${p.name}-${i}`} p={p} />
+      ))}
+      {team.sixthMan && (
+        <>
+          <div className="my-1 border-t-2 border-[var(--md-ink)]" />
+          <div className="font-display text-[8px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+            Sixth Man
+          </div>
+          <PlayerRow p={team.sixthMan} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// One side of a series card: seed badge + name (a roster toggle) + score,
+// winner bold / loser muted. The name button toggles `this` team's roster panel.
 function SeriesSide({
   team,
   name,
   isWinner,
   isYou,
   score,
+  open,
+  onToggle,
 }: {
   team: BracketTeam | undefined;
   name: string;
   isWinner: boolean;
   isYou: boolean;
   score: number;
+  open: boolean;
+  onToggle: () => void;
 }) {
   return (
     <div
@@ -138,14 +191,21 @@ function SeriesSide({
       }`}
     >
       <SeedBadge seed={team?.seed} />
-      <span
-        className={`min-w-0 flex-1 truncate font-display text-[12px] sm:text-[13px] ${
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`min-w-0 flex-1 truncate text-left font-display text-[12px] sm:text-[13px] ${
           isWinner ? "font-bold" : ""
         }`}
+        style={{ cursor: "pointer" }}
+        aria-expanded={open}
       >
         {name}
         {isYou ? " ★" : ""}
-      </span>
+        <span className="ml-1 text-[9px] text-[var(--md-ink-muted)]">
+          {open ? "▴" : "▾"}
+        </span>
+      </button>
       <span
         className={`shrink-0 font-display text-[14px] tabular-nums ${
           isWinner ? "font-bold" : "text-[var(--md-ink-muted)]"
@@ -171,18 +231,22 @@ function SeriesCard({
   isFinal?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // Which team's roster panel is expanded (the name-click toggle), if any.
+  const [rosterOpen, setRosterOpen] = useState<"hi" | "lo" | null>(null);
   const hiWon = series.winnerId === series.hiId;
   const involvesYou =
     youId !== undefined && (series.hiId === youId || series.loId === youId);
   const hiTeam = teamOf(series.hiId);
   const loTeam = teamOf(series.loId);
+  const toggleRoster = (side: "hi" | "lo") =>
+    setRosterOpen((cur) => (cur === side ? null : side));
 
   return (
     <div
       className={`md-card ${involvesYou || isFinal ? "md-card--lift" : ""}`}
       style={{ background: involvesYou ? "var(--md-yellow)" : "var(--md-white)" }}
     >
-      {/* The matchup — higher seed on top. */}
+      {/* The matchup — higher seed on top. Each name toggles its roster panel. */}
       <div className="divide-y divide-[var(--md-paper-3)]">
         <SeriesSide
           team={hiTeam}
@@ -190,17 +254,23 @@ function SeriesCard({
           isWinner={hiWon}
           isYou={series.hiId === youId}
           score={series.scoreHi}
+          open={rosterOpen === "hi"}
+          onToggle={() => toggleRoster("hi")}
         />
+        {rosterOpen === "hi" && <RosterPanel team={hiTeam} />}
         <SeriesSide
           team={loTeam}
           name={nameOf(series.loId)}
           isWinner={!hiWon}
           isYou={series.loId === youId}
           score={series.scoreLo}
+          open={rosterOpen === "lo"}
+          onToggle={() => toggleRoster("lo")}
         />
+        {rosterOpen === "lo" && <RosterPanel team={loTeam} />}
       </div>
 
-      {/* Expander — opt-in "why". */}
+      {/* Expander — opt-in per-game "why" breakdown (separate from rosters). */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -222,8 +292,23 @@ function SeriesCard({
   );
 }
 
-// A labeled stack of series for one round within a conference column.
-function RoundGroup({
+// A small conference tag shown on each non-final series so East/West stay
+// readable when both flow through the same responsive grid.
+function ConfTag({ conf }: { conf?: string }) {
+  if (!conf) return null;
+  return (
+    <span
+      className={`md-capsule ${conf === "West" ? "md-capsule--sky" : "md-capsule--coral"} px-1.5 py-0.5 text-[8px]`}
+    >
+      {conf}
+    </span>
+  );
+}
+
+// One full round, rendered as its own bounded section: a centered capsule
+// header with a dashed divider above (mirrors the Final treatment), then the
+// round's series in a responsive grid. East & West series flow together.
+function RoundSection({
   label,
   series,
   nameOf,
@@ -238,19 +323,24 @@ function RoundGroup({
 }) {
   if (series.length === 0) return null;
   return (
-    <div className="flex flex-col gap-2">
-      <div className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-        {label}
+    <div className="flex flex-col items-center gap-3 border-t-2 border-dashed border-[var(--md-paper-3)] pt-5">
+      <div className="md-capsule">{label}</div>
+      <div className="grid w-full gap-3 sm:grid-cols-2">
+        {series.map((s, i) => {
+          const conf = teamOf(s.hiId)?.conference;
+          return (
+            <div key={`${s.hiId}-${s.loId}-${i}`} className="flex flex-col gap-1">
+              <ConfTag conf={conf} />
+              <SeriesCard
+                series={s}
+                nameOf={nameOf}
+                teamOf={teamOf}
+                youId={youId}
+              />
+            </div>
+          );
+        })}
       </div>
-      {series.map((s, i) => (
-        <SeriesCard
-          key={`${s.hiId}-${s.loId}-${i}`}
-          series={s}
-          nameOf={nameOf}
-          teamOf={teamOf}
-          youId={youId}
-        />
-      ))}
     </div>
   );
 }
@@ -266,81 +356,54 @@ export function BracketView({
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
   const teamOf = (id: string) => byId.get(id);
 
-  // rounds: [R1 (8), Semis (4), Conf Finals (2), Final (1)]. The Final is the
-  // single last series; everything before it splits East / West by team conf.
-  const finalRound = bracket.rounds[bracket.rounds.length - 1] ?? [];
-  const earlierRounds = bracket.rounds.slice(0, -1);
-
-  const confColumn = (conf: "East" | "West") =>
-    earlierRounds.map((round) =>
-      round.filter((s) => teamOf(s.hiId)?.conference === conf),
-    );
-
-  const east = confColumn("East");
-  const west = confColumn("West");
-
-  // Each conference is a single vertical column: Round 1 → Conf. Semifinals →
-  // Conf. Finals, top to bottom. On desktop the two conferences sit side by side
-  // and both feed the Final below; on mobile they stack. (A horizontal
-  // round-by-round bracket doesn't fit the column width without colliding.)
-  const ConfRail = ({
-    conf,
-    rounds,
-  }: {
-    conf: string;
-    rounds: SeriesResult[][];
-  }) => (
-    <div className="flex flex-col gap-3">
-      <div
-        className={`md-capsule self-start ${
-          conf === "West" ? "md-capsule--sky" : ""
-        }`}
-      >
-        {conf}
-      </div>
-      {rounds.map((series, r) => (
-        <RoundGroup
-          key={r}
-          label={ROUND_LABEL[r]}
-          series={series}
-          nameOf={nameOf}
-          teamOf={teamOf}
-          youId={youId}
-        />
-      ))}
-    </div>
-  );
+  // rounds: [R1 (8), Semis (4), Conf Finals (2), Final (1)]. We render each
+  // round as its own stacked section, top to bottom; the Final is its own
+  // narrower centered section with the champion capsule beneath.
+  const lastIdx = bracket.rounds.length - 1;
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Two conference columns side by side on desktop, stacked on mobile,
-          both feeding the Final below. */}
-      <div className="grid items-start gap-6 lg:grid-cols-2 lg:gap-5">
-        <ConfRail conf="East" rounds={east} />
-        <ConfRail conf="West" rounds={west} />
-      </div>
-
-      {/* The Final — center stage. */}
-      {finalRound.length > 0 && (
-        <div className="flex flex-col items-center gap-3 border-t-2 border-dashed border-[var(--md-paper-3)] pt-5">
-          <div className="md-capsule md-capsule--coral">{ROUND_LABEL[3]}</div>
-          <div className="w-full max-w-sm">
-            {finalRound.map((s, i) => (
-              <SeriesCard
-                key={`final-${i}`}
-                series={s}
-                nameOf={nameOf}
-                teamOf={teamOf}
-                youId={youId}
-                isFinal
-              />
-            ))}
-          </div>
-          <div className="md-capsule md-capsule--teal">
-            🏆 {bracket.championName}
-          </div>
-        </div>
-      )}
+      {bracket.rounds.map((series, r) => {
+        // The Final gets bespoke centered/narrow treatment + champion capsule.
+        if (r === lastIdx) {
+          if (series.length === 0) return null;
+          return (
+            <div
+              key="final"
+              className="flex flex-col items-center gap-3 border-t-2 border-dashed border-[var(--md-paper-3)] pt-5"
+            >
+              <div className="md-capsule md-capsule--coral">
+                {ROUND_LABEL[3]}
+              </div>
+              <div className="w-full max-w-sm">
+                {series.map((s, i) => (
+                  <SeriesCard
+                    key={`final-${i}`}
+                    series={s}
+                    nameOf={nameOf}
+                    teamOf={teamOf}
+                    youId={youId}
+                    isFinal
+                  />
+                ))}
+              </div>
+              <div className="md-capsule md-capsule--teal">
+                🏆 {bracket.championName}
+              </div>
+            </div>
+          );
+        }
+        return (
+          <RoundSection
+            key={r}
+            label={ROUND_LABEL[r] ?? `Round ${r + 1}`}
+            series={series}
+            nameOf={nameOf}
+            teamOf={teamOf}
+            youId={youId}
+          />
+        );
+      })}
     </div>
   );
 }

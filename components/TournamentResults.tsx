@@ -1,7 +1,87 @@
 "use client";
 
-import type { TournamentRunResponse } from "@/lib/types";
+import type { TournamentRunResponse, BracketResult } from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
+
+// Round labels for the user's record summary, by round index (0..3).
+const RECORD_ROUND_LABEL = ["R1", "R2", "R3", "FINAL"];
+
+interface RoundRecord {
+  label: string;
+  wins: number;
+  losses: number;
+  eliminated: boolean;
+}
+
+// Walk the bracket round by round and pull out the user's own game record:
+// for each round their team appears in, find the series with their id and read
+// their wins (scoreHi if hiId else scoreLo) vs the opponent's. The round they
+// lost is flagged "(eliminated)".
+function computeRoundRecords(
+  bracket: BracketResult,
+  youId: string,
+): { rows: RoundRecord[]; totalW: number; totalL: number } {
+  const rows: RoundRecord[] = [];
+  let totalW = 0;
+  let totalL = 0;
+  bracket.rounds.forEach((round, r) => {
+    const s = round.find((x) => x.hiId === youId || x.loId === youId);
+    if (!s) return;
+    const youAreHi = s.hiId === youId;
+    const wins = youAreHi ? s.scoreHi : s.scoreLo;
+    const losses = youAreHi ? s.scoreLo : s.scoreHi;
+    totalW += wins;
+    totalL += losses;
+    rows.push({
+      label: RECORD_ROUND_LABEL[r] ?? `R${r + 1}`,
+      wins,
+      losses,
+      eliminated: s.winnerId !== youId,
+    });
+  });
+  return { rows, totalW, totalL };
+}
+
+// A tidy md-card block of the user's per-round + total game record.
+function RecordSummary({
+  bracket,
+  youId,
+}: {
+  bracket: BracketResult;
+  youId: string;
+}) {
+  const { rows, totalW, totalL } = computeRoundRecords(bracket, youId);
+  if (rows.length === 0) return null;
+  return (
+    <div className="md-card p-3 sm:p-4">
+      <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+        Your record
+      </div>
+      <div className="grid gap-0.5">
+        {rows.map((row) => (
+          <div
+            key={row.label}
+            className="flex items-baseline justify-between gap-3 font-display text-sm tabular-nums"
+          >
+            <span className="text-[var(--md-ink-muted)]">{row.label}</span>
+            <span>
+              {row.wins}&ndash;{row.losses}
+              {row.eliminated ? (
+                <span className="ml-1 text-[var(--md-coral)]">(eliminated)</span>
+              ) : null}
+            </span>
+          </div>
+        ))}
+        <div className="mt-1 flex items-baseline justify-between gap-3 border-t-2 border-[var(--md-ink)] pt-1 font-display text-sm font-bold tabular-nums">
+          <span>TOT</span>
+          <span>
+            {totalW}&ndash;{totalL}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // reachedRound: 0 = lost R1 … 4 = champion. Maps to a player-facing phrase.
 function reachedLabel(reachedRound: number, isChampion: boolean): string {
@@ -111,6 +191,9 @@ export function TournamentResults({
             <ProgressPips reachedRound={you.reachedRound} isChampion={isChampion} />
           </div>
         </div>
+
+        {/* The player's own per-round + total game record. */}
+        <RecordSummary bracket={bracket} youId={you.id} />
 
         {/* Champion banner. */}
         <div className="border-t-2 border-[var(--md-ink)] pt-3 text-center">
