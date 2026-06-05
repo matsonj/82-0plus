@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getTeamDecades } from "@/lib/queries";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
+import { signRoll } from "@/lib/tournamentToken";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,11 @@ export async function GET(req: NextRequest) {
       );
     }
     const decades = await getTeamDecades(team, queryOptions);
-    return jsonWithSessionHint(sessionHint, { decades });
+    // A signed receipt per offered (team, decade) so a decade-skip pick carries
+    // provenance just like a fresh roll.
+    const receipts: Record<number, string> = {};
+    for (const d of decades) receipts[d] = signRoll(team, d);
+    return jsonWithSessionHint(sessionHint, { decades, receipts });
   } catch (err) {
     console.error("[/api/team-decades]", err);
     return jsonWithSessionHint(

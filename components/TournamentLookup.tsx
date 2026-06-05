@@ -5,6 +5,7 @@ import type {
   TournamentLookupResponse,
   TournamentTeamSummary,
   TournamentRunResponse,
+  BracketPlayer,
 } from "@/lib/types";
 import {
   validateName,
@@ -46,7 +47,27 @@ function MarginTag({ value }: { value: number }) {
   );
 }
 
-// A single memorialized team, rendered as a clickable md-card row.
+// One roster line: name (+ [C] for captain) and a subtle "team 'season".
+function RosterLine({ p }: { p: BracketPlayer }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 py-0.5 font-display text-[12px]">
+      <span className="min-w-0 truncate">
+        {p.name}
+        {p.captain ? (
+          <span className="ml-1 inline-block border border-[var(--md-ink)] bg-[var(--md-yellow)] px-1 text-[8px] font-bold uppercase leading-tight tracking-wide align-middle">
+            C
+          </span>
+        ) : null}
+      </span>
+      <span className="shrink-0 text-[11px] text-[var(--md-orange-deep)]">
+        {p.team} &rsquo;{String(p.season).slice(2)}
+      </span>
+    </div>
+  );
+}
+
+// A single memorialized team. The card body opens the bracket; a separate
+// "Show roster" toggle reveals the five (captain flagged) + sixth man inline.
 function TeamRow({
   team,
   onOpen,
@@ -57,61 +78,92 @@ function TeamRow({
   loading: boolean;
 }) {
   const isChampion = team.reachedRound === 4;
+  const [showRoster, setShowRoster] = useState(false);
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      disabled={loading}
-      className="md-card md-card--lift flex w-full flex-col gap-2 p-4 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px] disabled:opacity-60"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <span className="font-display text-lg font-bold leading-tight break-words">
-          {team.teamName}
-        </span>
-        <span className="font-display text-xs text-[var(--md-ink-muted)] whitespace-nowrap">
-          {new Date(team.createdAt).toLocaleDateString()}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2">
-        {team.mode === "hoopiq" ? (
-          <span className="md-capsule md-capsule--ink">HoopIQ</span>
-        ) : (
-          <span className="md-capsule">Classic</span>
-        )}
-        {isChampion && (
-          <span className="md-capsule md-capsule--teal">🏆 Champion</span>
-        )}
-      </div>
-
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="font-display text-3xl font-bold tabular-nums">
-          {team.recordW}&ndash;{team.recordL}
-        </span>
-        <MarginTag value={team.realizedMargin} />
-      </div>
-
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="font-display text-sm font-bold">
-          {reachedPhrase(team.reachedRound)}
-        </span>
-        {isChampion ? (
-          <span className="font-display text-sm text-[var(--md-teal)]">
-            🏆 You won it all
+    <div className="md-card md-card--lift flex w-full flex-col gap-2 p-4">
+      <button
+        type="button"
+        onClick={onOpen}
+        disabled={loading}
+        className="flex w-full flex-col gap-2 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px] disabled:opacity-60"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-display text-lg font-bold leading-tight break-words">
+            {team.teamName}
           </span>
-        ) : (
-          <span className="font-display text-sm text-[var(--md-ink-muted)]">
-            Won by {team.championName}
+          <span className="font-display text-xs text-[var(--md-ink-muted)] whitespace-nowrap">
+            {new Date(team.createdAt).toLocaleDateString()}
           </span>
-        )}
-      </div>
+        </div>
 
-      {loading && (
-        <div className="font-display text-xs text-[var(--md-ink-muted)]">
-          Loading bracket…
+        <div className="flex items-center gap-2">
+          {team.mode === "hoopiq" ? (
+            <span className="md-capsule md-capsule--ink">HoopIQ</span>
+          ) : (
+            <span className="md-capsule">Classic</span>
+          )}
+          {isChampion && (
+            <span className="md-capsule md-capsule--teal">🏆 Champion</span>
+          )}
+        </div>
+
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-display text-3xl font-bold tabular-nums">
+            {team.recordW}&ndash;{team.recordL}
+          </span>
+          <MarginTag value={team.realizedMargin} />
+        </div>
+
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <span className="font-display text-sm font-bold">
+            {reachedPhrase(team.reachedRound)}
+          </span>
+          {isChampion ? (
+            <span className="font-display text-sm text-[var(--md-teal)]">
+              🏆 You won it all
+            </span>
+          ) : (
+            <span className="font-display text-sm text-[var(--md-ink-muted)]">
+              Won by {team.championName}
+            </span>
+          )}
+        </div>
+
+        {loading && (
+          <div className="font-display text-xs text-[var(--md-ink-muted)]">
+            Loading bracket…
+          </div>
+        )}
+      </button>
+
+      {team.roster && team.roster.length > 0 && (
+        <div className="border-t-2 border-dashed border-[var(--md-ink)] pt-2">
+          <button
+            type="button"
+            className="font-display text-[12px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+            onClick={() => setShowRoster((v) => !v)}
+          >
+            {showRoster ? "Hide roster" : "Show roster"}
+          </button>
+          {showRoster && (
+            <div className="mt-2">
+              {team.roster.map((p, i) => (
+                <RosterLine key={`${p.team}-${p.name}-${i}`} p={p} />
+              ))}
+              {team.sixthMan && (
+                <>
+                  <div className="my-1 border-t border-[var(--md-paper-3)]" />
+                  <div className="font-display text-[9px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                    Sixth Man
+                  </div>
+                  <RosterLine p={team.sixthMan} />
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 

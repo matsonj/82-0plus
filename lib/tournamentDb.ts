@@ -88,7 +88,7 @@ export function ensureSchema(): Promise<void> {
       await queryRW(
         `CREATE TABLE IF NOT EXISTS ${TDB}.teams (
            team_id UUID DEFAULT uuid(), user_id UUID, team_name VARCHAR, mode VARCHAR,
-           roster_json JSON, sixth_json JSON, captain_slot INTEGER, seed_net DOUBLE,
+           roster_json JSON, sixth_json JSON, roster_display JSON, captain_slot INTEGER, seed_net DOUBLE,
            record_w INTEGER, record_l INTEGER, realized_margin DOUBLE, reached_round INTEGER,
            champion_name VARCHAR, bracket_json JSON, created_at TIMESTAMP DEFAULT now())`,
       );

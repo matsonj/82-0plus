@@ -375,18 +375,21 @@ export interface UserAuthRow {
   pin_salt: string;
 }
 
-/** Look up a user by their normalized name (the app-level uniqueness gate). */
-export async function findUserByName(
+/**
+ * All accounts sharing a normalized name. Identity is the (name, PIN) PAIR — a
+ * name is NOT unique, so the same name with a different PIN is a different
+ * account (a 90s-arcade throwback). The caller picks the one whose PIN verifies.
+ */
+export async function getUsersByName(
   nameNorm: string,
-): Promise<UserAuthRow | null> {
-  const rows = await queryRW<UserAuthRow>(
+): Promise<UserAuthRow[]> {
+  return queryRW<UserAuthRow>(
     `SELECT user_id, pin_hash, pin_salt
        FROM nba_tournament.main.users
       WHERE name_norm = $1
-      LIMIT 1`,
+      ORDER BY created_at ASC`,
     [nameNorm],
   );
-  return rows[0] ?? null;
 }
 
 export interface InsertUserArgs {
@@ -420,6 +423,7 @@ export interface InsertTeamArgs {
   mode: string; // "classic" | "hoopiq" — segregates the bracket pool
   rosterJson: unknown;
   sixthJson: unknown;
+  rosterDisplay: unknown; // { roster: BracketPlayer[]; sixthMan: BracketPlayer } — names for the list
   captainSlot: number;
   seedNet: number;
   recordW: number;
@@ -438,9 +442,10 @@ export interface InsertTeamArgs {
 export async function insertTeam(args: InsertTeamArgs): Promise<void> {
   await queryRW(
     `INSERT INTO nba_tournament.main.teams
-       (team_id, user_id, team_name, mode, roster_json, sixth_json, captain_slot, seed_net,
+       (team_id, user_id, team_name, mode, roster_json, sixth_json, roster_display,
+        captain_slot, seed_net,
         record_w, record_l, realized_margin, reached_round, champion_name, bracket_json)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
       args.teamId,
       args.userId,
@@ -448,6 +453,7 @@ export async function insertTeam(args: InsertTeamArgs): Promise<void> {
       args.mode,
       JSON.stringify(args.rosterJson),
       JSON.stringify(args.sixthJson),
+      JSON.stringify(args.rosterDisplay),
       args.captainSlot,
       args.seedNet,
       args.recordW,
@@ -470,34 +476,44 @@ interface TeamSummaryRow {
   reached_round: number;
   champion_name: string;
   created_at: string | Date;
+  roster_display: unknown; // { roster: BracketPlayer[]; sixthMan: BracketPlayer } | null
 }
 
-/** All memorialized teams for a user, newest first (lightweight — no bracket). */
+/** All memorialized teams for a user, newest first. Carries the roster display
+ *  (names) so the list can reveal a roster without fetching the full bracket. */
 export async function getUserTeams(
   userId: string,
 ): Promise<TournamentTeamSummary[]> {
   const rows = await queryRW<TeamSummaryRow>(
     `SELECT team_id, team_name, mode, record_w, record_l, realized_margin, reached_round,
-            champion_name, created_at
+            champion_name, created_at, roster_display
        FROM nba_tournament.main.teams
       WHERE user_id = $1
       ORDER BY created_at DESC`,
     [userId],
   );
-  return rows.map((r) => ({
-    teamId: r.team_id,
-    teamName: r.team_name,
-    mode: r.mode as GameMode,
-    recordW: r.record_w,
-    recordL: r.record_l,
-    realizedMargin: r.realized_margin,
-    reachedRound: r.reached_round,
-    championName: r.champion_name,
-    createdAt:
-      r.created_at instanceof Date
-        ? r.created_at.toISOString()
-        : new Date(r.created_at).toISOString(),
-  }));
+  return rows.map((r) => {
+    const rd = parseJson<{
+      roster?: BracketPlayer[];
+      sixthMan?: BracketPlayer;
+    } | null>(r.roster_display) ?? null;
+    return {
+      teamId: r.team_id,
+      teamName: r.team_name,
+      mode: r.mode as GameMode,
+      recordW: r.record_w,
+      recordL: r.record_l,
+      realizedMargin: r.realized_margin,
+      reachedRound: r.reached_round,
+      championName: r.champion_name,
+      createdAt:
+        r.created_at instanceof Date
+          ? r.created_at.toISOString()
+          : new Date(r.created_at).toISOString(),
+      roster: rd?.roster,
+      sixthMan: rd?.sixthMan,
+    };
+  });
 }
 
 /** A team's stored bracket (for the public viewer + lookup detail). */

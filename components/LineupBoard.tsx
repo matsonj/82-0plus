@@ -7,6 +7,10 @@ export interface LineupEntry {
   player: PublicPlayer;
   team: string;
   decade: number;
+  // Signed roll receipt for (team, decade) from /api/slot or the decade-skip.
+  // "" when the slot wasn't server-rolled (Daily's seeded slots) — Daily can't
+  // enter the tournament, so it never needs provenance.
+  receipt: string;
 }
 
 const ROLE_BG: Record<Role, string> = {

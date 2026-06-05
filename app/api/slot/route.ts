@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getTeamWeights, getPlayableTeams } from "@/lib/queries";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
+import { signRoll } from "@/lib/tournamentToken";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,7 +62,14 @@ export async function GET(req: NextRequest) {
       // (a sparse decade whose teams are all used) — otherwise never repeat.
       if (filtered.length > 0) pool = filtered;
     }
-    return jsonWithSessionHint(sessionHint, { team: weightedPick(pool), decade });
+    const team = weightedPick(pool);
+    // Signed receipt: proof the server rolled this (team, decade), redeemable
+    // when entering the tournament.
+    return jsonWithSessionHint(sessionHint, {
+      team,
+      decade,
+      receipt: signRoll(team, decade),
+    });
   } catch (err) {
     console.error("[/api/slot]", err);
     return jsonWithSessionHint(

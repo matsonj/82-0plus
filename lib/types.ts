@@ -217,6 +217,7 @@ export interface TournamentSubmitRequest {
   pin: string;
   teamName: string; // this team's display name
   mode: GameMode; // which tournament: classic teams play classic, hoopiq play hoopiq
+  runToken: string; // signed proof that /api/simulate scored this five
   roster: SimPick[]; // the five starters (slots 0..4 = [G,FLEX,W,FLEX,B])
   captainSlot: number; // 0..4, index into the five
   sixthPick: { entity_id: string; team: string; decade: number }; // bench player (no slot)

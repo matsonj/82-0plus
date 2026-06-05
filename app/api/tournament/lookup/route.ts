@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { validateName, validatePin, normalizeName } from "@/lib/tournamentValidation";
 import { ensureSchema } from "@/lib/tournamentDb";
-import { findUserByName, getUserTeams } from "@/lib/tournamentQueries";
+import { getUsersByName, getUserTeams } from "@/lib/tournamentQueries";
 import type { TournamentLookupResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -32,23 +32,24 @@ export async function POST(req: NextRequest) {
 
     await ensureSchema();
 
-    const user = await findUserByName(nameNorm);
-    if (!user) {
+    // Identity is the (name, PIN) pair — find the account whose PIN verifies
+    // among any accounts sharing this name. timingSafeEqual throws on mismatched
+    // lengths, so length-guard first. Same generic 404 on any miss (no enum).
+    const matchingUserIds: string[] = [];
+    for (const u of await getUsersByName(nameNorm)) {
+      const candidate = scryptSync(pin, u.pin_salt, 32);
+      const stored = Buffer.from(u.pin_hash, "hex");
+      if (candidate.length === stored.length && timingSafeEqual(candidate, stored)) {
+        matchingUserIds.push(u.user_id);
+      }
+    }
+    if (matchingUserIds.length === 0) {
       return jsonWithSessionHint(sessionHint, NOT_FOUND, { status: 404 });
     }
 
-    // Re-hash the supplied PIN with the stored salt and compare in constant time.
-    // timingSafeEqual throws on mismatched lengths, so guard the length first and
-    // treat a length mismatch as a non-match (same generic 404, no enumeration).
-    const candidate = scryptSync(pin, user.pin_salt, 32);
-    const stored = Buffer.from(user.pin_hash, "hex");
-    const matches =
-      candidate.length === stored.length && timingSafeEqual(candidate, stored);
-    if (!matches) {
-      return jsonWithSessionHint(sessionHint, NOT_FOUND, { status: 404 });
-    }
-
-    const teams = await getUserTeams(user.user_id);
+    const teams = (await Promise.all(matchingUserIds.map(getUserTeams)))
+      .flat()
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     return jsonWithSessionHint(
       sessionHint,
       { name: nameNorm, teams } satisfies TournamentLookupResponse,

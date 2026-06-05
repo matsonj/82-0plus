@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   GameMode,
   PublicPlayer,
-  SimPick,
   TournamentRunResponse,
 } from "@/lib/types";
 import { type SlotKind } from "@/lib/positions";
@@ -68,6 +67,7 @@ export function TournamentEntry({
   const [sixth, setSixth] = useState<LineupEntry | null>(null);
   const [currentDecade, setCurrentDecade] = useState<number | null>(null);
   const [currentTeam, setCurrentTeam] = useState<string | null>(null);
+  const [currentReceipt, setCurrentReceipt] = useState<string>(""); // bench roll receipt
   const [teamSkips, setTeamSkips] = useState(1);
   const [rolling, setRolling] = useState(false);
   const [rollError, setRollError] = useState<string | null>(null);
@@ -183,6 +183,7 @@ export function TournamentEntry({
         .then((data) => {
           if (rollSeq.current !== myId) return;
           setCurrentTeam(data.team);
+          setCurrentReceipt(data.receipt ?? "");
         })
         .catch(() => {
           if (rollSeq.current === myId)
@@ -215,7 +216,12 @@ export function TournamentEntry({
 
   const pickSixth = (player: PublicPlayer) => {
     if (currentTeam === null || currentDecade === null) return;
-    setSixth({ player, team: currentTeam, decade: currentDecade });
+    setSixth({
+      player,
+      team: currentTeam,
+      decade: currentDecade,
+      receipt: currentReceipt,
+    });
     setCurrentDecade(null);
     setCurrentTeam(null);
   };
@@ -244,7 +250,8 @@ export function TournamentEntry({
     setSubmitError(null);
     setNameTaken(false);
     try {
-      const roster: SimPick[] = lineup
+      // Each pick carries its signed roll receipt (server verifies provenance).
+      const roster = lineup
         .map((e, i) =>
           e
             ? {
@@ -252,10 +259,11 @@ export function TournamentEntry({
                 team: e.team,
                 decade: e.decade,
                 slot: i,
+                receipt: e.receipt,
               }
             : null,
         )
-        .filter((p): p is SimPick => p !== null);
+        .filter((p): p is NonNullable<typeof p> => p !== null);
       const res = await fetch("/api/tournament/submit", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -270,6 +278,7 @@ export function TournamentEntry({
             entity_id: sixth.player.entity_id,
             team: sixth.team,
             decade: sixth.decade,
+            receipt: sixth.receipt,
           },
         }),
       });

@@ -16,12 +16,13 @@ import {
   getStatNorms,
   drawOpponents,
   buildTournamentTeam,
-  findUserByName,
+  getUsersByName,
   insertUser,
   insertTeam,
 } from "@/lib/tournamentQueries";
 import { simulateBracket } from "@/lib/tournament";
 import { deriveYou, deriveRecord, stripBreakdown } from "@/lib/tournamentRun";
+import { verifyRoll } from "@/lib/tournamentToken";
 import type { SimPick, TournamentRunResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -171,29 +172,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ---- Provenance: every pick must carry a valid signed roll receipt for its
+    // (team, decade) — proof it came from a real server roll (/api/slot or the
+    // decade-skip), not five arbitrary combos invented in a direct POST. ----
+    const rawRoster = (Array.isArray(body?.roster) ? body.roster : []) as {
+      receipt?: unknown;
+    }[];
+    const rawSixth = (body?.sixthPick ?? {}) as { receipt?: unknown };
+    const receiptsOk =
+      picks.every((p, i) => verifyRoll(rawRoster[i]?.receipt, p.team, p.decade)) &&
+      verifyRoll(rawSixth.receipt, sixthPick.team, sixthPick.decade);
+    if (!receiptsOk) {
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "roll your team in a real game first" },
+        { status: 400 },
+      );
+    }
+
     await ensureSchema();
 
-    // ---- User upsert: same name + correct PIN adds another team; wrong PIN
-    // for an existing name is rejected. A new name creates a fresh user. ----
-    let userId: string;
-    const existingUser = await findUserByName(nameNorm);
-    if (existingUser) {
-      // Re-hash the submitted PIN with the stored salt and compare in constant
-      // time. timingSafeEqual throws on length mismatch, so length-guard first.
-      const candidate = scryptSync(pin, existingUser.pin_salt, 32);
-      const stored = Buffer.from(existingUser.pin_hash, "hex");
-      const matches =
-        candidate.length === stored.length &&
-        timingSafeEqual(candidate, stored);
-      if (!matches) {
-        return jsonWithSessionHint(
-          sessionHint,
-          { error: "that name is taken — wrong PIN" },
-          { status: 409 },
-        );
+    // ---- Identity = the (name, PIN) PAIR (90s arcade auth). The same name with
+    // a DIFFERENT PIN is a separate account; the same name + same PIN reuses the
+    // existing account so its teams accumulate. No name is ever "taken". ----
+    const pinMatches = (row: { pin_hash: string; pin_salt: string }): boolean => {
+      const candidate = scryptSync(pin, row.pin_salt, 32);
+      const stored = Buffer.from(row.pin_hash, "hex");
+      return candidate.length === stored.length && timingSafeEqual(candidate, stored);
+    };
+    let userId: string | null = null;
+    for (const u of await getUsersByName(nameNorm)) {
+      if (pinMatches(u)) {
+        userId = u.user_id;
+        break;
       }
-      userId = existingUser.user_id;
-    } else {
+    }
+    if (!userId) {
       const salt = randomBytes(16).toString("hex");
       const pinHash = scryptSync(pin, salt, 32).toString("hex");
       userId = await insertUser({ name, nameNorm, pinHash, pinSalt: salt });
@@ -263,6 +277,8 @@ export async function POST(req: NextRequest) {
       mode,
       rosterJson: picks,
       sixthJson: sixthPick,
+      // Names for the teams-list roster peek (no extra bracket fetch needed).
+      rosterDisplay: { roster: myTeam.roster, sixthMan: myTeam.sixthManInfo },
       captainSlot,
       seedNet,
       recordW: rec.recordW,

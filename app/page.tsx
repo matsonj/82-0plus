@@ -62,6 +62,10 @@ export default function Home() {
   const [rolling, setRolling] = useState(false);
   const [result, setResult] = useState<SimResult | null>(null);
   const [resultRoster, setResultRoster] = useState<SimRosterLine[]>([]);
+  // Signed roll receipt for the CURRENT (team, decade) — captured from /api/slot
+  // and the decade-skip, attached to each drafted player so the tournament can
+  // verify provenance. "" for Daily's seeded slots (which never enter a tournament).
+  const [currentReceipt, setCurrentReceipt] = useState<string>("");
   const [simulating, setSimulating] = useState(false);
   const [booting, setBooting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +110,7 @@ export default function Home() {
         const data = await res.json();
         if (rollSeq.current !== myId) return; // a newer roll superseded this one
         setCurrentTeam(data.team);
+        setCurrentReceipt(data.receipt ?? "");
       } catch {
         if (rollSeq.current === myId) setError("Couldn't roll a team. Try again.");
       } finally {
@@ -124,6 +129,7 @@ export default function Home() {
     setGameType(type);
     setResult(null);
     setResultRoster([]);
+    setCurrentReceipt("");
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
@@ -162,6 +168,7 @@ export default function Home() {
     setPhase("menu");
     setResult(null);
     setResultRoster([]);
+    setCurrentReceipt("");
     setDailySlots([]);
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
@@ -178,6 +185,7 @@ export default function Home() {
         setSelected(null);
         setCurrentDecade(slot.decade);
         setCurrentTeam(slot.team);
+        setCurrentReceipt(""); // Daily slots aren't server-rolled; no receipt.
       }
       return;
     }
@@ -216,7 +224,7 @@ export default function Home() {
 
   const placeAt = (player: PublicPlayer, i: number) => {
     if (currentTeam === null || currentDecade === null) return;
-    const entry: LineupEntry = { player, team: currentTeam, decade: currentDecade };
+    const entry: LineupEntry = { player, team: currentTeam, decade: currentDecade, receipt: currentReceipt };
     setLineup((prev) => prev.map((s, idx) => (idx === i ? entry : s)));
     setPending(null);
     setSelected(null);
@@ -322,7 +330,10 @@ export default function Home() {
     try {
       const res = await fetch(`/api/team-decades?team=${team}`);
       if (!res.ok) throw new Error("skip failed");
-      const { decades: teamDecades } = (await res.json()) as { decades: number[] };
+      const { decades: teamDecades, receipts } = (await res.json()) as {
+        decades: number[];
+        receipts?: Record<number, string>;
+      };
       if (rollSeq.current !== myId) return; // superseded
       const others = (teamDecades ?? []).filter((d) => d !== cur);
       if (others.length === 0) {
@@ -334,7 +345,9 @@ export default function Home() {
       for (const e of lineupRef.current) {
         if (e) usage[e.decade] = (usage[e.decade] ?? 0) + 1;
       }
-      setCurrentDecade(pickWeightedDecade(others, usage)); // same team, new era
+      const nextDecade = pickWeightedDecade(others, usage); // same team, new era
+      setCurrentDecade(nextDecade);
+      setCurrentReceipt(receipts?.[nextDecade] ?? ""); // provenance for the new (team, decade)
     } catch {
       if (rollSeq.current === myId) {
         setError("Couldn't skip the decade. Try again.");
