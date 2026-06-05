@@ -325,17 +325,18 @@ describe("simulateBracket: buffs in the breakdown", () => {
     for (const rd of r.rounds)
       for (const s of rd)
         for (const g of s.games) {
-          const ids = Object.keys(g.breakdown);
+          const bk = g.breakdown!; // engine output always carries the breakdown
+          const ids = Object.keys(bk);
           const [a, b] = ids;
           // Height zero-sum.
-          expect(g.breakdown[a].heightBuff).toBeCloseTo(-g.breakdown[b].heightBuff, 9);
+          expect(bk[a].heightBuff).toBeCloseTo(-bk[b].heightBuff, 9);
           // Height capped.
-          expect(Math.abs(g.breakdown[a].heightBuff)).toBeLessThanOrEqual(C.HEIGHT_CAP + 1e-9);
+          expect(Math.abs(bk[a].heightBuff)).toBeLessThanOrEqual(C.HEIGHT_CAP + 1e-9);
           // Home zero-sum: +HOME/2 and -HOME/2.
-          expect(g.breakdown[a].homeBuff).toBeCloseTo(-g.breakdown[b].homeBuff, 9);
-          expect(Math.abs(g.breakdown[a].homeBuff)).toBeCloseTo(C.HOME_BUFF / 2, 9);
+          expect(bk[a].homeBuff).toBeCloseTo(-bk[b].homeBuff, 9);
+          expect(Math.abs(bk[a].homeBuff)).toBeCloseTo(C.HOME_BUFF / 2, 9);
           // adj reconstructs from the parts.
-          const bd = g.breakdown[a];
+          const bd = bk[a];
           const recomputed =
             bd.seedNet + bd.gameScoreBuff + bd.heightBuff +
             bd.homeBuff - bd.fatigue - bd.recoveryCarry + bd.randomFactor;
@@ -354,7 +355,7 @@ describe("simulateBracket: buffs in the breakdown", () => {
     for (const rd of r.rounds)
       for (const s of rd) {
         const g = s.games[0];
-        const vals = Object.values(g.breakdown).map((b) => b.gameScoreBuff);
+        const vals = Object.values(g.breakdown!).map((b) => b.gameScoreBuff);
         expect(vals.every((v) => allowed.has(v))).toBe(true);
         // At most one team is buffed (loser + tie are 0).
         expect(vals.filter((v) => v > 0).length).toBeLessThanOrEqual(1);
@@ -368,8 +369,8 @@ describe("simulateBracket: buffs in the breakdown", () => {
     for (const rd of r.rounds)
       for (const s of rd)
         for (const g of s.games)
-          for (const id of Object.keys(g.breakdown))
-            expect(g.breakdown[id].seedNet).toBe(inputNet.get(id));
+          for (const id of Object.keys(g.breakdown!))
+            expect(g.breakdown![id].seedNet).toBe(inputNet.get(id));
   });
 });
 
@@ -521,8 +522,8 @@ describe("simulateBracket: per-game box scores", () => {
 
   it("the one luck draw is zero-sum: home.randomFactor === −away.randomFactor", () => {
     for (const g of allGames) {
-      const hr = g.breakdown[g.homeId].randomFactor;
-      const ar = g.breakdown[g.awayId].randomFactor;
+      const hr = g.breakdown![g.homeId].randomFactor;
+      const ar = g.breakdown![g.awayId].randomFactor;
       expect(hr + ar).toBeCloseTo(0, 6);
       expect(Math.abs(hr)).toBeLessThanOrEqual(C.RANDOM_FACTOR_MAX + 1e-9);
     }

@@ -21,11 +21,15 @@ import {
   insertTeam,
 } from "@/lib/tournamentQueries";
 import { simulateBracket } from "@/lib/tournament";
-import { deriveYou, deriveRecord } from "@/lib/tournamentRun";
+import { deriveYou, deriveRecord, stripBreakdown } from "@/lib/tournamentRun";
 import type { SimPick, TournamentRunResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Per-game modifier breakdown is debug-only; gate it server-side too (not just
+// the UI), so the model internals aren't readable from the API in normal play.
+const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "1";
 
 // Must mirror the client lineup board (same as /api/simulate).
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
@@ -269,9 +273,12 @@ export async function POST(req: NextRequest) {
       bracketJson: bracket,
     });
 
+    // Strip the per-game modifier breakdown unless debug is on (don't leak the
+    // model). The stored bracket_json keeps the full breakdown.
+    const out = DEBUG ? bracket : stripBreakdown(bracket);
     return jsonWithSessionHint(
       sessionHint,
-      { bracket, you, teamId } satisfies TournamentRunResponse,
+      { bracket: out, you, teamId } satisfies TournamentRunResponse,
     );
   } catch (err) {
     console.error("[/api/tournament/submit]", err);

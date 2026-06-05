@@ -27,10 +27,9 @@ export function TournamentHowToPlay({ onClose }: { onClose: () => void }) {
 
         <ol className="mt-4 flex flex-col gap-3 text-[14px] leading-relaxed">
           <li>
-            <strong>Enter your five.</strong> The team you just built goes in as-is
-            — then draft a <strong>sixth man</strong> and name a{" "}
-            <strong>captain</strong> (their two best categories lift the whole
-            team, their worst drags a little).
+            <strong>Enter your five.</strong> The team you just built goes in
+            as-is — then draft a <strong>sixth man</strong> and choose a{" "}
+            <strong>captain</strong> — they buff your team in unique ways.
           </li>
           <li>
             <strong>Get seeded into a 16-team bracket.</strong> Teams split into

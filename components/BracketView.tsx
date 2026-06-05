@@ -93,8 +93,8 @@ function GameRow({
   nameOf: (id: string) => string;
 }) {
   const homeWon = game.winnerId === game.homeId;
-  const hb = game.breakdown[game.homeId];
-  const ab = game.breakdown[game.awayId];
+  const hb = game.breakdown?.[game.homeId];
+  const ab = game.breakdown?.[game.awayId];
   return (
     <div className="border-t border-[var(--md-paper-3)] pt-2">
       <div className="flex items-baseline justify-between gap-2 font-display text-[12px]">

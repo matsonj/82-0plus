@@ -311,11 +311,14 @@ async function hydrateStoredTeam(
 
 /**
  * Draw up to 15 opponents to fill a 16-team field. HUMAN teams are ALWAYS
- * preferred: any real memorialized team from the LAST 24 HOURS in the SAME MODE
- * (excluding the player's own account), most recent first, up to the field size.
- * Ghosts (mode-agnostic AI fillers) are added ONLY to make up the shortfall when
- * there aren't enough humans. Each is re-hydrated so it can actually play. Ids
- * are unique: `team:<team_id>` / `ghost:<ghost_id>`.
+ * preferred: a RANDOM sample of real memorialized teams from the LAST 24 HOURS
+ * in the SAME MODE (excluding the player's own account). Random (not most-recent)
+ * so a player can't stuff their bracket with weak alt teams submitted moments
+ * before — fresh writes don't get priority. Ghosts (mode-agnostic AI fillers) add
+ * ONLY to make up the shortfall. Each is re-hydrated so it can play. Ids are
+ * unique: `team:<team_id>` / `ghost:<ghost_id>`.
+ * NOTE: this dampens but doesn't fully prevent alt-stuffing — a determined player
+ * with many alts still raises their odds. Per-account/IP caps would close it.
  */
 export async function drawOpponents(
   myNameNorm: string,
@@ -333,7 +336,7 @@ export async function drawOpponents(
       WHERE t.created_at >= now() - INTERVAL 24 HOUR
         AND t.mode = $2
         AND u.name_norm <> $1
-      ORDER BY t.created_at DESC
+      ORDER BY random()
       LIMIT ${FIELD}`,
     [myNameNorm, mode],
   );

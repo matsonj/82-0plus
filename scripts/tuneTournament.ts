@@ -187,8 +187,8 @@ function accumulateSeries(
   cb: { onGame: (g: SeriesResult["games"][number], flipMods: ModKey[]) => void },
 ): void {
   for (const g of series.games) {
-    const homeBd = g.breakdown[g.homeId];
-    const awayBd = g.breakdown[g.awayId];
+    const homeBd = g.breakdown?.[g.homeId];
+    const awayBd = g.breakdown?.[g.awayId];
     const flipMods: ModKey[] = [];
     if (homeBd && awayBd) {
       const baseHome = adjFrom(homeBd);
@@ -242,7 +242,7 @@ function printBracketTables(
 
       series.games.forEach((g) => {
         for (const teamId of [g.homeId, g.awayId]) {
-          const bd = g.breakdown[teamId];
+          const bd = g.breakdown?.[teamId];
           if (!bd) continue;
           const ident = teamById.get(teamId);
           rows.push({

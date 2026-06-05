@@ -1,10 +1,13 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { ensureSchema, queryRW, TDB } from "@/lib/tournamentDb";
+import { stripBreakdown } from "@/lib/tournamentRun";
 import type { BracketResult } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "1";
 
 // Brackets aren't secret — this is a read-only, no-PIN endpoint for the public
 // share page: GET /api/tournament/bracket?id=<team_id>.
@@ -61,7 +64,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    return jsonWithSessionHint(sessionHint, { bracket });
+    const out = DEBUG ? bracket : stripBreakdown(bracket);
+    return jsonWithSessionHint(sessionHint, { bracket: out });
   } catch (err) {
     console.error("[/api/tournament/bracket]", err);
     return jsonWithSessionHint(

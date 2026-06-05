@@ -2,11 +2,13 @@ import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { ensureSchema } from "@/lib/tournamentDb";
 import { getTeamBracket } from "@/lib/tournamentQueries";
-import { deriveYou } from "@/lib/tournamentRun";
+import { deriveYou, stripBreakdown } from "@/lib/tournamentRun";
 import type { BracketResult, TournamentRunResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "1";
 
 // Public, no-PIN endpoint: a team's bracket isn't secret (the PIN only gates the
 // user's list of teams). GET /api/tournament/team?id=<team_id>.
@@ -54,9 +56,10 @@ export async function GET(req: NextRequest) {
     }
 
     const you = deriveYou(bracket, `team:${id}`);
+    const out = DEBUG ? bracket : stripBreakdown(bracket);
     return jsonWithSessionHint(
       sessionHint,
-      { bracket, you, teamId: id } satisfies TournamentRunResponse,
+      { bracket: out, you, teamId: id } satisfies TournamentRunResponse,
     );
   } catch (err) {
     console.error("[/api/tournament/team]", err);

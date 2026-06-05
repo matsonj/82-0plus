@@ -16,6 +16,25 @@
 
 import type { BracketResult, TournamentYou } from "./types";
 
+/**
+ * Project a bracket for the client with the per-game modifier `breakdown` (the
+ * tuning/"WHY" internals: seedNet, buffs, fatigue, randomFactor, adj) REMOVED.
+ * Those leak the model otherwise — anyone could read them from the API/devtools.
+ * Routes return the full bracket only on an explicit server debug path. The box
+ * scores, winner, and series outcomes are kept (they're player-facing).
+ */
+export function stripBreakdown(bracket: BracketResult): BracketResult {
+  return {
+    ...bracket,
+    rounds: bracket.rounds.map((round) =>
+      round.map((series) => ({
+        ...series,
+        games: series.games.map(({ breakdown: _omit, ...game }) => game),
+      })),
+    ),
+  };
+}
+
 /** A team's realized playoff line: W-L, average point margin, and how far it got. */
 export interface TeamRecord {
   recordW: number;

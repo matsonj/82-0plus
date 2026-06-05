@@ -154,7 +154,9 @@ export interface GameResult {
   margin: number;
   homeScore: number; // display box score (~95–105 base, split by the margin); never tied
   awayScore: number;
-  breakdown: Record<string, GameBreakdown>; // keyed by team id (home & away)
+  // Per-team modifier breakdown (the "WHY"). Tuning/debug data — stripped at the
+  // API boundary in normal play (see stripBreakdown), so it's optional here.
+  breakdown?: Record<string, GameBreakdown>; // keyed by team id (home & away)
 }
 
 /** A playoff series. `hi` = higher seed (owns home court under 2-2-1 / 2-3-2). */
