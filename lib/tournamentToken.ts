@@ -1,17 +1,19 @@
 // Signed roll receipts — lightweight, stateless provenance for the tournament.
 //
-// Every server-issued roll (/api/slot, and the decade-skip via /api/team-decades)
-// returns a `receipt`: an HMAC over the (team, decade) it handed out plus an
-// issue time. The client keeps the receipt with the drafted player, and
-// /api/tournament/submit verifies every pick's receipt matches its team+decade
-// and is recent. This blocks the trivial exploit — POSTing five arbitrary
-// team/decade picks straight to the tournament — because each combo must have
-// actually been rolled by the server. (A determined script can still re-roll
-// until it sees good teams; fully closing that needs state/rate limits, which is
-// beyond the intended vibe. No logins required.)
+// Only /api/slot issues receipts, and it binds the receipt to the TEAM it rolled
+// — crucially, /api/slot hands out a RANDOM team you can't choose, so a valid
+// team receipt is real proof the server rolled that team to you. The receipt is
+// deliberately NOT bound to the decade: the decade-skip keeps the SAME team (and
+// reuses its receipt), and /api/team-decades issues nothing — otherwise a caller
+// could mint a receipt for any team it names, bypassing the random roll.
 //
-// Server-only (node:crypto). The secret is shared by the issuing routes and the
-// verifying route — all run server-side with the same env.
+// /api/tournament/submit verifies every pick's receipt against its team. This
+// blocks POSTing arbitrary teams straight to the tournament — each must have been
+// randomly rolled. (A script can still re-roll until it sees good teams; closing
+// that needs state/rate limits, beyond the intended vibe. No logins required.)
+//
+// Server-only (node:crypto). The secret is shared by /api/slot and the verifying
+// route — both run server-side with the same env.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
@@ -28,18 +30,14 @@ function hmac(data: string): string {
   return createHmac("sha256", SECRET).update(data).digest("hex");
 }
 
-/** Issue a receipt for a server roll of (team, decade): `<issuedAt>.<hmac>`. */
-export function signRoll(team: string, decade: number): string {
+/** Issue a receipt for a server roll of `team`: `<issuedAt>.<hmac>`. */
+export function signRoll(team: string): string {
   const issuedAt = Date.now();
-  return `${issuedAt}.${hmac(`${issuedAt}.${team}:${decade}`)}`;
+  return `${issuedAt}.${hmac(`${issuedAt}.${team}`)}`;
 }
 
-/** True iff `receipt` is a valid, unexpired signature for exactly (team, decade). */
-export function verifyRoll(
-  receipt: unknown,
-  team: string,
-  decade: number,
-): boolean {
+/** True iff `receipt` is a valid, unexpired signature for exactly `team`. */
+export function verifyRoll(receipt: unknown, team: string): boolean {
   if (typeof receipt !== "string") return false;
   const dot = receipt.indexOf(".");
   if (dot <= 0) return false;
@@ -49,7 +47,7 @@ export function verifyRoll(
   const now = Date.now();
   if (now - issuedAt > TTL_MS) return false; // expired
   if (issuedAt - now > 60_000) return false; // future-dated (clock-skew guard)
-  const expected = hmac(`${issuedAt}.${team}:${decade}`);
+  const expected = hmac(`${issuedAt}.${team}`);
   try {
     const a = Buffer.from(sig, "hex");
     const b = Buffer.from(expected, "hex");

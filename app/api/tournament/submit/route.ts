@@ -180,8 +180,8 @@ export async function POST(req: NextRequest) {
     }[];
     const rawSixth = (body?.sixthPick ?? {}) as { receipt?: unknown };
     const receiptsOk =
-      picks.every((p, i) => verifyRoll(rawRoster[i]?.receipt, p.team, p.decade)) &&
-      verifyRoll(rawSixth.receipt, sixthPick.team, sixthPick.decade);
+      picks.every((p, i) => verifyRoll(rawRoster[i]?.receipt, p.team)) &&
+      verifyRoll(rawSixth.receipt, sixthPick.team);
     if (!receiptsOk) {
       return jsonWithSessionHint(
         sessionHint,

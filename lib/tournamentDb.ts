@@ -96,6 +96,17 @@ export function ensureSchema(): Promise<void> {
         `CREATE TABLE IF NOT EXISTS ${TDB}.ghosts (
            ghost_id INTEGER, name VARCHAR, roster_json JSON, sixth_json JSON, seed_net DOUBLE)`,
       );
+      // CREATE TABLE IF NOT EXISTS won't add columns introduced after a table
+      // already exists, so additively self-heal the evolving `teams` columns.
+      for (const col of [
+        "team_name VARCHAR",
+        "mode VARCHAR",
+        "roster_display JSON",
+      ]) {
+        await queryRW(
+          `ALTER TABLE ${TDB}.teams ADD COLUMN IF NOT EXISTS ${col}`,
+        );
+      }
     })().catch((err) => {
       globalThis.__md_rw_schema__ = undefined; // allow retry on failure
       throw err;
