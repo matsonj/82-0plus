@@ -152,7 +152,6 @@ function per36Stat(p: ScoringPlayer, k: StatKey): number {
     case "ast": return per36(p, p.ast);
     case "stl": return per36(p, p.stl);
     case "blk": return per36(p, p.blk);
-    case "fg3m": return per36(p, p.fg3m);
     case "tov": return per36(p, p.tov);
     case "fgV":
       return p.fga > 0 ? (p.fgm / p.fga - FG_BASELINE) * per36(p, p.fga) : 0;
@@ -230,7 +229,6 @@ export function per36Totals(
     counting.ast += per36(p, p.ast) * mult.ast;
     counting.stl += per36(p, p.stl) * mult.stl;
     counting.blk += per36(p, p.blk) * mult.blk;
-    counting.fg3m += per36(p, p.fg3m) * mult.fg3m;
     counting.tov += per36(p, p.tov) * mult.tov;
     // Shooting: aggregate makes (buffed) / attempts so the value moves with the buff.
     fgm36 += per36(p, p.fgm) * mult.fgV;

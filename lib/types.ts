@@ -105,11 +105,15 @@ export type Conference = "East" | "West";
  *  Counting stats are per-36; fgV/ftV are volume-weighted shooting values
  *  ((pct − baseline)·attempts, like GQ's fg_v/ft_v); `tov` is a NEGATIVE
  *  stat (lower is better) and is sign-inverted wherever "better" is judged. */
+// Eight era-stable categories. `fg3m` is deliberately EXCLUDED: pre-1980 players
+// have a fabricated 3PM estimate on zero attempts (incoherent across eras), and
+// made threes are already credited inside fgV (they're field goals). stl/blk/tov
+// are backfilled to era-comparable values, so they stay.
 export type StatKey =
-  | "pts" | "reb" | "ast" | "stl" | "blk" | "fg3m" | "fgV" | "ftV" | "tov";
+  | "pts" | "reb" | "ast" | "stl" | "blk" | "fgV" | "ftV" | "tov";
 
 export const STAT_KEYS: StatKey[] = [
-  "pts", "reb", "ast", "stl", "blk", "fg3m", "fgV", "ftV", "tov",
+  "pts", "reb", "ast", "stl", "blk", "fgV", "ftV", "tov",
 ];
 
 // Shooting "value" baselines, mirroring the Game Quality view: a category's
@@ -203,10 +207,13 @@ export interface TournamentYou {
   reachedRound: number; // 0 = lost R1 … 4 = won the Final (champion)
 }
 
-/** POST /api/tournament/submit request body. */
+/** POST /api/tournament/submit request body. `name`+`pin` are the USER account
+ *  (old-school: same name+pin → another team on that account); `teamName` is this
+ *  entry's franchise name, shown in the bracket. */
 export interface TournamentSubmitRequest {
-  name: string;
+  name: string; // username (account handle)
   pin: string;
+  teamName: string; // this team's display name
   mode: GameMode; // which tournament: classic teams play classic, hoopiq play hoopiq
   roster: SimPick[]; // the five starters (slots 0..4 = [G,FLEX,W,FLEX,B])
   captainSlot: number; // 0..4, index into the five
@@ -223,6 +230,7 @@ export interface TournamentRunResponse {
 /** One memorialized team in a user's list (lightweight — no bracket payload). */
 export interface TournamentTeamSummary {
   teamId: string;
+  teamName: string;
   mode: GameMode;
   recordW: number;
   recordL: number;

@@ -199,6 +199,9 @@ function SeriesSide({
         style={{ cursor: "pointer" }}
         aria-expanded={open}
       >
+        {/* Ghost (AI filler) teams are prefixed with 🤖 so users can tell them
+            apart from real human submissions. Human teams render no emoji. */}
+        {team?.isGhost ? "🤖 " : ""}
         {name}
         {isYou ? " ★" : ""}
         <span className="ml-1 text-[9px] text-[var(--md-ink-muted)]">
@@ -387,7 +390,10 @@ export function BracketView({
                 ))}
               </div>
               <div className="md-capsule md-capsule--teal">
-                🏆 {bracket.championName}
+                {/* championName is a bare string here, so look the champion team
+                    up by championId to recover its isGhost flag and prefix 🤖. */}
+                🏆 {teamOf(bracket.championId)?.isGhost ? "🤖 " : ""}
+                {bracket.championName}
               </div>
             </div>
           );

@@ -51,7 +51,6 @@ function statValues(p: IndexedPlayer): Record<StatKey, number> {
     ast: per36(p.ast, p.mpg),
     stl: per36(p.stl, p.mpg),
     blk: per36(p.blk, p.mpg),
-    fg3m: per36(p.fg3m, p.mpg),
     fgV: p.fga > 0 ? (p.fgm / p.fga - FG_BASELINE) * per36(p.fga, p.mpg) : 0,
     ftV: p.fta > 0 ? (p.ftm / p.fta - FT_BASELINE) * per36(p.fta, p.mpg) : 0,
     tov: per36(p.tov, p.mpg),
@@ -325,7 +324,7 @@ export async function drawOpponents(
 ): Promise<TournamentTeam[]> {
   const FIELD = field;
   const subs = await queryRW<StoredTeamRow>(
-    `SELECT t.team_id AS team_id, u.name AS name, u.name_norm AS name_norm,
+    `SELECT t.team_id AS team_id, t.team_name AS name,
             t.roster_json AS roster_json, t.sixth_json AS sixth_json,
             t.captain_slot AS captain_slot, t.seed_net AS seed_net
        FROM nba_tournament.main.teams t
@@ -413,6 +412,7 @@ export async function insertUser(args: InsertUserArgs): Promise<string> {
 export interface InsertTeamArgs {
   teamId: string; // caller-generated (used as the bracket owner id before insert)
   userId: string;
+  teamName: string; // this team's display name (franchise), distinct from the user
   mode: string; // "classic" | "hoopiq" — segregates the bracket pool
   rosterJson: unknown;
   sixthJson: unknown;
@@ -434,12 +434,13 @@ export interface InsertTeamArgs {
 export async function insertTeam(args: InsertTeamArgs): Promise<void> {
   await queryRW(
     `INSERT INTO nba_tournament.main.teams
-       (team_id, user_id, mode, roster_json, sixth_json, captain_slot, seed_net,
+       (team_id, user_id, team_name, mode, roster_json, sixth_json, captain_slot, seed_net,
         record_w, record_l, realized_margin, reached_round, champion_name, bracket_json)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
     [
       args.teamId,
       args.userId,
+      args.teamName,
       args.mode,
       JSON.stringify(args.rosterJson),
       JSON.stringify(args.sixthJson),
@@ -457,6 +458,7 @@ export async function insertTeam(args: InsertTeamArgs): Promise<void> {
 
 interface TeamSummaryRow {
   team_id: string;
+  team_name: string;
   mode: string;
   record_w: number;
   record_l: number;
@@ -471,7 +473,7 @@ export async function getUserTeams(
   userId: string,
 ): Promise<TournamentTeamSummary[]> {
   const rows = await queryRW<TeamSummaryRow>(
-    `SELECT team_id, mode, record_w, record_l, realized_margin, reached_round,
+    `SELECT team_id, team_name, mode, record_w, record_l, realized_margin, reached_round,
             champion_name, created_at
        FROM nba_tournament.main.teams
       WHERE user_id = $1
@@ -480,6 +482,7 @@ export async function getUserTeams(
   );
   return rows.map((r) => ({
     teamId: r.team_id,
+    teamName: r.team_name,
     mode: r.mode as GameMode,
     recordW: r.record_w,
     recordL: r.record_l,

@@ -5,8 +5,10 @@ import { canPlay, type SlotKind } from "@/lib/positions";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import {
   validateName,
+  validateTeamName,
   validatePin,
   normalizeName,
+  normalizeTeamName,
 } from "@/lib/tournamentValidation";
 import { ensureSchema } from "@/lib/tournamentDb";
 import {
@@ -107,6 +109,17 @@ export async function POST(req: NextRequest) {
     }
     const name = String(body.name);
     const nameNorm = normalizeName(name);
+
+    // ---- Team name (the franchise shown in the bracket; distinct from user) ----
+    const teamNameCheck = validateTeamName(String(body?.teamName ?? ""));
+    if (!teamNameCheck.ok) {
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: `team name: ${teamNameCheck.reason}` },
+        { status: 400 },
+      );
+    }
+    const teamName = normalizeTeamName(String(body.teamName));
 
     // ---- Tournament mode (classic teams play classic, hoopiq play hoopiq) ----
     const mode = String(body?.mode ?? "");
@@ -215,7 +228,7 @@ export async function POST(req: NextRequest) {
     const teamId = randomUUID();
     const myTeam = buildTournamentTeam({
       id: `team:${teamId}`,
-      name: nameNorm,
+      name: teamName,
       isGhost: false,
       seedNet,
       hydrated,
@@ -242,6 +255,7 @@ export async function POST(req: NextRequest) {
     await insertTeam({
       teamId,
       userId,
+      teamName,
       mode,
       rosterJson: picks,
       sixthJson: sixthPick,

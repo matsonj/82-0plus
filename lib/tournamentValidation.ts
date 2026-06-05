@@ -55,6 +55,45 @@ export function validateName(s: string): ValidationResult {
   return { ok: true };
 }
 
+// ── Team names ─────────────────────────────────────────────────────────────────
+
+// A team's (franchise) name is more expressive than the login handle: uppercase
+// A–Z plus SPACES and APOSTROPHES, e.g. "MJ'S CREW". Still no digits or other
+// symbols, still 16 max, still profanity-checked. It must START with a letter
+// (no leading space/apostrophe), and curly apostrophes fold to a straight one.
+export const TEAM_NAME_ALLOWED = /^[A-Z][A-Z ']*$/;
+
+/**
+ * Canonical team-name form: fold curly/back apostrophes to a straight `'`, trim,
+ * uppercase, and collapse internal whitespace runs to a single space.
+ */
+export function normalizeTeamName(s: string): string {
+  return s
+    .replace(/[’`]/g, "'")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
+
+/** Validate a team (franchise) name — like validateName but allows spaces and
+ *  apostrophes. Same length cap and profanity check. */
+export function validateTeamName(s: string): ValidationResult {
+  const name = normalizeTeamName(s);
+  if (name.length === 0) {
+    return { ok: false, reason: "please enter a team name" };
+  }
+  if (name.length > NAME_MAX_LEN) {
+    return { ok: false, reason: "too long — 16 characters max" };
+  }
+  if (!TEAM_NAME_ALLOWED.test(name)) {
+    return { ok: false, reason: "letters, spaces and apostrophes only" };
+  }
+  if (isProfane(name)) {
+    return { ok: false, reason: "please choose another team name" };
+  }
+  return { ok: true };
+}
+
 // ── PIN ──────────────────────────────────────────────────────────────────────
 
 // A 4-to-6 digit numeric PIN. This is a low-stakes arcade lock, not a password —

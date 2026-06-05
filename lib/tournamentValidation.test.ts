@@ -3,9 +3,35 @@ import {
   NAME_ALLOWED,
   normalizeName,
   validateName,
+  validateTeamName,
+  normalizeTeamName,
   validatePin,
   isProfane,
 } from "./tournamentValidation";
+
+describe("validateTeamName — allows spaces & apostrophes", () => {
+  it("accepts letters, spaces and apostrophes", () => {
+    expect(validateTeamName("MJ'S CREW").ok).toBe(true);
+    expect(validateTeamName("THE DREAM TEAM").ok).toBe(true);
+    expect(validateTeamName("showtime").ok).toBe(true); // normalized to upper
+  });
+  it("folds curly apostrophes and collapses whitespace", () => {
+    expect(normalizeTeamName("  mj’s   crew ")).toBe("MJ'S CREW");
+  });
+  it("rejects digits and other symbols", () => {
+    expect(validateTeamName("MJ23").ok).toBe(false);
+    expect(validateTeamName("CREW!").ok).toBe(false);
+    expect(validateTeamName("A-TEAM").ok).toBe(false);
+  });
+  it("must start with a letter and fit 16 chars", () => {
+    expect(validateTeamName("'CREW").ok).toBe(false); // leading apostrophe
+    expect(validateTeamName(" CREW").ok).toBe(true); // leading space trimmed
+    expect(validateTeamName("A".repeat(17)).ok).toBe(false);
+  });
+  it("still rejects profanity", () => {
+    expect(validateTeamName("SHIT KICKERS").ok).toBe(false);
+  });
+});
 
 describe("normalizeName", () => {
   it("trims and uppercases", () => {

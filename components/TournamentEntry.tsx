@@ -14,6 +14,7 @@ import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { TournamentResults } from "@/components/TournamentResults";
 import {
   validateName,
+  validateTeamName,
   validatePin,
   NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
@@ -69,8 +70,9 @@ export function TournamentEntry({
 
   // ----- finalize -----
   const [captainSlot, setCaptainSlot] = useState<number | null>(null);
-  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
+  const [teamName, setTeamName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [nameTaken, setNameTaken] = useState(false);
@@ -197,10 +199,16 @@ export function TournamentEntry({
   };
 
   // ----- submit -----
-  const nameCheck = validateName(name);
+  const usernameCheck = validateName(username);
+  const teamNameCheck = validateTeamName(teamName);
   const pinOk = validatePin(pin);
   const canSubmit =
-    sixth !== null && captainSlot !== null && nameCheck.ok && pinOk && !submitting;
+    sixth !== null &&
+    captainSlot !== null &&
+    usernameCheck.ok &&
+    teamNameCheck.ok &&
+    pinOk &&
+    !submitting;
 
   const submit = async () => {
     if (!canSubmit || captainSlot === null || !sixth) return;
@@ -224,8 +232,9 @@ export function TournamentEntry({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          name,
+          name: username,
           pin,
+          teamName,
           mode,
           roster,
           captainSlot,
@@ -237,9 +246,12 @@ export function TournamentEntry({
         }),
       });
       if (res.status === 409) {
+        // Username belongs to someone else / wrong PIN — flag the USERNAME field.
         setNameTaken(true);
         const data = await res.json().catch(() => ({}));
-        setSubmitError(data?.error ?? "That name is taken — pick another.");
+        setSubmitError(
+          data?.error ?? "That account name is taken — wrong PIN?",
+        );
         return;
       }
       if (!res.ok) {
@@ -442,15 +454,17 @@ export function TournamentEntry({
             <div className="mt-3 flex flex-col gap-3">
               <label className="flex flex-col gap-1">
                 <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Team name
+                  Your name
                 </span>
                 <input
                   className="md-input md-input--name"
-                  value={name}
+                  value={username}
                   maxLength={NAME_MAX_LEN}
                   autoCapitalize="characters"
                   onChange={(e) => {
-                    setName(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""));
+                    setUsername(
+                      e.target.value.toUpperCase().replace(/[^A-Z]/g, ""),
+                    );
                     setNameTaken(false);
                   }}
                   placeholder="DREAMTEAM"
@@ -459,9 +473,12 @@ export function TournamentEntry({
                   }
                 />
                 <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-                  {name.length > 0 && !nameCheck.ok
-                    ? nameCheck.reason
-                    : "A–Z only · 16 max"}
+                  {username.length > 0 && !usernameCheck.ok
+                    ? usernameCheck.reason
+                    : "Your account name · A–Z, 16 max"}
+                </span>
+                <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
+                  This is how you log back in to check your teams.
                 </span>
               </label>
 
@@ -472,6 +489,7 @@ export function TournamentEntry({
                 <input
                   className="md-input"
                   value={pin}
+                  type="password"
                   inputMode="numeric"
                   maxLength={6}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
@@ -480,7 +498,33 @@ export function TournamentEntry({
                 <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
                   {pin.length > 0 && !pinOk
                     ? "PIN must be 4–6 digits"
-                    : "Remembers your team so you can check back."}
+                    : "Remembers your account so you can check back."}
+                </span>
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  Team name
+                </span>
+                <input
+                  className="md-input md-input--name"
+                  value={teamName}
+                  maxLength={NAME_MAX_LEN}
+                  autoCapitalize="characters"
+                  onChange={(e) =>
+                    setTeamName(
+                      e.target.value
+                        .toUpperCase()
+                        .replace(/[’`]/g, "'")
+                        .replace(/[^A-Z ']/g, ""),
+                    )
+                  }
+                  placeholder="MJ'S CREW"
+                />
+                <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
+                  {teamName.length > 0 && !teamNameCheck.ok
+                    ? teamNameCheck.reason
+                    : "This team's name · letters, spaces & ' · 16 max"}
                 </span>
               </label>
             </div>

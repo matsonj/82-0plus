@@ -64,19 +64,23 @@ function TeamRow({
       className="md-card md-card--lift flex w-full flex-col gap-2 p-4 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px] disabled:opacity-60"
     >
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          {team.mode === "hoopiq" ? (
-            <span className="md-capsule md-capsule--ink">HoopIQ</span>
-          ) : (
-            <span className="md-capsule">Classic</span>
-          )}
-          {isChampion && (
-            <span className="md-capsule md-capsule--teal">🏆 Champion</span>
-          )}
-        </div>
-        <span className="font-display text-xs text-[var(--md-ink-muted)]">
+        <span className="font-display text-lg font-bold leading-tight break-words">
+          {team.teamName}
+        </span>
+        <span className="font-display text-xs text-[var(--md-ink-muted)] whitespace-nowrap">
           {new Date(team.createdAt).toLocaleDateString()}
         </span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {team.mode === "hoopiq" ? (
+          <span className="md-capsule md-capsule--ink">HoopIQ</span>
+        ) : (
+          <span className="md-capsule">Classic</span>
+        )}
+        {isChampion && (
+          <span className="md-capsule md-capsule--teal">🏆 Champion</span>
+        )}
       </div>
 
       <div className="flex items-baseline justify-between gap-3">
@@ -261,15 +265,15 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
       className="md-card md-card--lift mx-auto flex w-full max-w-md flex-col gap-4 p-5"
     >
       <div>
-        <div className="font-display text-xl font-bold">Check your team</div>
+        <div className="font-display text-xl font-bold">Check your teams</div>
         <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
-          Enter the name and PIN you used to enter the tournament.
+          Enter the account name and PIN you used to enter the tournament.
         </p>
       </div>
 
       <label className="flex flex-col gap-1">
         <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          Team name
+          Your name
         </span>
         <input
           className="md-input md-input--name"
@@ -281,6 +285,9 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
           }
           placeholder="DREAMTEAM"
         />
+        <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
+          Your account name
+        </span>
       </label>
 
       <label className="flex flex-col gap-1">
@@ -290,6 +297,7 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
         <input
           className="md-input"
           value={pin}
+          type="password"
           inputMode="numeric"
           maxLength={6}
           onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}

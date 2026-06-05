@@ -13,8 +13,14 @@
  *   - MOTHERDUCK_RW_TOKEN  (write) — used by ensureSchema + the ghost inserts.
  *
  * Idempotent: it DELETEs every existing ghost first, then re-inserts the field.
- * The roster generation is driven by a SEEDED PRNG (mulberry32(hashSeed("ghosts-v1")))
+ * The roster generation is driven by a SEEDED PRNG (mulberry32(hashSeed("ghosts-v2")))
  * so re-running produces the exact same 60 ghosts every time.
+ *
+ * STRENGTH FLOOR: every ghost is STRONG. We bias sampling toward high-GQ players
+ * and REJECT-AND-RESAMPLE any candidate whose 5-starter netRating < NET_FLOOR
+ * (= 5), re-rolling on the same seeded RNG (which keeps advancing) until it
+ * clears the floor. The field targets a spread of roughly +5 → +15 net so it is
+ * uniformly tough but still varied. See NET_FLOOR / buildStrongGhost below.
  *
  * Stored JSON shape (must match how drawOpponents/hydrateStoredTeam re-reads it):
  *   roster_json : SimPick[]   -> [{ entity_id, team, decade, slot }]  (5 starters)
@@ -35,6 +41,16 @@ const SLOT_ORDER: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 
 // How many ghosts to seed.
 const GHOST_COUNT = 60;
+
+// Strength floor: every ghost's 5-starter netRating MUST be >= this. Candidates
+// below it are rejected and resampled (see buildStrongGhost). This is what makes
+// the ghost field uniformly hard to beat for the championship.
+const NET_FLOOR = 5;
+
+// Max resample attempts per ghost before we widen to the strongest-players pool.
+// With high-GQ-biased sampling the floor is usually cleared in a handful of
+// tries; this cap just guards against pathological deadlock.
+const MAX_ATTEMPTS_PER_GHOST = 200;
 
 // Arcade-flavored names. We need GHOST_COUNT unique names; the base list below
 // is long enough, but we suffix numbers if it ever runs short, so the field is
@@ -59,15 +75,17 @@ interface Band {
   hi: number;
 }
 
-// Spread the field across strength so seed_net ranges weak → strong. Each ghost
-// samples its players from one of these GQ windows; lower windows make weaker
-// rosters, higher windows make stronger ones.
+// Every band is STRONG — the field no longer spans weak → elite. These windows
+// sit high on the GQ scale so every sampled roster starts well above average,
+// and the NET_FLOOR reject-and-resample guarantees the rest. Cycling the bands
+// just gives variety in the +5 → +15 net spread (lower bands cluster near the
+// floor, higher bands push toward elite) without ever dropping below it.
 const BANDS: Band[] = [
-  { lo: 0.35, hi: 0.5 }, // weak
-  { lo: 0.45, hi: 0.6 }, // below average
-  { lo: 0.5, hi: 0.7 }, // average
-  { lo: 0.6, hi: 0.85 }, // strong
-  { lo: 0.7, hi: 1.0 }, // elite
+  { lo: 0.6, hi: 0.78 }, // strong
+  { lo: 0.65, hi: 0.85 }, // very strong
+  { lo: 0.7, hi: 0.9 }, // near-elite
+  { lo: 0.78, hi: 1.0 }, // elite
+  { lo: 0.85, hi: 1.0 }, // superteam
 ];
 
 /** Map an indexed player into the scoring shape (mirrors hydrateRoster in lib/queries.ts). */
@@ -104,17 +122,23 @@ interface Picked {
  * Build ONE valid 6-man ghost from the index for a given GQ band:
  *  - 5 starters filling [G, FLEX, W, FLEX, B] (respect canPlay per slot; distinct)
  *  - a 6th bench player (any eligibility, distinct from the five)
- * Sampling is biased to the band but falls back to the full pool if a band is
- * too thin to fill a slot, so generation never deadlocks. Returns null only if
- * the index itself can't satisfy the board (shouldn't happen with a real index).
+ * Sampling is biased to the band but falls back to `strongPool` (the strongest
+ * players in the index, NOT the full index) if a band is too thin to fill a
+ * slot — that keeps every roster strong while never deadlocking. Returns null
+ * only if even the strong pool can't satisfy the board.
+ *
+ * This is the single-shot builder; the NET_FLOOR is enforced by the
+ * reject-and-resample loop in buildStrongGhost.
  */
 function buildGhostRoster(
   index: IndexedPlayer[],
+  strongPool: IndexedPlayer[],
   band: Band,
   rng: () => number,
 ): { starters: Picked[]; sixth: IndexedPlayer } | null {
   const inBand = index.filter((p) => p.value >= band.lo && p.value <= band.hi);
-  // Prefer the band; fall back to the full index so a slot is always fillable.
+  // Prefer the band; fall back to the STRONG pool so a slot is always fillable
+  // without ever reaching into weak players.
   const pickFrom = (
     pool: IndexedPlayer[],
     slot: SlotKind,
@@ -132,20 +156,51 @@ function buildGhostRoster(
   for (let slot = 0; slot < SLOT_ORDER.length; slot++) {
     const kind = SLOT_ORDER[slot];
     const player =
-      pickFrom(inBand, kind, used) ?? pickFrom(index, kind, used);
+      pickFrom(inBand, kind, used) ?? pickFrom(strongPool, kind, used);
     if (!player) return null;
     used.add(keyOf(player));
     starters.push({ player, slot });
   }
 
-  // Sixth man: any eligibility, distinct from the five. Prefer the band.
+  // Sixth man: any eligibility, distinct from the five. Prefer the band, fall
+  // back to the strong pool (the bench is cosmetic for seed_net but we keep the
+  // whole field strong).
   const sixthPool = inBand.filter((p) => !used.has(keyOf(p)));
-  const fallbackPool = index.filter((p) => !used.has(keyOf(p)));
+  const fallbackPool = strongPool.filter((p) => !used.has(keyOf(p)));
   const pool = sixthPool.length > 0 ? sixthPool : fallbackPool;
   if (pool.length === 0) return null;
   const sixth = pool[Math.floor(rng() * pool.length)];
 
   return { starters, sixth };
+}
+
+/**
+ * Build a ghost that CLEARS THE NET FLOOR. Repeatedly calls buildGhostRoster on
+ * the (continually advancing) seeded RNG, computing the 5-starter netRating each
+ * time, and only returns once netRating >= NET_FLOOR. Reproducible because the
+ * RNG keeps advancing deterministically across attempts. Returns the best
+ * candidate seen if the cap is hit (should not happen with strong bands), so the
+ * field is always full; the caller logs if any ghost ends up below the floor.
+ */
+function buildStrongGhost(
+  index: IndexedPlayer[],
+  strongPool: IndexedPlayer[],
+  band: Band,
+  rng: () => number,
+): { starters: Picked[]; sixth: IndexedPlayer; seedNet: number } | null {
+  let best: { starters: Picked[]; sixth: IndexedPlayer; seedNet: number } | null =
+    null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_GHOST; attempt++) {
+    const built = buildGhostRoster(index, strongPool, band, rng);
+    if (!built) continue;
+    const seedNet = simulateRoster(
+      built.starters.map((s) => toScoring(s.player)),
+    ).netRating;
+    const candidate = { ...built, seedNet };
+    if (seedNet >= NET_FLOOR) return candidate; // cleared the floor — done.
+    if (!best || seedNet > best.seedNet) best = candidate; // keep the strongest.
+  }
+  return best;
 }
 
 /** Stable de-dup key for an index row (a player can appear per team+decade). */
@@ -164,8 +219,21 @@ async function main(): Promise<void> {
     throw new Error("player index is empty — cannot build ghosts");
   }
 
-  // Deterministic field: a single seeded PRNG drives every choice.
-  const rng = mulberry32(hashSeed("ghosts-v1"));
+  // Deterministic field: a single seeded PRNG drives every choice. Bumped to
+  // "ghosts-v2" since the field is changing (now uniformly strong, net >= 5).
+  const rng = mulberry32(hashSeed("ghosts-v2"));
+
+  // The "strong pool" used as the sampling fallback: the top slice of the index
+  // by GQ. Widening to this (rather than the full index) keeps every roster
+  // strong even when a band is thin for some slot. Take the strongest ~40% (at
+  // least 200 rows) so there's always depth at every position.
+  const sorted = [...index].sort((a, b) => b.value - a.value);
+  const strongCount = Math.max(200, Math.floor(index.length * 0.4));
+  const strongPool = sorted.slice(0, Math.min(strongCount, index.length));
+  console.log(
+    `[seedGhosts] strong fallback pool: ${strongPool.length} rows ` +
+      `(GQ >= ${strongPool[strongPool.length - 1]?.value.toFixed(3)}).`,
+  );
 
   // Wipe then reseed so re-running never duplicates.
   console.log(`[seedGhosts] wiping ${TDB}.ghosts…`);
@@ -173,20 +241,23 @@ async function main(): Promise<void> {
 
   let inserted = 0;
   for (let i = 0; i < GHOST_COUNT; i++) {
-    // Cycle the bands so the field is evenly spread weak → strong.
+    // Cycle the bands — all strong — for variety within a uniformly tough field.
     const band = BANDS[i % BANDS.length];
 
-    let built = buildGhostRoster(index, band, rng);
-    // Retry a few times within the band in case of an unlucky de-dup deadlock.
-    for (let attempt = 0; attempt < 5 && !built; attempt++) {
-      built = buildGhostRoster(index, band, rng);
-    }
+    // Reject-and-resample until the candidate clears NET_FLOOR (net >= 5).
+    const built = buildStrongGhost(index, strongPool, band, rng);
     if (!built) {
       console.warn(`[seedGhosts] ghost ${i}: could not build a valid roster, skipping.`);
       continue;
     }
+    if (built.seedNet < NET_FLOOR) {
+      console.warn(
+        `[seedGhosts] ghost ${i}: hit attempt cap below floor ` +
+          `(seed_net=${built.seedNet.toFixed(1)} < ${NET_FLOOR}).`,
+      );
+    }
 
-    const { starters, sixth } = built;
+    const { starters, sixth, seedNet } = built;
 
     // roster_json: SimPick[] — exactly what hydrateStoredTeam parses + feeds to
     // hydrateRoster (entity_id|team|decade re-resolve the index row; slot drives
@@ -205,9 +276,8 @@ async function main(): Promise<void> {
     };
 
     // seed_net = the FIVE starters' netRating via simulateRoster (NO buffs) —
-    // exactly the seeding strength the engine consumes.
-    const seedNet = simulateRoster(starters.map((s) => toScoring(s.player)))
-      .netRating;
+    // exactly the seeding strength the engine consumes. Already computed (and
+    // floor-checked) inside buildStrongGhost; reuse it.
 
     const name = NAME_POOL[i] ?? `GHOST ${i + 1}`;
 
@@ -235,11 +305,25 @@ async function main(): Promise<void> {
        FROM ${TDB}.ghosts`,
   );
   const s = summary[0];
+  const minNet = Number(s?.min_net);
+  const maxNet = Number(s?.max_net);
   console.log("[seedGhosts] done.");
   console.log(
     `[seedGhosts] inserted=${inserted} | rows=${s?.n} | ` +
-      `seed_net min=${Number(s?.min_net).toFixed(1)} max=${Number(s?.max_net).toFixed(1)}`,
+      `seed_net min=${minNet.toFixed(1)} max=${maxNet.toFixed(1)}`,
   );
+  // Confirm the strength floor held across the whole field.
+  if (minNet >= NET_FLOOR) {
+    console.log(
+      `[seedGhosts] ✓ floor OK: every ghost has seed_net >= ${NET_FLOOR} ` +
+        `(min=${minNet.toFixed(1)}).`,
+    );
+  } else {
+    console.warn(
+      `[seedGhosts] ✗ floor BREACHED: min seed_net ${minNet.toFixed(1)} ` +
+        `< ${NET_FLOOR} — widen the bands or raise MAX_ATTEMPTS_PER_GHOST.`,
+    );
+  }
 }
 
 main()
