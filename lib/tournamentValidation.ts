@@ -8,19 +8,21 @@
 
 // ── Names ────────────────────────────────────────────────────────────────────
 
-// Allowed characters are ONLY uppercase A–Z. Nothing else — no lowercase, no
-// digits, no spaces, no symbols, no emoji. Length 1–16.
-export const NAME_ALLOWED = /^[A-Z]{1,16}$/;
+// The USERNAME (account handle) allows uppercase A–Z, digits, and spaces — e.g.
+// "PHIL JACKSON 11". No other symbols or emoji. Length 1–16. (Team names are
+// looser still — they also allow apostrophes; see validateTeamName.)
+export const NAME_ALLOWED = /^[A-Z0-9 ]{1,16}$/;
 
 export const NAME_MAX_LEN = 16;
 
 /**
- * Canonical storage form of a name: trim surrounding whitespace, then UPPERCASE.
- * The form can be case-insensitive on input ("mj23" === "MJ23"); callers persist
- * this normalized value as `name_norm` and dedupe / look up against it.
+ * Canonical storage form of a username: trim, UPPERCASE, and collapse internal
+ * whitespace runs to a single space ("phil  jackson" === "PHIL JACKSON"). Callers
+ * persist this as `name_norm` and dedupe / look up against it (case- and
+ * spacing-insensitive).
  */
 export function normalizeName(s: string): string {
-  return s.trim().toUpperCase();
+  return s.trim().toUpperCase().replace(/\s+/g, " ");
 }
 
 /** Friendly result type — a reason string is only present on failure. */
@@ -46,7 +48,7 @@ export function validateName(s: string): ValidationResult {
   if (!NAME_ALLOWED.test(name)) {
     return {
       ok: false,
-      reason: "letters A–Z only — no spaces, numbers or symbols",
+      reason: "letters, numbers and spaces only — no symbols",
     };
   }
   if (isProfane(name)) {

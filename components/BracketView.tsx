@@ -39,8 +39,8 @@ function BreakLine({ label, value }: { label: string; value: number }) {
     v > 0 ? "var(--md-teal)" : v < 0 ? "var(--md-coral)" : "var(--md-ink-muted)";
   return (
     <div className="flex items-baseline justify-between gap-2 font-display text-[11px]">
-      <span className="text-[var(--md-ink-muted)]">{label}</span>
-      <span style={{ color }}>{round1(v)}</span>
+      <span className="whitespace-nowrap text-[var(--md-ink-muted)]">{label}</span>
+      <span className="shrink-0" style={{ color }}>{round1(v)}</span>
     </div>
   );
 }
@@ -65,12 +65,12 @@ function TeamBreakdown({
         {name}
       </div>
       {/* fatigue & recoveryCarry are stored positive and SUBTRACTED. */}
-      <BreakLine label="seed net" value={b.seedNet} />
+      <BreakLine label="seed" value={b.seedNet} />
       <BreakLine label="game score" value={b.gameScoreBuff} />
       <BreakLine label="height" value={b.heightBuff} />
       <BreakLine label="home" value={b.homeBuff} />
       <BreakLine label="fatigue" value={-b.fatigue} />
-      <BreakLine label="recovery carry" value={-b.recoveryCarry} />
+      <BreakLine label="recovery" value={-b.recoveryCarry} />
       <BreakLine label="random" value={b.randomFactor} />
       <div className="mt-1 flex items-baseline justify-between border-t-2 border-[var(--md-ink)] pt-0.5 font-display text-[11px] font-bold">
         <span>adj</span>

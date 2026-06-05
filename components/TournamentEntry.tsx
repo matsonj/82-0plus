@@ -463,11 +463,11 @@ export function TournamentEntry({
                   autoCapitalize="characters"
                   onChange={(e) => {
                     setUsername(
-                      e.target.value.toUpperCase().replace(/[^A-Z]/g, ""),
+                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
                     );
                     setNameTaken(false);
                   }}
-                  placeholder="DREAMTEAM"
+                  placeholder="PHILJACKSON"
                   style={
                     nameTaken ? { borderColor: "var(--md-coral)" } : undefined
                   }
@@ -475,7 +475,7 @@ export function TournamentEntry({
                 <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
                   {username.length > 0 && !usernameCheck.ok
                     ? usernameCheck.reason
-                    : "Your account name · A–Z, 16 max"}
+                    : "Your account name · letters, numbers, spaces · 16 max"}
                 </span>
                 <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
                   This is how you log back in to check your teams.
@@ -519,7 +519,7 @@ export function TournamentEntry({
                         .replace(/[^A-Z ']/g, ""),
                     )
                   }
-                  placeholder="MJ'S CREW"
+                  placeholder="DREAMTEAM"
                 />
                 <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
                   {teamName.length > 0 && !teamNameCheck.ok

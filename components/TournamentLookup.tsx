@@ -281,9 +281,9 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
           maxLength={NAME_MAX_LEN}
           autoCapitalize="characters"
           onChange={(e) =>
-            setName(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))
+            setName(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""))
           }
-          placeholder="DREAMTEAM"
+          placeholder="PHILJACKSON"
         />
         <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
           Your account name

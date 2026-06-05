@@ -310,11 +310,12 @@ async function hydrateStoredTeam(
 }
 
 /**
- * Draw up to 15 opponents to fill a 16-team field: random real memorialized
- * teams from the last hour IN THE SAME MODE (excluding the human's own teams),
- * topped up with random ghosts (ghosts are mode-agnostic — they fill either
- * bracket). Each is re-hydrated through hydrateTournamentRoster so it can
- * actually play. Ids are unique: `team:<team_id>` / `ghost:<ghost_id>`.
+ * Draw up to 15 opponents to fill a 16-team field. HUMAN teams are ALWAYS
+ * preferred: any real memorialized team in the SAME MODE (excluding the player's
+ * own account), most recent first, up to the field size. Ghosts (mode-agnostic
+ * AI fillers) are added ONLY to make up the shortfall when there aren't enough
+ * humans. Each is re-hydrated so it can actually play. Ids are unique:
+ * `team:<team_id>` / `ghost:<ghost_id>`.
  */
 export async function drawOpponents(
   myNameNorm: string,
@@ -329,10 +330,9 @@ export async function drawOpponents(
             t.captain_slot AS captain_slot, t.seed_net AS seed_net
        FROM nba_tournament.main.teams t
        JOIN nba_tournament.main.users u ON u.user_id = t.user_id
-      WHERE t.created_at >= now() - INTERVAL 1 HOUR
-        AND t.mode = $2
+      WHERE t.mode = $2
         AND u.name_norm <> $1
-      ORDER BY random()
+      ORDER BY t.created_at DESC
       LIMIT ${FIELD}`,
     [myNameNorm, mode],
   );

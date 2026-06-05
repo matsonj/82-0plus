@@ -41,43 +41,42 @@ describe("normalizeName", () => {
 });
 
 describe("NAME_ALLOWED charset", () => {
-  it("accepts uppercase letters A–Z only", () => {
+  it("accepts uppercase letters, digits and spaces", () => {
     expect(NAME_ALLOWED.test("DREAMTEAM")).toBe(true);
-    expect(NAME_ALLOWED.test("GOAT")).toBe(true);
+    expect(NAME_ALLOWED.test("MJ23")).toBe(true); // digits allowed
+    expect(NAME_ALLOWED.test("PHIL JACKSON")).toBe(true); // spaces allowed
     expect(NAME_ALLOWED.test("ABCDEFGHIJKLMNOP")).toBe(true); // 16
-    expect(NAME_ALLOWED.test("MJ23")).toBe(false); // digits rejected
     expect(NAME_ALLOWED.test("!@#$%^&*")).toBe(false); // symbols rejected
     expect(NAME_ALLOWED.test("mj")).toBe(false); // raw regex rejects lowercase
   });
 });
 
 describe("validateName — charset", () => {
-  it("allowed names pass", () => {
+  it("allowed names pass (letters, digits, spaces)", () => {
     expect(validateName("DREAMTEAM")).toEqual({ ok: true });
-    expect(validateName("GOAT")).toEqual({ ok: true });
-    expect(validateName("BALLERS")).toEqual({ ok: true });
+    expect(validateName("MJ23")).toEqual({ ok: true });
+    expect(validateName("PHIL JACKSON 11")).toEqual({ ok: true });
   });
 
-  it("is case-insensitive on input (normalizes first)", () => {
+  it("is case- and spacing-insensitive on input (normalizes first)", () => {
     expect(validateName("dreamteam")).toEqual({ ok: true });
-    expect(validateName("  baller ")).toEqual({ ok: true });
+    expect(validateName("  phil   jackson ")).toEqual({ ok: true });
   });
 
-  it("rejects digits, space, emoji and stray punctuation", () => {
-    expect(validateName("MJ23").ok).toBe(false); // digits
-    expect(validateName("DREAM TEAM").ok).toBe(false); // space
+  it("rejects emoji and stray punctuation", () => {
     expect(validateName("MJ-23").ok).toBe(false); // hyphen
     expect(validateName("MJ.23").ok).toBe(false); // dot
     expect(validateName("MJ+23").ok).toBe(false); // plus
     expect(validateName("GOAT😀").ok).toBe(false); // emoji
     expect(validateName("DREAM_TEAM").ok).toBe(false); // underscore
     expect(validateName("$WISH$").ok).toBe(false); // symbols
+    expect(validateName("MJ'S").ok).toBe(false); // apostrophe (team names only)
   });
 
   it("the illegal-charset failure carries the friendly reason", () => {
-    const r = validateName("MJ23");
+    const r = validateName("MJ_23");
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toContain("letters A–Z only");
+    if (!r.ok) expect(r.reason).toContain("letters, numbers and spaces");
   });
 });
 
@@ -145,9 +144,9 @@ describe("validateName — profanity", () => {
     }
   });
 
-  it("leet/symbol profanity is rejected (on charset, before the filter)", () => {
-    // Symbols/digits are no longer allowed, so these fail the charset gate. The
-    // isProfane suite separately confirms the leet-fold still catches them.
+  it("leet/symbol profanity is rejected", () => {
+    // Symbol leet (CR@P, $HIT) fails the charset gate; digit leet (CR4P) passes
+    // charset now that digits are allowed, but the leet-fold catches it as profane.
     for (const bad of ["CR@P", "CR4P", "$HIT"]) {
       expect(validateName(bad).ok).toBe(false);
     }
