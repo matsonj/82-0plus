@@ -105,16 +105,18 @@ export async function getDebutSeasons(
 ): Promise<Map<string, number>> {
   const ids = [...new Set(entityIds)].filter((id) => id);
   if (ids.length === 0) return new Map();
+  // A parameterized IN (...) list — the DuckDB pg endpoint doesn't bind a
+  // Postgres array literal to `= ANY($1)` reliably, so expand to $1,$2,….
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
   const rows = await query<DebutRow>(
     `SELECT b.entity_id AS entity_id, MIN(s.season_year) AS debut
        FROM ${DB}.box_scores b
        JOIN ${DB}.schedule s USING (game_id)
       WHERE b.period = 'FullGame'
         AND s.season_type = 'Regular Season'
-        AND b.entity_id = ANY($1)
+        AND b.entity_id IN (${placeholders})
       GROUP BY 1`,
-    // pg serializes a JS array into a Postgres array literal for `= ANY($1)`.
-    [`{${ids.map((id) => `"${id.replace(/"/g, '\\"')}"`).join(",")}}`],
+    ids,
     options,
   );
   const map = new Map<string, number>();
