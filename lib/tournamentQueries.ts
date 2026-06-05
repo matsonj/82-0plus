@@ -5,6 +5,8 @@ import { simulateRoster, type ScoringPlayer } from "./scoring";
 import { queryRW } from "./tournamentDb";
 import {
   STAT_KEYS,
+  FG_BASELINE,
+  FT_BASELINE,
   type BracketPlayer,
   type GameMode,
   type SimPick,
@@ -40,7 +42,8 @@ function per36(stat: number, mpg: number): number {
   return mpg > 0 ? (stat * 36) / mpg : 0;
 }
 
-/** The nine per-36 / rate category values for one indexed player. */
+/** The nine per-36 category values for one indexed player. fgV/ftV are GQ-style
+ *  volume-weighted shooting values ((pct − baseline) × per-36 attempts). */
 function statValues(p: IndexedPlayer): Record<StatKey, number> {
   return {
     pts: per36(p.pts, p.mpg),
@@ -49,8 +52,8 @@ function statValues(p: IndexedPlayer): Record<StatKey, number> {
     stl: per36(p.stl, p.mpg),
     blk: per36(p.blk, p.mpg),
     fg3m: per36(p.fg3m, p.mpg),
-    fgPct: p.fga > 0 ? p.fgm / p.fga : 0,
-    ftPct: p.fta > 0 ? p.ftm / p.fta : 0,
+    fgV: p.fga > 0 ? (p.fgm / p.fga - FG_BASELINE) * per36(p.fga, p.mpg) : 0,
+    ftV: p.fta > 0 ? (p.ftm / p.fta - FT_BASELINE) * per36(p.fta, p.mpg) : 0,
     tov: per36(p.tov, p.mpg),
   };
 }

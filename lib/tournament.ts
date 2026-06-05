@@ -29,7 +29,7 @@ import type {
   StatKey,
   StatNorms,
 } from "./types";
-import { STAT_KEYS, NEGATIVE_STATS } from "./types";
+import { STAT_KEYS, NEGATIVE_STATS, FG_BASELINE, FT_BASELINE } from "./types";
 
 /** Engine input. The five starters + the bench player, plus precomputed seeding
  *  strength. The app builds these from a submission; the engine treats them as
@@ -137,8 +137,8 @@ function per36(p: ScoringPlayer, raw: number): number {
   return p.mpg > 0 ? (raw * 36) / p.mpg : 0;
 }
 
-/** The raw per-36 counting value for a StatKey on one player. fgPct/ftPct are
- *  rates (not per-36) and are handled separately during aggregation. */
+/** The per-36 value for a StatKey on one player. fgV/ftV are GQ-style volume-
+ *  weighted shooting values: (pct − baseline) × per-36 attempts. */
 function per36Stat(p: ScoringPlayer, k: StatKey): number {
   switch (k) {
     case "pts": return per36(p, p.pts);
@@ -148,8 +148,10 @@ function per36Stat(p: ScoringPlayer, k: StatKey): number {
     case "blk": return per36(p, p.blk);
     case "fg3m": return per36(p, p.fg3m);
     case "tov": return per36(p, p.tov);
-    case "fgPct": return p.fga > 0 ? p.fgm / p.fga : 0;
-    case "ftPct": return p.fta > 0 ? p.ftm / p.fta : 0;
+    case "fgV":
+      return p.fga > 0 ? (p.fgm / p.fga - FG_BASELINE) * per36(p, p.fga) : 0;
+    case "ftV":
+      return p.fta > 0 ? (p.ftm / p.fta - FT_BASELINE) * per36(p, p.fta) : 0;
   }
 }
 
@@ -196,9 +198,9 @@ export function captainMultipliers(
 /**
  * Team per-36 totals over all SIX players (5 starters + sixth man) with the
  * captain category multipliers applied team-wide. Counting stats SUM; shooting
- * rates are recomputed from AGGREGATE makes/attempts (fgPct = Σfgm/Σfga,
- * ftPct = Σftm/Σfta). The captain multiplier for a shooting category is applied
- * to that category's MAKES so the rate moves consistently with the buff.
+ * is the GQ-style VALUE fgV = (Σfgm/Σfga − 0.47)·Σfga, ftV = (Σftm/Σfta − 0.80)·Σfta
+ * — volume-weighted, not bare rate. The captain multiplier for a shooting
+ * category is applied to that category's MAKES so the value moves with the buff.
  */
 export function per36Totals(
   team: TournamentTeam,
@@ -224,16 +226,17 @@ export function per36Totals(
     counting.blk += per36(p, p.blk) * mult.blk;
     counting.fg3m += per36(p, p.fg3m) * mult.fg3m;
     counting.tov += per36(p, p.tov) * mult.tov;
-    // Shooting: aggregate makes (buffed) / attempts so the rate moves with the buff.
-    fgm36 += per36(p, p.fgm) * mult.fgPct;
+    // Shooting: aggregate makes (buffed) / attempts so the value moves with the buff.
+    fgm36 += per36(p, p.fgm) * mult.fgV;
     fga36 += per36(p, p.fga);
-    ftm36 += per36(p, p.ftm) * mult.ftPct;
+    ftm36 += per36(p, p.ftm) * mult.ftV;
     fta36 += per36(p, p.fta);
   }
 
   const totals = { ...counting };
-  totals.fgPct = fga36 > 0 ? fgm36 / fga36 : 0;
-  totals.ftPct = fta36 > 0 ? ftm36 / fta36 : 0;
+  // GQ-style shooting value: (rate − baseline) × volume. Higher is better.
+  totals.fgV = fga36 > 0 ? (fgm36 / fga36 - FG_BASELINE) * fga36 : 0;
+  totals.ftV = fta36 > 0 ? (ftm36 / fta36 - FT_BASELINE) * fta36 : 0;
   return totals;
 }
 

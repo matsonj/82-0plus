@@ -102,14 +102,21 @@ export type GameMode = "classic" | "hoopiq";
 export type Conference = "East" | "West";
 
 /** The nine Game-Quality stat categories used by the tournament stat layer.
- *  Counting stats are per-36; fgPct/ftPct are 0–1 rates; `tov` is a NEGATIVE
+ *  Counting stats are per-36; fgV/ftV are volume-weighted shooting values
+ *  ((pct − baseline)·attempts, like GQ's fg_v/ft_v); `tov` is a NEGATIVE
  *  stat (lower is better) and is sign-inverted wherever "better" is judged. */
 export type StatKey =
-  | "pts" | "reb" | "ast" | "stl" | "blk" | "fg3m" | "fgPct" | "ftPct" | "tov";
+  | "pts" | "reb" | "ast" | "stl" | "blk" | "fg3m" | "fgV" | "ftV" | "tov";
 
 export const STAT_KEYS: StatKey[] = [
-  "pts", "reb", "ast", "stl", "blk", "fg3m", "fgPct", "ftPct", "tov",
+  "pts", "reb", "ast", "stl", "blk", "fg3m", "fgV", "ftV", "tov",
 ];
+
+// Shooting "value" baselines, mirroring the Game Quality view: a category's
+// value is (pct − baseline) × attempts, so it rewards efficient VOLUME, not bare
+// rate. fg_v = (fg% − 0.47)·FGA, ft_v = (ft% − 0.80)·FTA.
+export const FG_BASELINE = 0.47;
+export const FT_BASELINE = 0.8;
 
 /** `tov` is the only category where a lower value is better. */
 export const NEGATIVE_STATS: ReadonlySet<StatKey> = new Set<StatKey>(["tov"]);

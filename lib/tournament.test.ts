@@ -136,12 +136,13 @@ describe("per36Totals", () => {
     );
   });
 
-  it("recomputes shooting rates from aggregate makes/attempts", () => {
+  it("computes GQ-style volume-weighted shooting value (fgV)", () => {
     const t = team({
       starters: Array.from({ length: 5 }, () => p({ mpg: 36, fgm: 8, fga: 16 })),
       sixthMan: p({ mpg: 36, fgm: 8, fga: 16 }),
     });
-    expect(per36Totals(t).fgPct).toBeCloseTo(0.5, 6);
+    // team fg% = 0.5; per-36 attempts = 16 each × 6 = 96; fgV = (0.5 − 0.47)·96.
+    expect(per36Totals(t).fgV).toBeCloseTo((0.5 - 0.47) * 96, 5);
   });
 
   it("applies the captain category multipliers team-wide", () => {
