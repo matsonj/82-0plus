@@ -6,9 +6,11 @@ import { queryRW } from "./tournamentDb";
 import {
   STAT_KEYS,
   type BracketPlayer,
+  type GameMode,
   type SimPick,
   type StatKey,
   type StatNorms,
+  type TournamentTeamSummary,
 } from "./types";
 import type { TournamentTeam } from "./tournament";
 
@@ -251,8 +253,9 @@ export function buildTournamentTeam(args: BuildTournamentTeamArgs): TournamentTe
 
 // ── Opponent / ghost drawing ─────────────────────────────────────────────────
 
-/** Stored roster row shape (submissions and ghosts share these columns). */
+/** Stored roster row shape (teams and ghosts share these columns). */
 interface StoredTeamRow {
+  team_id?: string;
   name: string;
   name_norm?: string;
   roster_json: string;
@@ -300,11 +303,11 @@ async function hydrateStoredTeam(
 }
 
 /**
- * Draw up to 15 opponents to fill a 16-team field: random real submissions from
- * the last hour IN THE SAME MODE (excluding the human's own name), topped up with
- * random ghosts (ghosts are mode-agnostic — they fill either bracket). Each is
- * re-hydrated through hydrateTournamentRoster so it can actually play. Ids are
- * unique: `sub:<name_norm>` / `ghost:<ghost_id>`.
+ * Draw up to 15 opponents to fill a 16-team field: random real memorialized
+ * teams from the last hour IN THE SAME MODE (excluding the human's own teams),
+ * topped up with random ghosts (ghosts are mode-agnostic — they fill either
+ * bracket). Each is re-hydrated through hydrateTournamentRoster so it can
+ * actually play. Ids are unique: `team:<team_id>` / `ghost:<ghost_id>`.
  */
 export async function drawOpponents(
   myNameNorm: string,
@@ -314,11 +317,14 @@ export async function drawOpponents(
 ): Promise<TournamentTeam[]> {
   const FIELD = field;
   const subs = await queryRW<StoredTeamRow>(
-    `SELECT name, name_norm, roster_json, sixth_json, captain_slot, seed_net
-       FROM nba_tournament.main.submissions
-      WHERE created_at >= now() - INTERVAL 1 HOUR
-        AND mode = $2
-        AND name_norm <> $1
+    `SELECT t.team_id AS team_id, u.name AS name, u.name_norm AS name_norm,
+            t.roster_json AS roster_json, t.sixth_json AS sixth_json,
+            t.captain_slot AS captain_slot, t.seed_net AS seed_net
+       FROM nba_tournament.main.teams t
+       JOIN nba_tournament.main.users u ON u.user_id = t.user_id
+      WHERE t.created_at >= now() - INTERVAL 1 HOUR
+        AND t.mode = $2
+        AND u.name_norm <> $1
       ORDER BY random()
       LIMIT ${FIELD}`,
     [myNameNorm, mode],
@@ -326,7 +332,7 @@ export async function drawOpponents(
 
   const teams: TournamentTeam[] = [];
   for (const row of subs) {
-    const id = `sub:${row.name_norm ?? row.name}`;
+    const id = `team:${row.team_id ?? row.name_norm ?? row.name}`;
     const team = await hydrateStoredTeam(row, id, false, options);
     if (team) teams.push(team);
   }
@@ -350,21 +356,21 @@ export async function drawOpponents(
   return teams.slice(0, FIELD);
 }
 
-// ── Submission + tournament persistence ──────────────────────────────────────
+// ── User + team persistence ──────────────────────────────────────────────────
 
-export interface SubmissionAuthRow {
-  submission_id: string;
+export interface UserAuthRow {
+  user_id: string;
   pin_hash: string;
   pin_salt: string;
 }
 
-/** Look up a submission by its normalized name (the app-level uniqueness gate). */
-export async function findSubmissionByName(
+/** Look up a user by their normalized name (the app-level uniqueness gate). */
+export async function findUserByName(
   nameNorm: string,
-): Promise<SubmissionAuthRow | null> {
-  const rows = await queryRW<SubmissionAuthRow>(
-    `SELECT submission_id, pin_hash, pin_salt
-       FROM nba_tournament.main.submissions
+): Promise<UserAuthRow | null> {
+  const rows = await queryRW<UserAuthRow>(
+    `SELECT user_id, pin_hash, pin_salt
+       FROM nba_tournament.main.users
       WHERE name_norm = $1
       LIMIT 1`,
     [nameNorm],
@@ -372,88 +378,125 @@ export async function findSubmissionByName(
   return rows[0] ?? null;
 }
 
-export interface InsertSubmissionArgs {
+export interface InsertUserArgs {
   name: string;
   nameNorm: string;
   pinHash: string;
   pinSalt: string;
+}
+
+/**
+ * Insert a user and return its user_id. The UUID is generated in application
+ * code and passed explicitly (rather than relying on RETURNING or DEFAULT
+ * uuid()) so the id is deterministic for the caller — no dependence on RETURNING
+ * semantics on the MotherDuck pg endpoint.
+ */
+export async function insertUser(args: InsertUserArgs): Promise<string> {
+  const userId = randomUUID();
+  await queryRW(
+    `INSERT INTO nba_tournament.main.users
+       (user_id, name, name_norm, pin_hash, pin_salt)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, args.name, args.nameNorm, args.pinHash, args.pinSalt],
+  );
+  return userId;
+}
+
+export interface InsertTeamArgs {
+  teamId: string; // caller-generated (used as the bracket owner id before insert)
+  userId: string;
   mode: string; // "classic" | "hoopiq" — segregates the bracket pool
   rosterJson: unknown;
   sixthJson: unknown;
   captainSlot: number;
   seedNet: number;
+  recordW: number;
+  recordL: number;
+  realizedMargin: number;
+  reachedRound: number;
+  championName: string;
+  bracketJson: unknown;
 }
 
 /**
- * Insert a submission and return its submission_id. The UUID is generated in
- * application code and passed explicitly (rather than relying on RETURNING or
- * the DEFAULT uuid()) so the id is deterministic for the caller — no dependence
- * on RETURNING semantics on the MotherDuck pg endpoint. JSON columns are passed
- * as JSON.stringify'd text params (DuckDB casts text → JSON on insert).
+ * Insert a memorialized team. The caller supplies team_id so it can be used as
+ * the bracket owner id (`team:<teamId>`) before persistence. JSON columns are
+ * passed as JSON.stringify'd text params (DuckDB casts text → JSON on insert).
  */
-export async function insertSubmission(
-  args: InsertSubmissionArgs,
-): Promise<string> {
-  const submissionId = randomUUID();
+export async function insertTeam(args: InsertTeamArgs): Promise<void> {
   await queryRW(
-    `INSERT INTO nba_tournament.main.submissions
-       (submission_id, name, name_norm, pin_hash, pin_salt,
-        mode, roster_json, sixth_json, captain_slot, seed_net)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    `INSERT INTO nba_tournament.main.teams
+       (team_id, user_id, mode, roster_json, sixth_json, captain_slot, seed_net,
+        record_w, record_l, realized_margin, reached_round, champion_name, bracket_json)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
-      submissionId,
-      args.name,
-      args.nameNorm,
-      args.pinHash,
-      args.pinSalt,
+      args.teamId,
+      args.userId,
       args.mode,
       JSON.stringify(args.rosterJson),
       JSON.stringify(args.sixthJson),
       args.captainSlot,
       args.seedNet,
-    ],
-  );
-  return submissionId;
-}
-
-export interface InsertTournamentArgs {
-  ownerSubmission: string;
-  championName: string;
-  bracketJson: unknown;
-}
-
-/** Insert a resolved tournament and return its tournament_id (app-generated). */
-export async function insertTournament(
-  args: InsertTournamentArgs,
-): Promise<string> {
-  const tournamentId = randomUUID();
-  await queryRW(
-    `INSERT INTO nba_tournament.main.tournaments
-       (tournament_id, owner_submission, champion_name, bracket_json)
-     VALUES ($1, $2, $3, $4)`,
-    [
-      tournamentId,
-      args.ownerSubmission,
+      args.recordW,
+      args.recordL,
+      args.realizedMargin,
+      args.reachedRound,
       args.championName,
       JSON.stringify(args.bracketJson),
     ],
   );
-  return tournamentId;
 }
 
-/** The most recent stored bracket for a submission (for the lookup/results view). */
-export async function getLatestTournamentForSubmission(
-  submissionId: string,
-): Promise<{ bracket_json: unknown } | null> {
-  const rows = await queryRW<{ bracket_json: string }>(
+interface TeamSummaryRow {
+  team_id: string;
+  mode: string;
+  record_w: number;
+  record_l: number;
+  realized_margin: number;
+  reached_round: number;
+  champion_name: string;
+  created_at: string | Date;
+}
+
+/** All memorialized teams for a user, newest first (lightweight — no bracket). */
+export async function getUserTeams(
+  userId: string,
+): Promise<TournamentTeamSummary[]> {
+  const rows = await queryRW<TeamSummaryRow>(
+    `SELECT team_id, mode, record_w, record_l, realized_margin, reached_round,
+            champion_name, created_at
+       FROM nba_tournament.main.teams
+      WHERE user_id = $1
+      ORDER BY created_at DESC`,
+    [userId],
+  );
+  return rows.map((r) => ({
+    teamId: r.team_id,
+    mode: r.mode as GameMode,
+    recordW: r.record_w,
+    recordL: r.record_l,
+    realizedMargin: r.realized_margin,
+    reachedRound: r.reached_round,
+    championName: r.champion_name,
+    createdAt:
+      r.created_at instanceof Date
+        ? r.created_at.toISOString()
+        : new Date(r.created_at).toISOString(),
+  }));
+}
+
+/** A team's stored bracket (for the public viewer + lookup detail). */
+export async function getTeamBracket(
+  teamId: string,
+): Promise<{ bracketJson: unknown } | null> {
+  const rows = await queryRW<{ bracket_json: unknown }>(
     `SELECT bracket_json
-       FROM nba_tournament.main.tournaments
-      WHERE owner_submission = $1
-      ORDER BY created_at DESC
+       FROM nba_tournament.main.teams
+      WHERE team_id = $1
       LIMIT 1`,
-    [submissionId],
+    [teamId],
   );
   if (!rows[0]) return null;
-  // The pg endpoint returns JSON columns as strings — parse before returning.
-  return { bracket_json: parseJson(rows[0].bracket_json) };
+  // The pg endpoint returns JSON columns as strings — parse defensively.
+  return { bracketJson: parseJson(rows[0].bracket_json) };
 }

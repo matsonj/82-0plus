@@ -6,8 +6,8 @@ import type { BracketResult } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Brackets aren't secret — this is a read-only, no-PIN endpoint for a future
-// share page: GET /api/tournament/bracket?id=<tournament_id>.
+// Brackets aren't secret — this is a read-only, no-PIN endpoint for the public
+// share page: GET /api/tournament/bracket?id=<team_id>.
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     if (!UUID_RE.test(id)) {
       return jsonWithSessionHint(
         sessionHint,
-        { error: "invalid tournament id" },
+        { error: "invalid team id" },
         { status: 400 },
       );
     }
@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
 
     const rows = await queryRW<BracketRow>(
       `SELECT bracket_json, champion_name
-         FROM ${TDB}.tournaments
-        WHERE tournament_id = $1
+         FROM ${TDB}.teams
+        WHERE team_id = $1
         LIMIT 1`,
       [id],
     );

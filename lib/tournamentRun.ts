@@ -16,6 +16,51 @@
 
 import type { BracketResult, TournamentYou } from "./types";
 
+/** A team's realized playoff line: W-L, average point margin, and how far it got. */
+export interface TeamRecord {
+  recordW: number;
+  recordL: number;
+  realizedMargin: number; // avg (teamScore − oppScore) across the team's games
+  reachedRound: number;
+}
+
+/**
+ * Walk the bracket for one team and total its game record + average point margin
+ * (using the per-game box scores) across every series it played. Stops at the
+ * first round it loses (or doesn't appear in). Used to memorialize a team.
+ */
+export function deriveRecord(
+  bracket: BracketResult,
+  teamId: string,
+): TeamRecord {
+  let recordW = 0,
+    recordL = 0,
+    marginSum = 0,
+    games = 0,
+    reachedRound = 0;
+  for (const round of bracket.rounds) {
+    const series = round.find((s) => s.hiId === teamId || s.loId === teamId);
+    if (!series) break;
+    for (const g of series.games) {
+      const isHome = g.homeId === teamId;
+      const mine = isHome ? g.homeScore : g.awayScore;
+      const opp = isHome ? g.awayScore : g.homeScore;
+      marginSum += mine - opp;
+      games += 1;
+      if (g.winnerId === teamId) recordW += 1;
+      else recordL += 1;
+    }
+    if (series.winnerId !== teamId) break;
+    reachedRound += 1;
+  }
+  return {
+    recordW,
+    recordL,
+    realizedMargin: games > 0 ? Math.round((marginSum / games) * 10) / 10 : 0,
+    reachedRound,
+  };
+}
+
 export function deriveYou(
   bracket: BracketResult,
   teamId: string,

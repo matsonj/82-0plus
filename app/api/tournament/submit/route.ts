@@ -1,4 +1,4 @@
-import { scryptSync, randomBytes } from "crypto";
+import { scryptSync, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
 import { simulateRoster } from "@/lib/scoring";
 import { canPlay, type SlotKind } from "@/lib/positions";
@@ -14,12 +14,12 @@ import {
   getStatNorms,
   drawOpponents,
   buildTournamentTeam,
-  findSubmissionByName,
-  insertSubmission,
-  insertTournament,
+  findUserByName,
+  insertUser,
+  insertTeam,
 } from "@/lib/tournamentQueries";
 import { simulateBracket } from "@/lib/tournament";
-import { deriveYou } from "@/lib/tournamentRun";
+import { deriveYou, deriveRecord } from "@/lib/tournamentRun";
 import type { SimPick, TournamentRunResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -156,14 +156,30 @@ export async function POST(req: NextRequest) {
 
     await ensureSchema();
 
-    // ---- One-per-name uniqueness gate ----
-    const existing = await findSubmissionByName(nameNorm);
-    if (existing) {
-      return jsonWithSessionHint(
-        sessionHint,
-        { error: "that name is taken — pick another" },
-        { status: 409 },
-      );
+    // ---- User upsert: same name + correct PIN adds another team; wrong PIN
+    // for an existing name is rejected. A new name creates a fresh user. ----
+    let userId: string;
+    const existingUser = await findUserByName(nameNorm);
+    if (existingUser) {
+      // Re-hash the submitted PIN with the stored salt and compare in constant
+      // time. timingSafeEqual throws on length mismatch, so length-guard first.
+      const candidate = scryptSync(pin, existingUser.pin_salt, 32);
+      const stored = Buffer.from(existingUser.pin_hash, "hex");
+      const matches =
+        candidate.length === stored.length &&
+        timingSafeEqual(candidate, stored);
+      if (!matches) {
+        return jsonWithSessionHint(
+          sessionHint,
+          { error: "that name is taken — wrong PIN" },
+          { status: 409 },
+        );
+      }
+      userId = existingUser.user_id;
+    } else {
+      const salt = randomBytes(16).toString("hex");
+      const pinHash = scryptSync(pin, salt, 32).toString("hex");
+      userId = await insertUser({ name, nameNorm, pinHash, pinSalt: salt });
     }
 
     // ---- Hydrate roster (six players) ----
@@ -192,25 +208,13 @@ export async function POST(req: NextRequest) {
     // ---- Seeding strength: the five's net rating with NO tournament buffs ----
     const seedNet = simulateRoster(hydrated.scoring).netRating;
 
-    // ---- PIN hashing (low-stakes arcade lock) ----
-    const salt = randomBytes(16).toString("hex");
-    const pinHash = scryptSync(pin, salt, 32).toString("hex");
-
-    const submissionId = await insertSubmission({
-      name,
-      nameNorm,
-      pinHash,
-      pinSalt: salt,
-      mode,
-      rosterJson: picks,
-      sixthJson: sixthPick,
-      captainSlot,
-      seedNet,
-    });
-
-    // ---- Build MY team and the 16-team field ----
+    // ---- Generate the team id up front so it's the bracket owner id ----
+    // Multiple teams share a user/name, so the bracket owner must be the
+    // unique teamId (not sub:name). The teamId also seeds simulateBracket so
+    // each team's run is deterministic + unique.
+    const teamId = randomUUID();
     const myTeam = buildTournamentTeam({
-      id: `sub:${nameNorm}`,
+      id: `team:${teamId}`,
       name: nameNorm,
       isGhost: false,
       seedNet,
@@ -230,18 +234,30 @@ export async function POST(req: NextRequest) {
 
     // ---- Simulate + persist the bracket ----
     const statNorms = await getStatNorms(queryOptions);
-    const bracket = simulateBracket(field, submissionId, statNorms);
+    const bracket = simulateBracket(field, teamId, statNorms);
 
-    await insertTournament({
-      ownerSubmission: submissionId,
+    const you = deriveYou(bracket, myTeam.id);
+    const rec = deriveRecord(bracket, myTeam.id);
+
+    await insertTeam({
+      teamId,
+      userId,
+      mode,
+      rosterJson: picks,
+      sixthJson: sixthPick,
+      captainSlot,
+      seedNet,
+      recordW: rec.recordW,
+      recordL: rec.recordL,
+      realizedMargin: rec.realizedMargin,
+      reachedRound: rec.reachedRound,
       championName: bracket.championName,
       bracketJson: bracket,
     });
 
-    const you = deriveYou(bracket, myTeam.id);
     return jsonWithSessionHint(
       sessionHint,
-      { bracket, you } satisfies TournamentRunResponse,
+      { bracket, you, teamId } satisfies TournamentRunResponse,
     );
   } catch (err) {
     console.error("[/api/tournament/submit]", err);

@@ -317,14 +317,47 @@ export function recoveryCarry(
 // Bracket construction + series play.
 // ---------------------------------------------------------------------------
 
-/** Fisher–Yates shuffle driven by a seeded PRNG (deterministic for a seedKey). */
-function seededShuffle<T>(arr: T[], rng: () => number): T[] {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
+// Real-NBA conference by (modern-lineage) franchise abbreviation. A player on a
+// West team is worth +1, an East team −1. A team's region score sums its six
+// players, with the captain counted twice, so it ranges −7..+7. Unknown or
+// conference-ambiguous historical abbreviations are neutral (0). Aligned to
+// MODERN reality on purpose — the split is meant to be a fun, slightly
+// West-favoring nod to recent seasons, not historical pre-merger divisions.
+const WEST_TEAMS: ReadonlySet<string> = new Set([
+  "DAL", "DEN", "GSW", "HOU", "LAC", "LAL", "MEM", "MIN", "NOP", "OKC",
+  "PHX", "POR", "SAC", "SAS", "UTA",
+  // relocated / historical lineage → West
+  "SEA", "VAN", "NOH", "NOK", "SDC", "KCK", "SDR", "PHW", "MNL",
+]);
+const EAST_TEAMS: ReadonlySet<string> = new Set([
+  "ATL", "BOS", "BKN", "CHA", "CHI", "CLE", "DET", "IND", "MIA", "MIL",
+  "NYK", "ORL", "PHI", "TOR", "WAS",
+  // relocated / historical lineage → East
+  "NJN", "WSB", "CHH", "SYR", "BAL", "CIN", "BUF", "ROC", "FTW",
+]);
+
+/** Conference value of a franchise: +1 West, −1 East, 0 unknown/ambiguous. */
+function confVal(team: string): number {
+  if (WEST_TEAMS.has(team)) return 1;
+  if (EAST_TEAMS.has(team)) return -1;
+  return 0;
+}
+
+/**
+ * Region affinity score for a team (−7..+7): +1 per West player, −1 per East
+ * player across the six (5 starters + sixth man), with the CAPTAIN counted an
+ * extra time. Higher → more Western. Reads the display roster (which carries
+ * each player's franchise); 0 when roster info is absent.
+ */
+export function regionScore(team: TournamentTeam): number {
+  let score = 0;
+  for (const p of team.roster ?? []) {
+    const v = confVal(p.team);
+    score += v;
+    if (p.captain) score += v; // captain counts double
   }
-  return out;
+  if (team.sixthManInfo) score += confVal(team.sixthManInfo.team);
+  return score;
 }
 
 /** Summed real height of a team's five starters (drives the size matchup). */
@@ -457,8 +490,9 @@ function playSeries(
 /**
  * Top-level entry: 16 teams → a fully resolved BracketResult.
  *
- * 1. Seeded-shuffle the 16 into East(8)/West(8). Within each conference sort by
- *    seedNet desc → seeds 1..8 (tie-break: seedNet, then id, for determinism).
+ * 1. Region-affinity split: score each team by its players' real conferences
+ *    (West +1 / East −1, captain doubled), top 8 → West / bottom 8 → East (ties
+ *    to seedNet). Within each conference sort by seedNet desc → seeds 1..8.
  * 2. Fixed tree (NO reseed): pairings 1v8 / 4v5 / 3v6 / 2v7. R1 best-of-5; conf
  *    semis, conf finals and the Final are best-of-7. rounds = [8, 4, 2, 1].
  * 3. Each series: higher seed = home court. Per game, adjusted net comes from the
@@ -475,10 +509,17 @@ export function simulateBracket(
     throw new Error(`simulateBracket requires exactly 16 teams, got ${teams.length}`);
   }
 
-  // ---- 1. Seeded split into conferences, then seed within each. ----
-  const shuffled = seededShuffle(teams, mulberry32(hashSeed(seedKey)));
-  const eastRaw = shuffled.slice(0, 8);
-  const westRaw = shuffled.slice(8, 16);
+  // ---- 1. Region-affinity split into conferences, then seed within each. ----
+  // Sort by region score (West-leaning first); ties broken by seedNet (higher →
+  // West), so the West ends up slightly stronger. Top 8 → West, bottom 8 → East.
+  const byRegion = [...teams].sort(
+    (a, b) =>
+      regionScore(b) - regionScore(a) ||
+      b.seedNet - a.seedNet ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+  const westRaw = byRegion.slice(0, 8);
+  const eastRaw = byRegion.slice(8, 16);
 
   const byStrength = (a: TournamentTeam, b: TournamentTeam) =>
     b.seedNet - a.seedNet || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);

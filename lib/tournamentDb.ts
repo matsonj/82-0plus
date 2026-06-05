@@ -81,14 +81,15 @@ export function ensureSchema(): Promise<void> {
     globalThis.__md_rw_schema__ = (async () => {
       await queryRW(`CREATE SCHEMA IF NOT EXISTS ${TDB.split(".")[0]}.main`);
       await queryRW(
-        `CREATE TABLE IF NOT EXISTS ${TDB}.submissions (
-           submission_id UUID DEFAULT uuid(), name VARCHAR, name_norm VARCHAR,
-           pin_hash VARCHAR, pin_salt VARCHAR, mode VARCHAR, roster_json JSON, sixth_json JSON,
-           captain_slot INTEGER, seed_net DOUBLE, created_at TIMESTAMP DEFAULT now())`,
+        `CREATE TABLE IF NOT EXISTS ${TDB}.users (
+           user_id UUID DEFAULT uuid(), name VARCHAR, name_norm VARCHAR,
+           pin_hash VARCHAR, pin_salt VARCHAR, created_at TIMESTAMP DEFAULT now())`,
       );
       await queryRW(
-        `CREATE TABLE IF NOT EXISTS ${TDB}.tournaments (
-           tournament_id UUID DEFAULT uuid(), owner_submission UUID,
+        `CREATE TABLE IF NOT EXISTS ${TDB}.teams (
+           team_id UUID DEFAULT uuid(), user_id UUID, mode VARCHAR,
+           roster_json JSON, sixth_json JSON, captain_slot INTEGER, seed_net DOUBLE,
+           record_w INTEGER, record_l INTEGER, realized_margin DOUBLE, reached_round INTEGER,
            champion_name VARCHAR, bracket_json JSON, created_at TIMESTAMP DEFAULT now())`,
       );
       await queryRW(

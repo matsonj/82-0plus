@@ -12,6 +12,7 @@ import {
   sixthManBuff,
   fatigue,
   recoveryCarry,
+  regionScore,
   simulateBracket,
   type TournamentTeam,
 } from "./tournament";
@@ -386,6 +387,79 @@ describe("simulateBracket: determinism & competitive sanity", () => {
       champs.add(simulateBracket(teams, `flat-${i}`, norms()).championId);
     }
     expect(champs.size).toBeGreaterThan(3);
+  });
+});
+
+describe("region affinity", () => {
+  const ros = (teams: string[], captainIdx: number) =>
+    teams.map((t, i) => ({
+      name: `p${i}`,
+      team: t,
+      season: 1996,
+      ...(i === captainIdx ? { captain: true } : {}),
+    }));
+
+  it("scores +7 for an all-West six (captain doubled) and −7 for all-East", () => {
+    const west = team({
+      roster: ros(["LAL", "GSW", "DEN", "PHX", "DAL"], 0),
+      sixthManInfo: { name: "s", team: "POR", season: 1996 },
+    });
+    expect(regionScore(west)).toBe(7); // 5 starters +1, captain +1 again, sixth +1
+    const east = team({
+      roster: ros(["BOS", "NYK", "MIA", "CHI", "PHI"], 0),
+      sixthManInfo: { name: "s", team: "TOR", season: 1996 },
+    });
+    expect(regionScore(east)).toBe(-7);
+  });
+
+  it("counts the captain twice", () => {
+    const capWest = team({
+      roster: ros(["LAL", "BOS", "NYK", "MIA", "CHI"], 0), // captain = LAL (West)
+      sixthManInfo: { name: "s", team: "ABC", season: 1996 }, // unknown → 0
+    });
+    // starters: +1 −1 −1 −1 −1 = −3, captain (LAL) +1 again = −2, sixth 0 = −2.
+    expect(regionScore(capWest)).toBe(-2);
+    const capEast = team({
+      roster: ros(["BOS", "LAL", "GSW", "DEN", "PHX"], 0), // captain = BOS (East)
+      sixthManInfo: { name: "s", team: "ABC", season: 1996 },
+    });
+    // starters: −1 +1 +1 +1 +1 = +3, captain (BOS) −1 again = +2.
+    expect(regionScore(capEast)).toBe(2);
+  });
+
+  it("unknown franchises are neutral", () => {
+    const neutral = team({
+      roster: ros(["ABC", "XYZ", "QQQ", "ZZZ", "WWW"], 0),
+      sixthManInfo: { name: "s", team: "ABC", season: 1996 },
+    });
+    expect(regionScore(neutral)).toBe(0);
+  });
+
+  it("the eight most-Western teams land in the West", () => {
+    // 8 clearly-West teams + 8 clearly-East teams.
+    const westRosters = Array.from({ length: 8 }, (_, i) =>
+      team({
+        id: `W${i}`,
+        seedNet: i,
+        roster: ros(["LAL", "GSW", "DEN", "PHX", "DAL"], 0),
+        sixthManInfo: { name: "s", team: "POR", season: 1996 },
+      }),
+    );
+    const eastRosters = Array.from({ length: 8 }, (_, i) =>
+      team({
+        id: `E${i}`,
+        seedNet: i,
+        roster: ros(["BOS", "NYK", "MIA", "CHI", "PHI"], 0),
+        sixthManInfo: { name: "s", team: "TOR", season: 1996 },
+      }),
+    );
+    const r = simulateBracket([...eastRosters, ...westRosters], "region", norms());
+    const west = r.teams.filter((t) => t.conference === "West");
+    const east = r.teams.filter((t) => t.conference === "East");
+    expect(west).toHaveLength(8);
+    expect(east).toHaveLength(8);
+    expect(west.every((t) => t.id.startsWith("W"))).toBe(true);
+    expect(east.every((t) => t.id.startsWith("E"))).toBe(true);
   });
 });
 

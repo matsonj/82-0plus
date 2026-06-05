@@ -207,8 +207,29 @@ export interface TournamentSubmitRequest {
   sixthPick: { entity_id: string; team: string; decade: number }; // bench player (no slot)
 }
 
-/** Response for both /api/tournament/submit and /api/tournament/lookup. */
+/** Response for /api/tournament/submit and /api/tournament/team (a single run). */
 export interface TournamentRunResponse {
   bracket: BracketResult;
   you: TournamentYou;
+  teamId?: string; // the persisted team this run was saved as
+}
+
+/** One memorialized team in a user's list (lightweight — no bracket payload). */
+export interface TournamentTeamSummary {
+  teamId: string;
+  mode: GameMode;
+  recordW: number;
+  recordL: number;
+  realizedMargin: number; // avg point margin in the playoffs, e.g. +5.2
+  championName: string;
+  reachedRound: number; // 0 = lost R1 … 4 = champion
+  createdAt: string; // ISO timestamp
+  roster?: BracketPlayer[]; // the five starters (quick peek)
+  sixthMan?: BracketPlayer;
+}
+
+/** Response for /api/tournament/lookup — a user (name) and their teams. */
+export interface TournamentLookupResponse {
+  name: string; // the user handle (normalized)
+  teams: TournamentTeamSummary[];
 }
