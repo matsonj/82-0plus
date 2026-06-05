@@ -7,6 +7,23 @@ import type {
   BracketTeam,
 } from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
+import { buildTournamentShareImage } from "@/lib/shareImage";
+import { SITE_URL } from "@/lib/site";
+
+// Reg-season W-L from the team rating (the five's net): wins = 41 + 2.7·net,
+// clamped to an 82-game season — mirrors lib/scoring's projection.
+function regSeasonRecord(seedNet: number): { w: number; l: number } {
+  const w = Math.max(0, Math.min(82, Math.round(41 + 2.7 * seedNet)));
+  return { w, l: 82 - w };
+}
+
+// Compact "how far" label for the share image.
+function shortReached(reachedRound: number, isChampion: boolean): string {
+  if (isChampion) return "Champion";
+  return ["Lost R1", "Lost Conf Semis", "Lost Conf Finals", "Lost the Final"][
+    reachedRound
+  ] ?? "Eliminated";
+}
 
 // Signed net-rating string, deliberately ROUNDED TO A WHOLE NUMBER so the team
 // rating reads as a ballpark, not a precise competitive figure. e.g. "+5" / "−3".
@@ -207,9 +224,115 @@ export function TournamentResults({
   const isChampion = bracket.championId === you.id;
   const myTeam = bracket.teams.find((t) => t.id === you.id);
   const [showRoster, setShowRoster] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const shareLink = data.teamId ? `${SITE_URL}/t/${data.teamId}` : SITE_URL;
+
+  const share = async () => {
+    if (!myTeam) return;
+    setSharing(true);
+    try {
+      const reg = regSeasonRecord(myTeam.seedNet);
+      const playoff = computeRoundRecords(bracket, you.id);
+      const blob = await buildTournamentShareImage({
+        teamName: you.name,
+        conference: you.conference,
+        seed: you.seed,
+        isChampion,
+        reachedLabel: shortReached(you.reachedRound, isChampion),
+        regWins: reg.w,
+        regLosses: reg.l,
+        playoffWins: playoff.totalW,
+        playoffLosses: playoff.totalL,
+        roster: myTeam.roster ?? [],
+        sixthMan: myTeam.sixthMan,
+      });
+      try {
+        await navigator.clipboard.writeText(shareLink); // link on the clipboard too
+      } catch {
+        /* clipboard blocked */
+      }
+      if (blob) {
+        setShareUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(blob);
+        });
+      }
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const closeShare = () => {
+    if (shareUrl) URL.revokeObjectURL(shareUrl);
+    setShareUrl(null);
+    setLinkCopied(false);
+  };
 
   return (
     <div className="flex flex-col gap-6">
+      {shareUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(56,56,56,0.55)" }}
+          onClick={closeShare}
+        >
+          <div
+            className="md-card md-card--lift w-full max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="font-display text-lg font-bold">Share your run</h3>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={closeShare}
+                className="font-display text-lg text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
+              >
+                ✕
+              </button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={shareUrl}
+              alt="Your tournament result card"
+              className="mt-3 w-full border-2 border-[var(--md-ink)]"
+            />
+            <p className="mt-2 text-center text-[13px] leading-snug text-[var(--md-ink-muted)]">
+              <strong>Right-click to copy and share.</strong> The link is already
+              on your clipboard.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a
+                className="md-btn md-btn--sm md-btn--secondary"
+                href={shareUrl}
+                download="82-0-tournament.png"
+              >
+                Download
+              </a>
+              <button
+                className="md-btn md-btn--sm md-btn--secondary"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(shareLink);
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 1500);
+                  } catch {
+                    /* clipboard blocked */
+                  }
+                }}
+              >
+                {linkCopied ? "Link copied!" : "Copy link"}
+              </button>
+              <button className="md-btn md-btn--sm md-btn--ink" onClick={closeShare}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Hero — the player's run, ResultsPanel aesthetic. */}
       <div className="md-card md-card--lift flex flex-col gap-4 p-4 sm:p-5">
         <div className="text-center">
@@ -287,13 +410,22 @@ export function TournamentResults({
           </div>
         </div>
 
-        {onReset && (
-          <div className="flex justify-center">
+        <div className="flex flex-wrap justify-center gap-2">
+          {myTeam && (
+            <button
+              className="md-btn md-btn--lg md-btn--teal"
+              onClick={share}
+              disabled={sharing}
+            >
+              {sharing ? "Building…" : "Share result"}
+            </button>
+          )}
+          {onReset && (
             <button className="md-btn md-btn--lg md-btn--ink" onClick={onReset}>
               Back to menu
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* The full bracket, with the user's team highlighted across rounds. */}
