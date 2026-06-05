@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type {
   GameMode,
   PublicPlayer,
@@ -545,12 +546,38 @@ export default function Home() {
               </p>
             </button>
           </div>
-          <button
-            className="mt-6 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-            onClick={() => setShowHowTo(true)}
+          <Link
+            href="/tournament"
+            className="md-card md-card--lift mt-6 block w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5"
+            style={{ background: "var(--md-orange)" }}
           >
-            How to play
-          </button>
+            <div className="flex items-center justify-between">
+              <div className="font-display text-xl font-bold">
+                Tournament — NBA Jam Edition
+              </div>
+              <span className="text-2xl" aria-hidden>
+                🏀
+              </span>
+            </div>
+            <p className="mt-1 text-[13px] text-[var(--md-ink)]">
+              Draft six, name a captain, get seeded into a 16-team bracket.
+            </p>
+          </Link>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
+            <button
+              className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+              onClick={() => setShowHowTo(true)}
+            >
+              How to play
+            </button>
+            <Link
+              href="/tournament"
+              className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+            >
+              Check your team →
+            </Link>
+          </div>
         </section>
       )}
 
