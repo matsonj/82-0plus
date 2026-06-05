@@ -90,7 +90,7 @@ async function main(): Promise<void> {
   console.log(`[tune] building a 16-team ghost field via drawOpponents…`);
   // "__none__" never matches a real submission name_norm, so the field is topped
   // up entirely from the ghosts table (run seedGhosts.ts first).
-  const drawn = await drawOpponents("__none__");
+  const drawn = await drawOpponents("__none__", {}, 16);
   console.log(`[tune] drawOpponents returned ${drawn.length} teams.`);
   if (drawn.length < 16) {
     throw new Error(

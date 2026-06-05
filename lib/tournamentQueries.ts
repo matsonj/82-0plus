@@ -283,8 +283,9 @@ async function hydrateStoredTeam(
 export async function drawOpponents(
   myNameNorm: string,
   options: QueryOptions = {},
+  field = 15,
 ): Promise<TournamentTeam[]> {
-  const FIELD = 15;
+  const FIELD = field;
   const subs = await queryRW<StoredTeamRow>(
     `SELECT name, name_norm, roster_json, sixth_json, captain_slot, seed_net
        FROM nba_tournament.main.submissions
