@@ -226,27 +226,20 @@ function SeriesCard({
 function RoundGroup({
   label,
   series,
-  align,
   nameOf,
   teamOf,
   youId,
 }: {
   label: string;
   series: SeriesResult[];
-  align: "left" | "right";
   nameOf: (id: string) => string;
   teamOf: (id: string) => BracketTeam | undefined;
   youId?: string;
 }) {
+  if (series.length === 0) return null;
   return (
-    // Centered vertically so later (fewer) rounds line up against earlier ones,
-    // giving the staggered bracket feel on wide screens.
-    <div className="flex flex-1 flex-col justify-center gap-2">
-      <div
-        className={`font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)] ${
-          align === "right" ? "text-right" : "text-left"
-        }`}
-      >
+    <div className="flex flex-col gap-2">
+      <div className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
         {label}
       </div>
       {series.map((s, i) => (
@@ -286,58 +279,45 @@ export function BracketView({
   const east = confColumn("East");
   const west = confColumn("West");
 
-  // East flows toward the center Final (R1 → ConfFinals left-to-right); West is
-  // mirrored so it reads right-to-left into the same Final. On narrow screens
-  // each conference simply stacks top-to-bottom.
+  // Each conference is a single vertical column: Round 1 → Conf. Semifinals →
+  // Conf. Finals, top to bottom. On desktop the two conferences sit side by side
+  // and both feed the Final below; on mobile they stack. (A horizontal
+  // round-by-round bracket doesn't fit the column width without colliding.)
   const ConfRail = ({
     conf,
     rounds,
-    dir,
   }: {
     conf: string;
     rounds: SeriesResult[][];
-    dir: "ltr" | "rtl";
-  }) => {
-    const align = dir === "rtl" ? "right" : "left";
-    const groups = rounds.map((series, r) => (
-      <RoundGroup
-        key={r}
-        label={ROUND_LABEL[r]}
-        series={series}
-        align={align}
-        nameOf={nameOf}
-        teamOf={teamOf}
-        youId={youId}
-      />
-    ));
-    return (
-      <div className="flex flex-col gap-2">
-        <div
-          className={`md-capsule ${
-            conf === "West" ? "md-capsule--sky" : ""
-          } self-start ${dir === "rtl" ? "lg:self-end" : ""}`}
-        >
-          {conf}
-        </div>
-        {/* Stacked on mobile, side-by-side rounds (a true bracket) on desktop. */}
-        <div
-          className={`flex flex-col gap-3 lg:flex-row lg:gap-4 ${
-            dir === "rtl" ? "lg:flex-row-reverse" : ""
-          }`}
-        >
-          {groups}
-        </div>
+  }) => (
+    <div className="flex flex-col gap-3">
+      <div
+        className={`md-capsule self-start ${
+          conf === "West" ? "md-capsule--sky" : ""
+        }`}
+      >
+        {conf}
       </div>
-    );
-  };
+      {rounds.map((series, r) => (
+        <RoundGroup
+          key={r}
+          label={ROUND_LABEL[r]}
+          series={series}
+          nameOf={nameOf}
+          teamOf={teamOf}
+          youId={youId}
+        />
+      ))}
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-6">
-      {/* The two conference rails. On lg, East sits left, West right, both
-          feeding the Final below. */}
-      <div className="grid gap-6 lg:grid-cols-2 lg:gap-5">
-        <ConfRail conf="East" rounds={east} dir="ltr" />
-        <ConfRail conf="West" rounds={west} dir="rtl" />
+      {/* Two conference columns side by side on desktop, stacked on mobile,
+          both feeding the Final below. */}
+      <div className="grid items-start gap-6 lg:grid-cols-2 lg:gap-5">
+        <ConfRail conf="East" rounds={east} />
+        <ConfRail conf="West" rounds={west} />
       </div>
 
       {/* The Final — center stage. */}
