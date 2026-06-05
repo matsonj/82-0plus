@@ -102,22 +102,21 @@ export function PlayerList({
   const available = useMemo(() => all.filter(draftable), [all, draftable]);
   const rows = useMemo(() => {
     const nq = norm(q);
-    const filtered = available.filter(
+    const filtered = all.filter(
       (p) =>
         (posFilter === "all" || p.positions.includes(posFilter)) &&
         (nq === "" || norm(p.player_name).includes(nq)),
     );
     // Default + HoopIQ stay on the server's minutes order; Classic can re-sort.
-    if (mode === "classic" && sortKey !== "mpg") {
+    // Non-eligible players keep their natural sort position — just greyed, not
+    // pushed to the bottom.
+    if (mode === "classic") {
       return [...filtered].sort(
         (a, b) => Number(b[sortKey] ?? 0) - Number(a[sortKey] ?? 0),
       );
     }
-    if (mode === "classic" && sortKey === "mpg") {
-      return [...filtered].sort((a, b) => Number(b.mpg ?? 0) - Number(a.mpg ?? 0));
-    }
     return filtered;
-  }, [available, q, sortKey, posFilter, mode]);
+  }, [all, q, sortKey, posFilter, mode]);
 
   const noneEligible = status === "ok" && available.length === 0;
 
@@ -201,17 +200,27 @@ export function PlayerList({
             )}
           </div>
         )}
-        {status === "ok" && available.length > 0 && rows.length === 0 && (
+        {status === "ok" && !noneEligible && rows.length === 0 && (
           <div className="px-3 py-6 text-center font-display text-sm text-[var(--md-ink-muted)]">
             No {posFilter === "all" ? "" : `${posFilter} `}players match.
           </div>
         )}
         {status === "ok" &&
-          rows.map((p, i) => (
+          rows.map((p, i) => {
+            // Greyed + unclickable when the player can't fill any open slot —
+            // shown rather than hidden so you can see who's on the roster.
+            const eligible = draftable(p);
+            return (
             <button
               key={p.entity_id}
               onClick={() => onPick(p)}
-              className="flex w-full items-center justify-between gap-3 border-b border-[var(--md-paper-3)] px-3 py-2 text-left transition-colors hover:bg-[var(--md-yellow)]"
+              disabled={!eligible}
+              title={eligible ? undefined : "No open slot fits his position"}
+              className={`flex w-full items-center justify-between gap-3 border-b border-[var(--md-paper-3)] px-3 py-2 text-left transition-colors ${
+                eligible
+                  ? "hover:bg-[var(--md-yellow)]"
+                  : "cursor-not-allowed opacity-40"
+              }`}
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -263,7 +272,8 @@ export function PlayerList({
                 )}
               </div>
             </button>
-          ))}
+            );
+          })}
       </div>
     </div>
   );

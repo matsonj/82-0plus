@@ -95,6 +95,23 @@ export function primaryRole(p: RoleInput): Role {
   return "W";
 }
 
+// b-ref letter → a 1–5 court position value (G=1, F=3, C=5). A combo position
+// is the mean of its parts, so G-F=2 and F-C=4 fall naturally between the pures,
+// regardless of token order ("C-F" === "F-C" === 4). Used to order a finished
+// roster backcourt → frontcourt.
+const POS_VALUE: Record<string, number> = { G: 1, F: 3, C: 5 };
+
+/** A 1–5 court position rank from a b-ref pos string; 3 (neutral) when unknown. */
+export function positionRank(pos?: string | null): number {
+  if (!pos) return 3;
+  const vals = pos
+    .split("-")
+    .map((t) => POS_VALUE[t.trim().toUpperCase()])
+    .filter((v): v is number => v !== undefined);
+  if (vals.length === 0) return 3;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
 export function roleCounts(players: RoleInput[]): Record<Role, number> {
   const counts: Record<Role, number> = { G: 0, W: 0, B: 0 };
   for (const p of players) counts[primaryRole(p)] += 1;

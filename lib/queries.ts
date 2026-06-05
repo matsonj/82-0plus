@@ -1,5 +1,5 @@
 import { query, type QueryOptions } from "./motherduck";
-import { eligiblePositions } from "./positions";
+import { eligiblePositions, positionRank } from "./positions";
 import type { GameMode, PublicPlayer, SimPick, SimRosterLine } from "./types";
 import type { ScoringPlayer } from "./scoring";
 
@@ -347,5 +347,12 @@ export async function hydrateRoster(
       allDef: p.all_def ?? 0,
     });
   }
-  return { scoring, lines, players };
+  // Display order: backcourt → frontcourt by real position (G, G-F, F, F-C, C),
+  // tiebroken by lineup slot (G, FLEX, W, FLEX, B). scoring/players stay in slot
+  // order — the route's per-slot eligibility check indexes them against picks.
+  const orderedLines = lines
+    .map((line, i) => ({ line, rank: positionRank(players[i].pos), slot: picks[i].slot }))
+    .sort((a, b) => a.rank - b.rank || a.slot - b.slot)
+    .map((o) => o.line);
+  return { scoring, lines: orderedLines, players };
 }
