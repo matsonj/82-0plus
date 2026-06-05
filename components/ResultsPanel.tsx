@@ -289,15 +289,15 @@ export function ResultsPanel({
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex gap-2">
           <button
-            className="md-btn md-btn--lg md-btn--teal"
+            className="md-btn md-btn--lg md-btn--teal flex-1"
             onClick={share}
             disabled={status === "working"}
           >
             {status === "working" ? "Building…" : "Share result"}
           </button>
-          <button className="md-btn md-btn--lg md-btn--ink" onClick={onReset}>
+          <button className="md-btn md-btn--lg md-btn--ink flex-1" onClick={onReset}>
             Play again
           </button>
         </div>
