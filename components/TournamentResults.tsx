@@ -1,7 +1,61 @@
 "use client";
 
-import type { TournamentRunResponse, BracketResult } from "@/lib/types";
+import { useState } from "react";
+import type {
+  TournamentRunResponse,
+  BracketResult,
+  BracketTeam,
+} from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
+
+// Signed net-rating string, deliberately ROUNDED TO A WHOLE NUMBER so the team
+// rating reads as a ballpark, not a precise competitive figure. e.g. "+5" / "−3".
+function fmtNet(n: number): string {
+  const v = Math.round(n);
+  return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v)}`;
+}
+
+// The user's own roster (five starters with the captain flagged, then the sixth
+// man) — revealed by the "Show roster" toggle on the results page.
+function MyRoster({ team }: { team: BracketTeam }) {
+  if (!team.roster) return null;
+  return (
+    <div className="mt-3 border-t-2 border-dashed border-[var(--md-ink)] pt-2 text-left">
+      {team.roster.map((p, i) => (
+        <div
+          key={`${p.team}-${p.name}-${i}`}
+          className="flex items-baseline justify-between gap-2 py-0.5 font-display text-[12px]"
+        >
+          <span className="min-w-0 truncate">
+            {p.name}
+            {p.captain ? (
+              <span className="ml-1 inline-block border border-[var(--md-ink)] bg-[var(--md-yellow)] px-1 text-[8px] font-bold uppercase leading-tight tracking-wide align-middle">
+                C
+              </span>
+            ) : null}
+          </span>
+          <span className="shrink-0 text-[11px] text-[var(--md-orange-deep)]">
+            {p.team} &rsquo;{String(p.season).slice(2)}
+          </span>
+        </div>
+      ))}
+      {team.sixthMan && (
+        <>
+          <div className="my-1 border-t border-[var(--md-paper-3)]" />
+          <div className="font-display text-[9px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+            Sixth Man
+          </div>
+          <div className="flex items-baseline justify-between gap-2 py-0.5 font-display text-[12px]">
+            <span className="min-w-0 truncate">{team.sixthMan.name}</span>
+            <span className="shrink-0 text-[11px] text-[var(--md-orange-deep)]">
+              {team.sixthMan.team} &rsquo;{String(team.sixthMan.season).slice(2)}
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 // Round labels for the user's record summary, by round index (0..3).
 const RECORD_ROUND_LABEL = ["R1", "R2", "R3", "FINAL"];
@@ -151,6 +205,8 @@ export function TournamentResults({
 }) {
   const { bracket, you } = data;
   const isChampion = bracket.championId === you.id;
+  const myTeam = bracket.teams.find((t) => t.id === you.id);
+  const [showRoster, setShowRoster] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
@@ -190,7 +246,33 @@ export function TournamentResults({
           <div className="mt-3">
             <ProgressPips reachedRound={you.reachedRound} isChampion={isChampion} />
           </div>
+
+          {/* Team rating (the five's net at the end of Classic/HoopIQ — no
+              tournament buffs, no sixth man) + a roster reveal. Kept understated
+              and rounded, on purpose. */}
+          {myTeam && (
+            <div className="mt-3 text-[var(--md-ink-muted)]">
+              <span className="font-display text-[13px]">
+                Team rating{" "}
+                <span className="font-bold">{fmtNet(myTeam.seedNet)}</span>
+              </span>
+              {myTeam.roster && (
+                <>
+                  <span className="px-1.5">·</span>
+                  <button
+                    type="button"
+                    className="font-display text-[13px] font-bold text-[var(--md-blue)] underline"
+                    onClick={() => setShowRoster((v) => !v)}
+                  >
+                    {showRoster ? "Hide roster" : "Show roster"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
+
+        {myTeam && showRoster && <MyRoster team={myTeam} />}
 
         {/* The player's own per-round + total game record. */}
         <RecordSummary bracket={bracket} youId={you.id} />

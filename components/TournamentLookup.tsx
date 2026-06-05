@@ -120,6 +120,11 @@ type View = "form" | "list" | "team";
 export function TournamentLookup({ onBack }: { onBack?: () => void }) {
   const [view, setView] = useState<View>("form");
 
+  // True until we've checked for a saved session on mount. While true (and a
+  // saved user exists) we show a loader, not the login form, so a logged-in
+  // player never sees the login page.
+  const [bootingSession, setBootingSession] = useState(true);
+
   // Form state.
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
@@ -182,14 +187,19 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
     void runLookup(name, pin);
   };
 
-  // Auto-login from a saved session: jump straight to the teams list.
+  // Auto-login from a saved session: jump straight to the teams list (showing a
+  // loader, never the login form, while it resolves).
   useEffect(() => {
     const saved = getSavedUser();
-    if (saved) {
-      setName(saved.username);
-      setPin(saved.pin);
-      void runLookup(saved.username, saved.pin, true);
+    if (!saved) {
+      setBootingSession(false);
+      return;
     }
+    setName(saved.username);
+    setPin(saved.pin);
+    runLookup(saved.username, saved.pin, true).finally(() =>
+      setBootingSession(false),
+    );
   }, [runLookup]);
 
   const logOut = () => {
@@ -290,6 +300,15 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
             ← Check a different name
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // While restoring a saved session, show a loader — never the login form.
+  if (bootingSession) {
+    return (
+      <div className="mx-auto w-full max-w-md py-16 text-center font-display text-sm text-[var(--md-ink-muted)]">
+        Loading your teams…
       </div>
     );
   }
