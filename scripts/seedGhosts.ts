@@ -47,6 +47,10 @@ const GHOST_COUNT = 60;
 // the ghost field uniformly hard to beat for the championship.
 const NET_FLOOR = 5;
 
+// Roster diversity: at most this many players from any single decade (across all
+// six — five starters + the sixth man). Keeps ghosts from being all-one-era.
+const MAX_PER_DECADE = 2;
+
 // Max resample attempts per ghost before we widen to the strongest-players pool.
 // With high-GQ-biased sampling the floor is usually cleared in a handful of
 // tries; this cap just guards against pathological deadlock.
@@ -120,15 +124,18 @@ interface Picked {
 
 /**
  * Build ONE valid 6-man ghost from the index for a given GQ band:
- *  - 5 starters filling [G, FLEX, W, FLEX, B] (respect canPlay per slot; distinct)
- *  - a 6th bench player (any eligibility, distinct from the five)
+ *  - 5 starters filling [G, FLEX, W, FLEX, B] (respect canPlay per slot)
+ *  - a 6th bench player (any eligibility)
+ * Constraints across the whole six:
+ *  - NO duplicate PLAYERS — deduped by entity_id, so a player who appears under
+ *    multiple team/decade rows can't be picked twice.
+ *  - at most MAX_PER_DECADE players from the same decade.
  * Sampling is biased to the band but falls back to `strongPool` (the strongest
  * players in the index, NOT the full index) if a band is too thin to fill a
- * slot — that keeps every roster strong while never deadlocking. Returns null
- * only if even the strong pool can't satisfy the board.
+ * slot — keeping every roster strong without deadlocking. Returns null if the
+ * board can't be satisfied under the constraints (the caller resamples).
  *
- * This is the single-shot builder; the NET_FLOOR is enforced by the
- * reject-and-resample loop in buildStrongGhost.
+ * The NET_FLOOR is enforced by the reject-and-resample loop in buildStrongGhost.
  */
 function buildGhostRoster(
   index: IndexedPlayer[],
@@ -137,37 +144,37 @@ function buildGhostRoster(
   rng: () => number,
 ): { starters: Picked[]; sixth: IndexedPlayer } | null {
   const inBand = index.filter((p) => p.value >= band.lo && p.value <= band.hi);
+
+  const usedIds = new Set<string>(); // entity_id — no repeated players
+  const decadeCounts = new Map<number, number>(); // ≤ MAX_PER_DECADE each
+  const canTake = (p: IndexedPlayer) =>
+    !usedIds.has(p.entity_id) &&
+    (decadeCounts.get(p.decade) ?? 0) < MAX_PER_DECADE;
+  const take = (p: IndexedPlayer) => {
+    usedIds.add(p.entity_id);
+    decadeCounts.set(p.decade, (decadeCounts.get(p.decade) ?? 0) + 1);
+  };
   // Prefer the band; fall back to the STRONG pool so a slot is always fillable
   // without ever reaching into weak players.
-  const pickFrom = (
-    pool: IndexedPlayer[],
-    slot: SlotKind,
-    used: Set<string>,
-  ): IndexedPlayer | null => {
-    const eligible = pool.filter(
-      (p) => !used.has(keyOf(p)) && canPlay(p, slot),
-    );
+  const pickFrom = (pool: IndexedPlayer[], slot: SlotKind): IndexedPlayer | null => {
+    const eligible = pool.filter((p) => canTake(p) && canPlay(p, slot));
     if (eligible.length === 0) return null;
     return eligible[Math.floor(rng() * eligible.length)];
   };
 
-  const used = new Set<string>();
   const starters: Picked[] = [];
   for (let slot = 0; slot < SLOT_ORDER.length; slot++) {
     const kind = SLOT_ORDER[slot];
-    const player =
-      pickFrom(inBand, kind, used) ?? pickFrom(strongPool, kind, used);
+    const player = pickFrom(inBand, kind) ?? pickFrom(strongPool, kind);
     if (!player) return null;
-    used.add(keyOf(player));
+    take(player);
     starters.push({ player, slot });
   }
 
-  // Sixth man: any eligibility, distinct from the five. Prefer the band, fall
-  // back to the strong pool (the bench is cosmetic for seed_net but we keep the
-  // whole field strong).
-  const sixthPool = inBand.filter((p) => !used.has(keyOf(p)));
-  const fallbackPool = strongPool.filter((p) => !used.has(keyOf(p)));
-  const pool = sixthPool.length > 0 ? sixthPool : fallbackPool;
+  // Sixth man: any eligibility, but still distinct + within the decade cap.
+  const sixthBand = inBand.filter(canTake);
+  const sixthFallback = strongPool.filter(canTake);
+  const pool = sixthBand.length > 0 ? sixthBand : sixthFallback;
   if (pool.length === 0) return null;
   const sixth = pool[Math.floor(rng() * pool.length)];
 
@@ -203,11 +210,6 @@ function buildStrongGhost(
   return best;
 }
 
-/** Stable de-dup key for an index row (a player can appear per team+decade). */
-function keyOf(p: IndexedPlayer): string {
-  return `${p.entity_id}|${p.team}|${p.decade}`;
-}
-
 async function main(): Promise<void> {
   console.log("[seedGhosts] ensuring tournament schema…");
   await ensureSchema();
@@ -220,8 +222,9 @@ async function main(): Promise<void> {
   }
 
   // Deterministic field: a single seeded PRNG drives every choice. Bumped to
-  // "ghosts-v2" since the field is changing (now uniformly strong, net >= 5).
-  const rng = mulberry32(hashSeed("ghosts-v2"));
+  // "ghosts-v3" since the field is changing (uniformly strong net >= 5, no
+  // duplicate players, ≤2 players per decade).
+  const rng = mulberry32(hashSeed("ghosts-v3"));
 
   // The "strong pool" used as the sampling fallback: the top slice of the index
   // by GQ. Widening to this (rather than the full index) keeps every roster

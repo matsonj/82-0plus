@@ -136,6 +136,8 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
   const [run, setRun] = useState<TournamentRunResponse | null>(null);
   const [loadingTeamId, setLoadingTeamId] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  const [page, setPage] = useState(0); // teams-list page (10 per page)
+  const TEAMS_PER_PAGE = 10;
 
   const nameCheck = validateName(name);
   const pinOk = validatePin(pin);
@@ -147,6 +149,7 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
     setLoadingTeamId(null);
     setListError(null);
     setError(null);
+    setPage(0);
     setView("form");
   };
 
@@ -171,6 +174,7 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
         const data = (await res.json()) as TournamentLookupResponse;
         saveUser({ username: uname, pin: upin }); // stay logged in
         setLookup(data);
+        setPage(0);
         setView("list");
       } catch {
         if (!silent) setError("Couldn't check your team right now. Try again.");
@@ -247,6 +251,12 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
   // ---- Teams list view. ----
   if (view === "list" && lookup) {
     const teams = lookup.teams;
+    const pageCount = Math.max(1, Math.ceil(teams.length / TEAMS_PER_PAGE));
+    const safePage = Math.min(page, pageCount - 1);
+    const shown = teams.slice(
+      safePage * TEAMS_PER_PAGE,
+      safePage * TEAMS_PER_PAGE + TEAMS_PER_PAGE,
+    );
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-4">
         <div className="flex items-end justify-between gap-3">
@@ -280,7 +290,7 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {teams.map((team) => (
+            {shown.map((team) => (
               <TeamRow
                 key={team.teamId}
                 team={team}
@@ -288,6 +298,30 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
                 loading={loadingTeamId === team.teamId}
               />
             ))}
+          </div>
+        )}
+
+        {pageCount > 1 && (
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              className="md-btn md-btn--sm md-btn--secondary"
+              disabled={safePage === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              ← Newer
+            </button>
+            <span className="font-display text-xs uppercase tracking-wide text-[var(--md-ink-muted)]">
+              Page {safePage + 1} of {pageCount}
+            </span>
+            <button
+              type="button"
+              className="md-btn md-btn--sm md-btn--secondary"
+              disabled={safePage >= pageCount - 1}
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            >
+              Older →
+            </button>
           </div>
         )}
 

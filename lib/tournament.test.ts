@@ -273,12 +273,10 @@ describe("simulateBracket: structure", () => {
     expect(conf(r2)).toEqual(conf(r));
   });
 
-  it("rounds are [8, 4, 2, 1] with best-of-5 R1 and best-of-7 after", () => {
+  it("rounds are [8, 4, 2, 1] and every round is best-of-7", () => {
     const r = simulateBracket(field(Array.from({ length: 16 }, (_, i) => i)), "k", norms());
     expect(r.rounds.map((rd) => rd.length)).toEqual([8, 4, 2, 1]);
-    for (const s of r.rounds[0]) expect(s.bestOf).toBe(5);
-    for (const rd of r.rounds.slice(1))
-      for (const s of rd) expect(s.bestOf).toBe(7);
+    for (const rd of r.rounds) for (const s of rd) expect(s.bestOf).toBe(7);
   });
 
   it("threads each team's display roster (5 + captain flag) and sixth man into the bracket", () => {
@@ -295,14 +293,9 @@ describe("simulateBracket: structure", () => {
     }
   });
 
-  it("series stop at the clinch number (3 of 5, 4 of 7)", () => {
+  it("series stop at the best-of-7 clinch number (4)", () => {
     const r = simulateBracket(field(Array.from({ length: 16 }, (_, i) => i)), "k", norms());
-    for (const s of r.rounds[0]) {
-      expect(Math.max(s.scoreHi, s.scoreLo)).toBe(3); // best-of-5 clinch
-      expect(s.games.length).toBeLessThanOrEqual(5);
-      expect(s.games.length).toBeGreaterThanOrEqual(3);
-    }
-    for (const rd of r.rounds.slice(1))
+    for (const rd of r.rounds)
       for (const s of rd) {
         expect(Math.max(s.scoreHi, s.scoreLo)).toBe(4); // best-of-7 clinch
         expect(s.games.length).toBeLessThanOrEqual(7);

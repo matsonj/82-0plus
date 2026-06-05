@@ -37,10 +37,9 @@ export function TournamentHowToPlay({ onClose }: { onClose: () => void }) {
             rating. Classic teams play Classic, HoopIQ plays HoopIQ.
           </li>
           <li>
-            <strong>Survive the series.</strong> Best-of-5 in round one, best-of-7
-            after. Home court, height, a sixth-man-driven recovery, fatigue (older
-            teams fade) and a roster-fit <strong>game score</strong> all swing the
-            games.
+            <strong>Survive the series.</strong> Every round is a best-of-7. Home
+            court, height, a sixth-man-driven recovery, fatigue (older teams fade)
+            and a roster-fit <strong>game score</strong> all swing the games.
           </li>
           <li>
             <strong>Come back any time.</strong> Your account (name + PIN)

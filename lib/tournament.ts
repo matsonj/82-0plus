@@ -393,7 +393,8 @@ function starterHeight(team: TournamentTeam): number {
   return team.starters.reduce((a, p) => a + p.height_in, 0);
 }
 
-/** R1 is best-of-5; everything after is best-of-7. clinch = majority. */
+/** Every round is best-of-7 (clinch = 4). The bo5 entries remain for the type
+ *  but are unused now. */
 const CLINCH: Record<5 | 7, number> = { 5: 3, 7: 4 };
 
 /** Home/away game ownership by the HIGHER seed (`hi`): 2-2-1 / 2-3-2. */
@@ -518,7 +519,7 @@ function playSeries(
  * 1. Region-affinity split: score each team by its players' real conferences
  *    (West +1 / East −1, captain doubled), top 8 → West / bottom 8 → East (ties
  *    to seedNet). Within each conference sort by seedNet desc → seeds 1..8.
- * 2. Fixed tree (NO reseed): pairings 1v8 / 4v5 / 3v6 / 2v7. R1 best-of-5; conf
+ * 2. Fixed tree (NO reseed): pairings 1v8 / 4v5 / 3v6 / 2v7. Every round best-of-7; conf
  *    semis, conf finals and the Final are best-of-7. rounds = [8, 4, 2, 1].
  * 3. Each series: higher seed = home court. Per game, adjusted net comes from the
  *    breakdown; the winner is the higher adj; recovery carry flows from the
@@ -648,9 +649,9 @@ export function simulateBracket(
   const confR1 = (seeded: { team: TournamentTeam }[]): [Slot, Slot][] =>
     R1_PAIRS.map(([a, b]) => [{ team: seeded[a].team }, { team: seeded[b].team }]);
 
-  // Round 1 (best-of-5): 8 series total (4 East + 4 West).
-  const eR1 = playRound(confR1(east), 5, 1, 0);
-  const wR1 = playRound(confR1(west), 5, 1, 4);
+  // Round 1 (best-of-7, like every round): 8 series total (4 East + 4 West).
+  const eR1 = playRound(confR1(east), 7, 1, 0);
+  const wR1 = playRound(confR1(west), 7, 1, 4);
   rounds.push([...eR1.series, ...wR1.series]);
 
   // Conference semifinals (best-of-7): winners of (1v8 vs 4v5) and (3v6 vs 2v7).
