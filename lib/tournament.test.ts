@@ -9,6 +9,7 @@ import {
   per36Totals,
   captainMultipliers,
   gameScoreCompare,
+  gameScoreBuff,
   fatigue,
   recoveryCarry,
   regionScore,
@@ -178,6 +179,17 @@ describe("gameScoreCompare", () => {
   });
 });
 
+describe("gameScoreBuff — scales with category dominance", () => {
+  it("7-8 → +3, 6 → +2, 5 → +1.5, ≤4 → 0", () => {
+    expect(gameScoreBuff(8)).toBe(C.GAME_SCORE_BUFF_SWEEP); // 3
+    expect(gameScoreBuff(7)).toBe(C.GAME_SCORE_BUFF_SWEEP); // 3
+    expect(gameScoreBuff(6)).toBe(C.GAME_SCORE_BUFF_STRONG); // 2
+    expect(gameScoreBuff(5)).toBe(C.GAME_SCORE_BUFF_EDGE); // 1.5
+    expect(gameScoreBuff(4)).toBe(0);
+    expect(gameScoreBuff(0)).toBe(0);
+  });
+});
+
 describe("fatigue", () => {
   it("is zero in game 1 and grows with game number", () => {
     const t = team({ ageAtPeak: C.LEAGUE_AVG_EXP });
@@ -331,17 +343,21 @@ describe("simulateBracket: buffs in the breakdown", () => {
         }
   });
 
-  it("game-score buff is +1.5 to the pairwise winner only (0 to the loser)", () => {
+  it("game-score buff goes to one team only, at a tiered value", () => {
+    const allowed = new Set([
+      0,
+      C.GAME_SCORE_BUFF_EDGE,
+      C.GAME_SCORE_BUFF_STRONG,
+      C.GAME_SCORE_BUFF_SWEEP,
+    ]);
     const r = simulateBracket(field(Array.from({ length: 16 }, (_, i) => i)), "k", norms());
     for (const rd of r.rounds)
       for (const s of rd) {
         const g = s.games[0];
         const vals = Object.values(g.breakdown).map((b) => b.gameScoreBuff);
-        // Either one team has the buff and the other 0, or both 0 (a tie).
-        const set = new Set(vals);
-        expect([...set].every((v) => v === 0 || v === C.GAME_SCORE_BUFF)).toBe(true);
-        const buffed = vals.filter((v) => v === C.GAME_SCORE_BUFF);
-        expect(buffed.length).toBeLessThanOrEqual(1);
+        expect(vals.every((v) => allowed.has(v))).toBe(true);
+        // At most one team is buffed (loser + tie are 0).
+        expect(vals.filter((v) => v > 0).length).toBeLessThanOrEqual(1);
       }
   });
 

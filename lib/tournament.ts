@@ -68,8 +68,13 @@ export const TOURNAMENT_CONFIG = {
   HEIGHT_PER_INCH: 0.15,
   HEIGHT_CAP: 3.0,
 
-  // Awarded to whoever wins the pairwise 9-stat comparison; loser 0; tie → 0/0.
-  GAME_SCORE_BUFF: 1.5,
+  // Game-score buff — the one reward for TEAM COMPOSITION, so it's the strongest
+  // matchup buff and it SCALES with how decisively you win the 8-category pairwise
+  // comparison (winner's category count, out of 8):
+  //   7–8 → +3, 6 → +2, 5 → +1.5, 4-4 or worse → 0. Loser always 0.
+  GAME_SCORE_BUFF_SWEEP: 3, // 7 or 8 of 8 categories
+  GAME_SCORE_BUFF_STRONG: 2, // 6
+  GAME_SCORE_BUFF_EDGE: 1.5, // 5
 
   // Captain effect: the captain's 2 highest-z categories get a ×(1+PCT) bump and
   // their single lowest-z gets ×(1-PCT), applied to EVERY player on the team
@@ -245,10 +250,10 @@ export function per36Totals(
 }
 
 /**
- * Pairwise 9-category comparison (the playoff "game score", in the spirit of the
+ * Pairwise 8-category comparison (the playoff "game score", in the spirit of the
  * GQ round-robin): for each StatKey the team with the better value wins the
  * category. For `tov` (NEGATIVE) the LOWER value wins; ties award the category to
- * neither. Whoever wins more categories earns the GAME_SCORE_BUFF (caller).
+ * neither. The winner's category count feeds gameScoreBuff (caller).
  */
 export function gameScoreCompare(
   aTotals: Record<StatKey, number>,
@@ -263,6 +268,21 @@ export function gameScoreCompare(
     else bWins++;
   }
   return { aWins, bWins };
+}
+
+/**
+ * The game-score net buff for the team that WON `catWins` of the 8 categories.
+ * Scales with dominance: 7–8 → SWEEP, 6 → STRONG, 5 → EDGE, ≤4 → 0. (The loser
+ * and a 4-4 tie both get 0 — the caller only ever calls this for the winner.)
+ */
+export function gameScoreBuff(
+  catWins: number,
+  cfg: TournamentConfig = TOURNAMENT_CONFIG,
+): number {
+  if (catWins >= 7) return cfg.GAME_SCORE_BUFF_SWEEP;
+  if (catWins === 6) return cfg.GAME_SCORE_BUFF_STRONG;
+  if (catWins === 5) return cfg.GAME_SCORE_BUFF_EDGE;
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -559,20 +579,21 @@ export function simulateBracket(
     lo: TournamentTeam,
     carry: Record<string, number>,
   ): SeriesStatics => {
-    // Game-score buff: pairwise 9-stat comparison; winner +BUFF, else 0; tie 0/0.
+    // Game-score buff: pairwise 8-stat comparison; the winner's net buff SCALES
+    // with how many categories it won (7-8 → +3, 6 → +2, 5 → +1.5, ≤4 → 0).
     const hiTot = per36Totals(hi, statNorms, cfg);
     const loTot = per36Totals(lo, statNorms, cfg);
     const cmp = gameScoreCompare(hiTot, loTot);
-    const gameScoreBuff: Record<string, number> = { [hi.id]: 0, [lo.id]: 0 };
-    if (cmp.aWins > cmp.bWins) gameScoreBuff[hi.id] = cfg.GAME_SCORE_BUFF;
-    else if (cmp.bWins > cmp.aWins) gameScoreBuff[lo.id] = cfg.GAME_SCORE_BUFF;
+    const gsBuff: Record<string, number> = { [hi.id]: 0, [lo.id]: 0 };
+    if (cmp.aWins > cmp.bWins) gsBuff[hi.id] = gameScoreBuff(cmp.aWins, cfg);
+    else if (cmp.bWins > cmp.aWins) gsBuff[lo.id] = gameScoreBuff(cmp.bWins, cfg);
 
     // Height: zero-sum, capped both directions, from summed-starter-height diff.
     const diff = starterHeight(hi) - starterHeight(lo);
     const hiHeight = clamp(diff * cfg.HEIGHT_PER_INCH, -cfg.HEIGHT_CAP, cfg.HEIGHT_CAP);
     const heightBuff: Record<string, number> = { [hi.id]: hiHeight, [lo.id]: -hiHeight };
 
-    return { gameScoreBuff, heightBuff, carry };
+    return { gameScoreBuff: gsBuff, heightBuff, carry };
   };
 
   // ---- 2/3. Play each conference's bracket, then the Final. ----
