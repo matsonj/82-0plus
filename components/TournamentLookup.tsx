@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   TournamentLookupResponse,
   TournamentTeamSummary,
@@ -12,6 +12,7 @@ import {
   NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
 import { TournamentResults } from "@/components/TournamentResults";
+import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
 
 // reachedRound: 0 = lost R1 … 4 = champion. Short list-row phrasing.
 function reachedPhrase(reachedRound: number): string {
@@ -144,30 +145,58 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
     setView("form");
   };
 
-  const submit = async (e: React.FormEvent) => {
+  // Run a lookup for explicit credentials. `silent` (used by auto-login from a
+  // saved session) suppresses the error and clears stale creds instead.
+  const runLookup = useCallback(
+    async (uname: string, upin: string, silent = false) => {
+      setSubmitting(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/tournament/lookup", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: uname, pin: upin }),
+        });
+        if (!res.ok) {
+          // Any non-2xx (incl. no-match) → a single generic message.
+          if (silent) clearUser();
+          else setError("No team found for that name and PIN.");
+          return;
+        }
+        const data = (await res.json()) as TournamentLookupResponse;
+        saveUser({ username: uname, pin: upin }); // stay logged in
+        setLookup(data);
+        setView("list");
+      } catch {
+        if (!silent) setError("Couldn't check your team right now. Try again.");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [],
+  );
+
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/tournament/lookup", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, pin }),
-      });
-      if (!res.ok) {
-        // Any non-2xx (incl. no-match) → a single generic message.
-        setError("No team found for that name and PIN.");
-        return;
-      }
-      const data = (await res.json()) as TournamentLookupResponse;
-      setLookup(data);
-      setView("list");
-    } catch {
-      setError("Couldn't check your team right now. Try again.");
-    } finally {
-      setSubmitting(false);
+    void runLookup(name, pin);
+  };
+
+  // Auto-login from a saved session: jump straight to the teams list.
+  useEffect(() => {
+    const saved = getSavedUser();
+    if (saved) {
+      setName(saved.username);
+      setPin(saved.pin);
+      void runLookup(saved.username, saved.pin, true);
     }
+  }, [runLookup]);
+
+  const logOut = () => {
+    clearUser();
+    setName("");
+    setPin("");
+    resetToForm();
   };
 
   const openTeam = async (teamId: string) => {
@@ -217,6 +246,13 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
               {teams.length} {teams.length === 1 ? "team" : "teams"}
             </p>
           </div>
+          <button
+            type="button"
+            className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+            onClick={logOut}
+          >
+            Log out
+          </button>
         </div>
 
         {listError && (

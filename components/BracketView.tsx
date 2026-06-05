@@ -13,6 +13,11 @@ import type {
 // Round labels for the four playoff rounds (rounds[0..3]).
 const ROUND_LABEL = ["Round 1", "Conf. Semifinals", "Conf. Finals", "The Final"];
 
+// The per-game "WHY" breakdown (every modifier + box scores) is a debug/tuning
+// view, hidden in normal play. Set NEXT_PUBLIC_DEBUG=1 (Vercel env / .env.local)
+// to expose it. Inlined at build time, so it's a constant per deploy.
+const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "1";
+
 function round1(n: number): string {
   const v = Math.round(n * 10) / 10;
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}`;
@@ -272,18 +277,25 @@ function SeriesCard({
         {rosterOpen === "lo" && <RosterPanel team={loTeam} />}
       </div>
 
-      {/* Expander — opt-in per-game "why" breakdown (separate from rosters). */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between border-t-2 border-[var(--md-ink)] px-2 py-1 text-left font-display text-[9px] uppercase tracking-wide text-[var(--md-ink-muted)]"
-        style={{ cursor: "pointer" }}
-      >
-        <span>best of {series.bestOf}</span>
-        <span>{open ? "hide ▴" : "why ▾"}</span>
-      </button>
+      {/* Series format. The per-game "why" breakdown is a debug-only expander
+          (NEXT_PUBLIC_DEBUG=1); normal play shows just the best-of line. */}
+      {DEBUG ? (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-center justify-between border-t-2 border-[var(--md-ink)] px-2 py-1 text-left font-display text-[9px] uppercase tracking-wide text-[var(--md-ink-muted)]"
+          style={{ cursor: "pointer" }}
+        >
+          <span>best of {series.bestOf}</span>
+          <span>{open ? "hide ▴" : "why ▾"}</span>
+        </button>
+      ) : (
+        <div className="border-t-2 border-[var(--md-ink)] px-2 py-1 font-display text-[9px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+          best of {series.bestOf}
+        </div>
+      )}
 
-      {open && (
+      {DEBUG && open && (
         <div className="flex flex-col gap-2 border-t-2 border-[var(--md-ink)] bg-[var(--md-paper)] p-2">
           {series.games.map((g) => (
             <GameRow key={g.gameNo} game={g} nameOf={nameOf} />

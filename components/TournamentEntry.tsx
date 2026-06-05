@@ -12,12 +12,16 @@ import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { TournamentResults } from "@/components/TournamentResults";
+import { TournamentHowToPlay } from "@/components/TournamentHowToPlay";
 import {
   validateName,
   validateTeamName,
   validatePin,
   NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
+import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
+
+const HOWTO_KEY = "md820-seen-tournament-howto";
 
 // The starting five board — identical to the main game. The five are carried in
 // from the just-played Classic/HoopIQ game and locked; the tournament only adds
@@ -72,6 +76,11 @@ export function TournamentEntry({
   const [captainSlot, setCaptainSlot] = useState<number | null>(null);
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
+  // Logged in? (remembered from a previous submit/lookup). When set, the player
+  // only needs a team name; username + PIN come from the saved session.
+  const [loggedIn, setLoggedIn] = useState(false);
+  // First-visit Tournament Edition explainer.
+  const [showHowTo, setShowHowTo] = useState(false);
   const [teamName, setTeamName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -92,6 +101,31 @@ export function TournamentEntry({
     ...starters.map((e) => e.team),
     ...(sixth ? [sixth.team] : []),
   ];
+
+  // ----- restore login + first-visit how-to on mount -----
+  useEffect(() => {
+    const saved = getSavedUser();
+    if (saved) {
+      setUsername(saved.username);
+      setPin(saved.pin);
+      setLoggedIn(true);
+    }
+    try {
+      if (!localStorage.getItem(HOWTO_KEY)) {
+        setShowHowTo(true);
+        localStorage.setItem(HOWTO_KEY, "1");
+      }
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
+
+  const logOut = () => {
+    clearUser();
+    setLoggedIn(false);
+    setUsername("");
+    setPin("");
+  };
 
   // ----- load decades on mount -----
   useEffect(() => {
@@ -186,12 +220,6 @@ export function TournamentEntry({
     setCurrentTeam(null);
   };
 
-  const repickSixth = () => {
-    setSixth(null);
-    setCurrentDecade(null);
-    setCurrentTeam(null);
-  };
-
   const teamSkip = () => {
     if (teamSkips <= 0 || currentDecade === null || rolling) return;
     setTeamSkips((n) => n - 1);
@@ -260,6 +288,9 @@ export function TournamentEntry({
         return;
       }
       const data = (await res.json()) as TournamentRunResponse;
+      // Remember the account so the next entry only needs a team name.
+      saveUser({ username, pin });
+      setLoggedIn(true);
       setResult(data);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
@@ -299,6 +330,9 @@ export function TournamentEntry({
 
   return (
     <div className="flex flex-col gap-5">
+      {showHowTo && (
+        <TournamentHowToPlay onClose={() => setShowHowTo(false)} />
+      )}
       {/* The locked starting five, plus the sixth-man chip once chosen. */}
       <div>
         <div className="mb-2 flex items-center justify-between gap-2">
@@ -337,12 +371,6 @@ export function TournamentEntry({
                 {sixth.team} &rsquo;{String(sixth.player.best_season).slice(2)}
               </span>
             </div>
-            <button
-              className="md-btn md-btn--sm md-btn--secondary"
-              onClick={repickSixth}
-            >
-              Re-pick
-            </button>
           </div>
         )}
       </div>
@@ -407,8 +435,7 @@ export function TournamentEntry({
         <div className="md-card md-card--lift flex flex-col gap-4 p-4 sm:p-5">
           <div className="font-display text-xl font-bold">Pick your captain</div>
           <p className="-mt-2 text-[13px] text-[var(--md-ink-muted)]">
-            Tap one of your five starters. Your captain&rsquo;s two best stats lift
-            the whole team; their weakest drags a little.
+            Tap one of your five starters.
           </p>
           <div className="grid grid-cols-5 gap-1.5">
             {lineup.map((e, i) => {
@@ -452,55 +479,75 @@ export function TournamentEntry({
           <div className="border-t-2 border-[var(--md-ink)] pt-4">
             <div className="font-display text-xl font-bold">Claim your team</div>
             <div className="mt-3 flex flex-col gap-3">
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Your name
-                </span>
-                <input
-                  className="md-input md-input--name"
-                  value={username}
-                  maxLength={NAME_MAX_LEN}
-                  autoCapitalize="characters"
-                  onChange={(e) => {
-                    setUsername(
-                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                    );
-                    setNameTaken(false);
-                  }}
-                  placeholder="PHILJACKSON"
-                  style={
-                    nameTaken ? { borderColor: "var(--md-coral)" } : undefined
-                  }
-                />
-                <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-                  {username.length > 0 && !usernameCheck.ok
-                    ? usernameCheck.reason
-                    : "Your account name · letters, numbers, spaces · 16 max"}
-                </span>
-                <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-                  This is how you log back in to check your teams.
-                </span>
-              </label>
+              {loggedIn ? (
+                <div className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
+                  <span className="font-display text-[13px]">
+                    Playing as{" "}
+                    <strong className="text-[var(--md-orange-deep)]">
+                      {username}
+                    </strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+                    onClick={logOut}
+                  >
+                    Log out
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <label className="flex flex-col gap-1">
+                    <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                      Your name
+                    </span>
+                    <input
+                      className="md-input md-input--name"
+                      value={username}
+                      maxLength={NAME_MAX_LEN}
+                      autoCapitalize="characters"
+                      onChange={(e) => {
+                        setUsername(
+                          e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
+                        );
+                        setNameTaken(false);
+                      }}
+                      placeholder="PHILJACKSON"
+                      style={
+                        nameTaken ? { borderColor: "var(--md-coral)" } : undefined
+                      }
+                    />
+                    <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
+                      {username.length > 0 && !usernameCheck.ok
+                        ? usernameCheck.reason
+                        : "Your account name · letters, numbers, spaces · 16 max"}
+                    </span>
+                    <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
+                      This is how you log back in to check your teams.
+                    </span>
+                  </label>
 
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  PIN
-                </span>
-                <input
-                  className="md-input"
-                  value={pin}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4–6 digits"
-                />
-                <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-                  {pin.length > 0 && !pinOk
-                    ? "PIN must be 4–6 digits"
-                    : "Remembers your account so you can check back."}
-                </span>
-              </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                      PIN
+                    </span>
+                    <input
+                      className="md-input"
+                      value={pin}
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                      placeholder="4–6 digits"
+                    />
+                    <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
+                      {pin.length > 0 && !pinOk
+                        ? "PIN must be 4–6 digits"
+                        : "Remembers your account so you can check back."}
+                    </span>
+                  </label>
+                </>
+              )}
 
               <label className="flex flex-col gap-1">
                 <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
