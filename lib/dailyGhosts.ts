@@ -24,6 +24,29 @@ const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 
 export const DAILY_GHOST_COUNT = 15;
 
+// Daily ghosts draft from the SAME fixed board as the human, who picks the best
+// player available in each slot. If ghosts picked uniformly at random they'd
+// field weak rosters and lose every time. So bias selection toward higher Game
+// Quality: weight ∝ value^GQ_EXP. A high exponent makes ghosts mostly draft the
+// top one or two players per slot (a tough, human-like field) while the seeded
+// RNG still yields variety across the 15.
+const GQ_EXP = 4;
+
+/** Pick a player weighted toward higher GQ (value), via the seeded RNG. */
+function weightedByGQ(
+  players: IndexedPlayer[],
+  rng: () => number,
+): IndexedPlayer {
+  const weights = players.map((p) => Math.pow(Math.max(p.value, 0.01), GQ_EXP));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = rng() * total;
+  for (let i = 0; i < players.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return players[i];
+  }
+  return players[players.length - 1];
+}
+
 // Arcade-flavored daily ghost names (need at least DAILY_GHOST_COUNT).
 const NAME_POOL = [
   "DAY TRADERS", "SUNRISE SQUAD", "CALENDAR CREW", "NIGHT OWLS", "RISE AND GRIND",
@@ -105,16 +128,15 @@ export function buildDailyGhosts(
   if (!assignment || benchCands.length === 0) return [];
 
   const rng = mulberry32(hashSeed(`daily-ghosts:${date}`));
-  const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
 
   const ghosts: GeneratedDailyGhost[] = [];
   for (let i = 0; i < DAILY_GHOST_COUNT; i++) {
-    // Position j drafts an eligible player from its assigned board slot.
+    // Position j drafts a (GQ-weighted) eligible player from its assigned slot.
     const starters = KINDS.map((_, pos) => {
       const bs = assignment[pos];
-      return { player: pick(elig[bs][pos]), slot: pos };
+      return { player: weightedByGQ(elig[bs][pos], rng), slot: pos };
     });
-    const sixth = pick(benchCands);
+    const sixth = weightedByGQ(benchCands, rng);
     const seedNet = simulateRoster(
       starters.map((s) => toScoring(s.player)),
     ).netRating;

@@ -642,6 +642,7 @@ export default function Home() {
             initialLineup={lineup}
             mode={gameType === "daily" ? "daily" : mode}
             dailyBench={gameType === "daily" ? dailyBench : null}
+            dailyDate={gameType === "daily" ? dailyDate : null}
             onBack={backToMenu}
           />
         </section>

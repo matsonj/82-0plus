@@ -246,6 +246,7 @@ export interface TournamentTeamSummary {
   championName: string;
   reachedRound: number; // 0 = lost R1 … 4 = champion
   seedNet: number; // seeding net rating (drives the tier badge)
+  dailyDate?: string | null; // YYYY-MM-DD for mode='daily'; null otherwise
   createdAt: string; // ISO timestamp
   roster?: BracketPlayer[]; // the five starters (quick peek)
   sixthMan?: BracketPlayer;

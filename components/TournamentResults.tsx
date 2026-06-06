@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type {
   TournamentRunResponse,
+  TournamentMode,
   BracketResult,
   BracketTeam,
 } from "@/lib/types";
@@ -214,11 +215,32 @@ function ProgressPips({
   );
 }
 
+// Which tournament this run was — shown on the share card. Daily includes its
+// date (MM-DD-YY); classic/hoopiq are just the mode name.
+function tournamentModeLabel(
+  mode?: TournamentMode,
+  dailyDate?: string | null,
+): string | undefined {
+  if (!mode) return undefined;
+  if (mode === "daily") {
+    if (dailyDate && /^\d{4}-\d{2}-\d{2}$/.test(dailyDate)) {
+      const [y, m, d] = dailyDate.split("-");
+      return `Daily ${m}-${d}-${y.slice(2)}`;
+    }
+    return "Daily";
+  }
+  return mode === "hoopiq" ? "HoopIQ" : "Classic";
+}
+
 export function TournamentResults({
   data,
+  mode,
+  dailyDate,
   onReset,
 }: {
   data: TournamentRunResponse;
+  mode?: TournamentMode;
+  dailyDate?: string | null;
   onReset?: () => void;
 }) {
   const { bracket, you } = data;
@@ -248,6 +270,7 @@ export function TournamentResults({
         playoffWins: playoff.totalW,
         playoffLosses: playoff.totalL,
         tier: tierForSeedNet(myTeam.seedNet)?.label,
+        modeLabel: tournamentModeLabel(mode, dailyDate),
         roster: myTeam.roster ?? [],
         sixthMan: myTeam.sixthMan,
       });

@@ -190,6 +190,8 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
   // List + detail state.
   const [lookup, setLookup] = useState<TournamentLookupResponse | null>(null);
   const [run, setRun] = useState<TournamentRunResponse | null>(null);
+  // The summary of the team currently opened (for the share-card mode label).
+  const [openSummary, setOpenSummary] = useState<TournamentTeamSummary | null>(null);
   const [loadingTeamId, setLoadingTeamId] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [page, setPage] = useState(0); // teams-list page (10 per page)
@@ -283,6 +285,9 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
       }
       const data = (await res.json()) as TournamentRunResponse;
       setRun(data);
+      setOpenSummary(
+        lookup?.teams.find((t) => t.teamId === teamId) ?? null,
+      );
       setView("team");
     } catch {
       setListError("Couldn't load that team. Try again.");
@@ -296,6 +301,8 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
     return (
       <TournamentResults
         data={run}
+        mode={openSummary?.mode}
+        dailyDate={openSummary?.dailyDate}
         onReset={() => {
           setRun(null);
           setView("list");

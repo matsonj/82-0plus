@@ -50,6 +50,7 @@ export function TournamentEntry({
   initialLineup,
   mode,
   dailyBench = null,
+  dailyDate = null,
   onBack,
 }: {
   initialLineup: (LineupEntry | null)[];
@@ -58,6 +59,7 @@ export function TournamentEntry({
   // from — no rolling, no team-skip, no receipt (the daily board is the
   // provenance). Null/omitted for classic/hoopiq, which roll the bench.
   dailyBench?: { team: string; decade: number } | null;
+  dailyDate?: string | null; // daily board date (for the share-card mode label)
   onBack: () => void;
 }) {
   const isDaily = mode === "daily";
@@ -336,7 +338,14 @@ export function TournamentEntry({
   // ===================== render =====================
 
   if (result) {
-    return <TournamentResults data={result} onReset={onBack} />;
+    return (
+      <TournamentResults
+        data={result}
+        mode={mode}
+        dailyDate={dailyDate}
+        onReset={onBack}
+      />
+    );
   }
 
   if (booting) {

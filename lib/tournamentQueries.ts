@@ -534,6 +534,7 @@ interface TeamSummaryRow {
   reached_round: number;
   champion_name: string;
   seed_net: number;
+  daily_date: string | null;
   created_at: string | Date;
   roster_display: unknown; // { roster: BracketPlayer[]; sixthMan: BracketPlayer } | null
 }
@@ -545,7 +546,7 @@ export async function getUserTeams(
 ): Promise<TournamentTeamSummary[]> {
   const rows = await queryRW<TeamSummaryRow>(
     `SELECT team_id, team_name, mode, record_w, record_l, realized_margin, reached_round,
-            champion_name, seed_net, created_at, roster_display
+            champion_name, seed_net, daily_date, created_at, roster_display
        FROM nba_tournament.main.teams
       WHERE user_id = $1
       ORDER BY created_at DESC`,
@@ -566,6 +567,7 @@ export async function getUserTeams(
       reachedRound: r.reached_round,
       championName: r.champion_name,
       seedNet: Number.isFinite(r.seed_net) ? r.seed_net : 0,
+      dailyDate: r.daily_date ?? null,
       createdAt:
         r.created_at instanceof Date
           ? r.created_at.toISOString()

@@ -104,6 +104,7 @@ export async function buildTournamentShareImage(args: {
   playoffWins: number;
   playoffLosses: number;
   tier?: string; // S / AA / A / B / C / D — omitted if ineligible
+  modeLabel?: string; // which tournament — "DAILY 06-05-26" / "CLASSIC" / "HOOPIQ"
   roster: BracketPlayer[];
   sixthMan?: BracketPlayer;
 }): Promise<Blob | null> {
@@ -146,12 +147,14 @@ export async function buildTournamentShareImage(args: {
   ctx.fillStyle = ink;
   ctx.fillText(name, W / 2, 230);
 
-  // Tier · seed · conference · how far (champion glows teal).
+  // Tier · seed · conference · which tournament. (Champion status is shown by
+  // the trophy banner / playoff record, so the mode goes here, not "CHAMPION".)
   ctx.font = f(34, "normal");
   ctx.fillStyle = args.isChampion ? teal : muted;
   const tierPrefix = args.tier ? `${args.tier}-TIER · ` : "";
+  const tail = (args.modeLabel ?? args.reachedLabel).toUpperCase();
   ctx.fillText(
-    `${tierPrefix}#${args.seed} ${args.conference.toUpperCase()} · ${args.reachedLabel.toUpperCase()}`,
+    `${tierPrefix}#${args.seed} ${args.conference.toUpperCase()} · ${tail}`,
     W / 2,
     288,
   );
@@ -213,17 +216,26 @@ export async function buildTournamentShareImage(args: {
   }
 
   if (args.isChampion) {
-    ctx.textAlign = "center";
-    ctx.fillStyle = ink;
+    // Champion banner near the bottom — size the box to the TEXT (was a fixed
+    // 460px that the label overflowed).
+    const label = "🏆 TOURNAMENT CHAMPION";
     ctx.font = f(40);
-    // a small champion banner near the bottom
+    const textW = ctx.measureText(label).width;
+    const padX = 28;
+    const boxW = textW + padX * 2;
+    const boxH = 64;
+    const boxX = W / 2 - boxW / 2;
+    const boxY = H - 152;
     ctx.fillStyle = yellow;
-    ctx.fillRect(W / 2 - 230, H - 150, 460, 60);
+    ctx.fillRect(boxX, boxY, boxW, boxH);
     ctx.strokeStyle = ink;
     ctx.lineWidth = 4;
-    ctx.strokeRect(W / 2 - 230, H - 150, 460, 60);
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     ctx.fillStyle = ink;
-    ctx.fillText("🏆 TOURNAMENT CHAMPION", W / 2, H - 108);
+    ctx.fillText(label, W / 2, boxY + boxH / 2);
+    ctx.textBaseline = "alphabetic"; // restore for the footer
   }
 
   ctx.textAlign = "center";
