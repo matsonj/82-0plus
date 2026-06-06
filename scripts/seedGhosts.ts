@@ -238,9 +238,12 @@ async function main(): Promise<void> {
       `(GQ >= ${strongPool[strongPool.length - 1]?.value.toFixed(3)}).`,
   );
 
-  // Wipe then reseed so re-running never duplicates.
-  console.log(`[seedGhosts] wiping ${TDB}.ghosts…`);
-  await queryRW(`DELETE FROM ${TDB}.ghosts`);
+  // Wipe then reseed so re-running never duplicates. Only the STANDARD ghosts —
+  // daily ghosts (ghost_type='daily') are date-scoped and regenerate lazily.
+  console.log(`[seedGhosts] wiping standard ghosts in ${TDB}.ghosts…`);
+  await queryRW(
+    `DELETE FROM ${TDB}.ghosts WHERE COALESCE(ghost_type, 'standard') <> 'daily'`,
+  );
 
   let inserted = 0;
   for (let i = 0; i < GHOST_COUNT; i++) {
@@ -285,8 +288,9 @@ async function main(): Promise<void> {
     const name = NAME_POOL[i] ?? `GHOST ${i + 1}`;
 
     await queryRW(
-      `INSERT INTO ${TDB}.ghosts (ghost_id, name, roster_json, sixth_json, seed_net)
-       VALUES ($1, $2, $3, $4, $5)`,
+      `INSERT INTO ${TDB}.ghosts
+         (ghost_id, name, roster_json, sixth_json, seed_net, ghost_type, ghost_date)
+       VALUES ($1, $2, $3, $4, $5, 'standard', NULL)`,
       [
         i, // ghost_id
         name,

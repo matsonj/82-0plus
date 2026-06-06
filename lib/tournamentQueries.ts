@@ -315,10 +315,15 @@ async function hydrateStoredTeam(
 /**
  * Draw up to 15 opponents to fill a 16-team field, TIER-SEGMENTED: you face
  * teams in your own tier (see lib/tier). HUMAN teams are ALWAYS preferred — a
- * RANDOM sample of real memorialized teams from the LAST 24 HOURS in the SAME
- * MODE and SAME TIER (excluding the player's own account). Random (not
- * most-recent) so a player can't stuff their bracket with weak alt teams
- * submitted moments before. Same-tier ghosts (AI fillers) make up the shortfall;
+ * RANDOM sample of real memorialized teams in the SAME MODE and SAME TIER
+ * (excluding the player's own account). Random (not most-recent) so a player
+ * can't stuff their bracket with weak alt teams submitted moments before.
+ *
+ * The human pool starts in a tight RECENT window (1 hour) and WIDENS (→ 24h →
+ * all-time) only if that's too thin to fill the field. Recent-first means a
+ * change to team/scoring methodology transitions seamlessly: fresh-methodology
+ * teams dominate the pool within an hour, and stale older teams only backfill a
+ * shortfall. Same-tier ghosts (AI fillers) then make up any remaining shortfall;
  * if there still aren't enough, ANY ghost fills the rest so a bracket always
  * runs. Each opponent is re-hydrated so it can play. Ids are unique:
  * `team:<team_id>` / `ghost:<ghost_id>`.
@@ -327,7 +332,7 @@ async function hydrateStoredTeam(
  * Alt-stuffing within a tier is still possible — per-account/IP caps would close
  * it (accepted residual).
  *
- * DAILY mode is partitioned by DATE instead of a 24h window: the human field is
+ * DAILY mode is partitioned by DATE instead of a recency window: the human field is
  * that date's daily entries and the ghosts are that date's daily-constrained
  * ghosts (ghost_type='daily'); pass `dailyDate`. Classic/HoopIQ use the standard
  * ghost pool (ghost_type<>'daily').
@@ -346,43 +351,58 @@ export async function drawOpponents(
   const sameTier = (sn: number) =>
     myTier === null || tierForSeedNet(sn)?.key === myTier;
 
-  // Pull a generous random candidate set, then keep only same-tier teams. Daily
-  // pulls a date's full pool; classic/hoopiq pull the last 24h of that mode.
-  const subs = isDaily
-    ? await queryRW<StoredTeamRow>(
-        `SELECT t.team_id AS team_id, t.team_name AS name,
-                t.roster_json AS roster_json, t.sixth_json AS sixth_json,
-                t.captain_slot AS captain_slot, t.seed_net AS seed_net
-           FROM nba_tournament.main.teams t
-           JOIN nba_tournament.main.users u ON u.user_id = t.user_id
-          WHERE t.mode = 'daily'
-            AND t.daily_date = $2
-            AND u.name_norm <> $1
-          ORDER BY random()
-          LIMIT 200`,
-        [myNameNorm, dailyDate ?? ""],
-      )
-    : await queryRW<StoredTeamRow>(
-        `SELECT t.team_id AS team_id, t.team_name AS name,
-                t.roster_json AS roster_json, t.sixth_json AS sixth_json,
-                t.captain_slot AS captain_slot, t.seed_net AS seed_net
-           FROM nba_tournament.main.teams t
-           JOIN nba_tournament.main.users u ON u.user_id = t.user_id
-          WHERE t.created_at >= now() - INTERVAL 24 HOUR
-            AND t.mode = $2
-            AND u.name_norm <> $1
-          ORDER BY random()
-          LIMIT 200`,
-        [myNameNorm, mode],
-      );
-
   const teams: TournamentTeam[] = [];
-  for (const row of subs) {
-    if (teams.length >= FIELD) break;
-    if (!sameTier(row.seed_net)) continue;
-    const id = `team:${row.team_id ?? row.name_norm ?? row.name}`;
-    const team = await hydrateStoredTeam(row, id, false, options);
-    if (team) teams.push(team);
+  const usedTeamKeys = new Set<string>();
+
+  // Accumulate same-tier human teams from a batch of rows, deduped across the
+  // progressively-widening windows below.
+  const addHumans = async (rows: StoredTeamRow[]) => {
+    for (const row of rows) {
+      if (teams.length >= FIELD) break;
+      const key = String(row.team_id ?? row.name_norm ?? row.name);
+      if (usedTeamKeys.has(key)) continue;
+      if (!sameTier(row.seed_net)) continue;
+      usedTeamKeys.add(key);
+      const team = await hydrateStoredTeam(row, `team:${key}`, false, options);
+      if (team) teams.push(team);
+    }
+  };
+
+  const SELECT_TEAM =
+    `SELECT t.team_id AS team_id, t.team_name AS name,
+            t.roster_json AS roster_json, t.sixth_json AS sixth_json,
+            t.captain_slot AS captain_slot, t.seed_net AS seed_net
+       FROM nba_tournament.main.teams t
+       JOIN nba_tournament.main.users u ON u.user_id = t.user_id`;
+
+  if (isDaily) {
+    // Daily is partitioned by date — that day's entries are the human field.
+    await addHumans(
+      await queryRW<StoredTeamRow>(
+        `${SELECT_TEAM}
+          WHERE t.mode = 'daily' AND t.daily_date = $2 AND u.name_norm <> $1
+          ORDER BY random() LIMIT 200`,
+        [myNameNorm, dailyDate ?? ""],
+      ),
+    );
+  } else {
+    // Classic/HoopIQ: prefer RECENT submissions (a tight 1h window), widening
+    // only if that's too thin to fill the field. Recent-first means a change to
+    // team methodology transitions seamlessly — new-methodology teams dominate
+    // the pool within an hour, and stale older teams only backfill a shortfall.
+    const WINDOWS = ["INTERVAL 1 HOUR", "INTERVAL 24 HOUR", null] as const;
+    for (const w of WINDOWS) {
+      if (teams.length >= FIELD) break;
+      const timeClause = w === null ? "" : `AND t.created_at >= now() - ${w}`;
+      await addHumans(
+        await queryRW<StoredTeamRow>(
+          `${SELECT_TEAM}
+            WHERE t.mode = $2 ${timeClause} AND u.name_norm <> $1
+            ORDER BY random() LIMIT 200`,
+          [myNameNorm, mode],
+        ),
+      );
+    }
   }
 
   // Top up with ghosts: same-tier first, then any ghost as a last resort so the
