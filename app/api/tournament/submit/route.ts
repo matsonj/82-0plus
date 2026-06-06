@@ -23,6 +23,7 @@ import {
 import { simulateBracket } from "@/lib/tournament";
 import { deriveYou, deriveRecord, stripBreakdown } from "@/lib/tournamentRun";
 import { verifyRoll } from "@/lib/tournamentToken";
+import { isEligible, regWinsFromSeedNet, MIN_ELIGIBLE_WINS } from "@/lib/tier";
 import type { SimPick, TournamentRunResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -190,6 +191,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Each of the six players must come from its OWN server roll. A real draft
+    // never repeats a team (each roll excludes the ones already taken), so:
+    //   • distinct teams across all six — blocks replaying one team's receipt
+    //     across multiple rows and blocks stacking one franchise's best five;
+    //   • distinct receipts — belt-and-suspenders against reusing a single
+    //     signed roll (already implied by distinct teams, since receipts are
+    //     team-bound, but checked explicitly so the invariant is self-evident).
+    const allTeams = [...picks.map((p) => p.team), sixthPick.team];
+    if (new Set(allTeams).size !== allTeams.length) {
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "each player must come from a different team — re-roll a duplicate" },
+        { status: 400 },
+      );
+    }
+    const allReceipts = [
+      ...rawRoster.map((r) => r?.receipt),
+      rawSixth.receipt,
+    ];
+    if (new Set(allReceipts).size !== allReceipts.length) {
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "each pick must come from its own roll" },
+        { status: 400 },
+      );
+    }
+
     await ensureSchema();
 
     // ---- Identity = the (name, PIN) PAIR (90s arcade auth). The same name with
@@ -239,6 +267,21 @@ export async function POST(req: NextRequest) {
     // ---- Seeding strength: the five's net rating with NO tournament buffs ----
     const seedNet = simulateRoster(hydrated.scoring).netRating;
 
+    // ---- Tournament eligibility: a team must project to at least 40 wins (the
+    // D-tier floor). Gating here means an ineligible team is never stored, so it
+    // can never be drawn as an opponent either. ----
+    if (!isEligible(seedNet)) {
+      return jsonWithSessionHint(
+        sessionHint,
+        {
+          error: `not tournament-eligible — this roster projects to ${regWinsFromSeedNet(
+            seedNet,
+          )} wins (need ${MIN_ELIGIBLE_WINS}+)`,
+        },
+        { status: 400 },
+      );
+    }
+
     // ---- Generate the team id up front so it's the bracket owner id ----
     // Multiple teams share a user/name, so the bracket owner must be the
     // unique teamId (not sub:name). The teamId also seeds simulateBracket so
@@ -253,7 +296,7 @@ export async function POST(req: NextRequest) {
       captainSlot,
     });
 
-    const opponents = await drawOpponents(nameNorm, mode, queryOptions);
+    const opponents = await drawOpponents(nameNorm, mode, seedNet, queryOptions);
     const field = [myTeam, ...opponents];
     if (field.length !== 16) {
       return jsonWithSessionHint(

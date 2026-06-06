@@ -103,6 +103,7 @@ export async function buildTournamentShareImage(args: {
   regLosses: number;
   playoffWins: number;
   playoffLosses: number;
+  tier?: string; // S / AA / A / B / C / D — omitted if ineligible
   roster: BracketPlayer[];
   sixthMan?: BracketPlayer;
 }): Promise<Blob | null> {
@@ -145,11 +146,12 @@ export async function buildTournamentShareImage(args: {
   ctx.fillStyle = ink;
   ctx.fillText(name, W / 2, 230);
 
-  // Seed · conference · how far (champion glows teal).
+  // Tier · seed · conference · how far (champion glows teal).
   ctx.font = f(34, "normal");
   ctx.fillStyle = args.isChampion ? teal : muted;
+  const tierPrefix = args.tier ? `${args.tier}-TIER · ` : "";
   ctx.fillText(
-    `#${args.seed} ${args.conference.toUpperCase()} · ${args.reachedLabel.toUpperCase()}`,
+    `${tierPrefix}#${args.seed} ${args.conference.toUpperCase()} · ${args.reachedLabel.toUpperCase()}`,
     W / 2,
     288,
   );
@@ -166,12 +168,13 @@ export async function buildTournamentShareImage(args: {
   ctx.fillText(`${args.regWins}–${args.regLosses}`, colL, 446);
   ctx.fillText(`${args.playoffWins}–${args.playoffLosses}`, colR, 446);
 
-  // Roster — five starters, captain flagged with ★C.
+  // Roster — five starters, captain flagged with a ★ CAPTAIN badge.
   let y = 560;
   ctx.font = f(26, "normal");
   ctx.fillStyle = muted;
   ctx.textAlign = "left";
-  ctx.fillText("STARTERS", 110, y - 28);
+  // Lift the section label well clear of the first row (was a cramped 28px gap).
+  ctx.fillText("STARTERS", 110, y - 48);
   ctx.font = f(34, "normal");
   for (const p of args.roster) {
     ctx.fillStyle = orange;
@@ -180,9 +183,13 @@ export async function buildTournamentShareImage(args: {
     const nm = p.name.length > 24 ? p.name.slice(0, 23) + "…" : p.name;
     ctx.fillText(nm, 290, y);
     if (p.captain) {
-      ctx.fillStyle = ink;
+      // Measure the NAME at its own font (34) before switching to the badge
+      // font — otherwise the badge gets placed using the smaller font's width
+      // and lands on top of the end of the name.
+      const nameWidth = ctx.measureText(nm).width;
       ctx.font = f(22);
-      ctx.fillText("★ CAPTAIN", 290 + ctx.measureText(nm).width + 24, y);
+      ctx.fillStyle = ink;
+      ctx.fillText("★ CAPTAIN", 290 + nameWidth + 24, y);
       ctx.font = f(34, "normal");
     }
     y += 60;

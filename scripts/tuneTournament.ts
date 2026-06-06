@@ -87,8 +87,9 @@ function adjWithModZeroed(b: GameBreakdown, mod: ModKey): number {
 async function main(): Promise<void> {
   console.log(`[tune] building a 16-team ghost field via drawOpponents…`);
   // "__none__" never matches a real submission name_norm, so the field is topped
-  // up entirely from the ghosts table (run seedGhosts.ts first).
-  const drawn = await drawOpponents("__none__", "classic", {}, 16);
+  // up entirely from the ghosts table (run seedGhosts.ts first). seedNet 8 picks
+  // a representative tier; the any-ghost fallback guarantees a full 16 regardless.
+  const drawn = await drawOpponents("__none__", "classic", 8, {}, 16);
   console.log(`[tune] drawOpponents returned ${drawn.length} teams.`);
   if (drawn.length < 16) {
     throw new Error(

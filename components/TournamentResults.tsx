@@ -9,11 +9,12 @@ import type {
 import { BracketView } from "@/components/BracketView";
 import { buildTournamentShareImage } from "@/lib/shareImage";
 import { SITE_URL } from "@/lib/site";
+import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
 
-// Reg-season W-L from the team rating (the five's net): wins = 41 + 2.7·net,
-// clamped to an 82-game season — mirrors lib/scoring's projection.
+// Reg-season W-L from the team rating (the five's net), via the shared tier
+// projection (single source of truth for wins = 41 + 2.7·net, clamped to 82).
 function regSeasonRecord(seedNet: number): { w: number; l: number } {
-  const w = Math.max(0, Math.min(82, Math.round(41 + 2.7 * seedNet)));
+  const w = regWinsFromSeedNet(seedNet);
   return { w, l: 82 - w };
 }
 
@@ -246,6 +247,7 @@ export function TournamentResults({
         regLosses: reg.l,
         playoffWins: playoff.totalW,
         playoffLosses: playoff.totalL,
+        tier: tierForSeedNet(myTeam.seedNet)?.label,
         roster: myTeam.roster ?? [],
         sixthMan: myTeam.sixthMan,
       });

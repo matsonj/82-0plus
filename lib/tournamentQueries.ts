@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { query, type QueryOptions } from "./motherduck";
 import { getPlayerIndex, hydrateRoster, type IndexedPlayer } from "./queries";
 import { simulateRoster, type ScoringPlayer } from "./scoring";
+import { tierForSeedNet } from "./tier";
 import { queryRW } from "./tournamentDb";
 import {
   STAT_KEYS,
@@ -310,23 +311,35 @@ async function hydrateStoredTeam(
 }
 
 /**
- * Draw up to 15 opponents to fill a 16-team field. HUMAN teams are ALWAYS
- * preferred: a RANDOM sample of real memorialized teams from the LAST 24 HOURS
- * in the SAME MODE (excluding the player's own account). Random (not most-recent)
- * so a player can't stuff their bracket with weak alt teams submitted moments
- * before — fresh writes don't get priority. Ghosts (mode-agnostic AI fillers) add
- * ONLY to make up the shortfall. Each is re-hydrated so it can play. Ids are
- * unique: `team:<team_id>` / `ghost:<ghost_id>`.
- * NOTE: this dampens but doesn't fully prevent alt-stuffing — a determined player
- * with many alts still raises their odds. Per-account/IP caps would close it.
+ * Draw up to 15 opponents to fill a 16-team field, TIER-SEGMENTED: you face
+ * teams in your own tier (see lib/tier). HUMAN teams are ALWAYS preferred — a
+ * RANDOM sample of real memorialized teams from the LAST 24 HOURS in the SAME
+ * MODE and SAME TIER (excluding the player's own account). Random (not
+ * most-recent) so a player can't stuff their bracket with weak alt teams
+ * submitted moments before. Same-tier ghosts (AI fillers) make up the shortfall;
+ * if there still aren't enough, ANY ghost fills the rest so a bracket always
+ * runs. Each opponent is re-hydrated so it can play. Ids are unique:
+ * `team:<team_id>` / `ghost:<ghost_id>`.
+ * NOTE: tier filtering happens in JS off each row's seed_net (the same
+ * projection the engine seeds with), not in SQL, to keep one source of truth.
+ * Alt-stuffing within a tier is still possible — per-account/IP caps would close
+ * it (accepted residual).
  */
 export async function drawOpponents(
   myNameNorm: string,
   mode: string,
+  seedNet: number,
   options: QueryOptions = {},
   field = 15,
 ): Promise<TournamentTeam[]> {
   const FIELD = field;
+  const myTier = tierForSeedNet(seedNet)?.key ?? null;
+  const sameTier = (sn: number) =>
+    myTier === null || tierForSeedNet(sn)?.key === myTier;
+
+  // Pull a generous random candidate set, then keep only same-tier teams. The
+  // pool is bounded so a busy mode doesn't fetch unboundedly; FIELD opponents
+  // are sampled from whatever same-tier teams surface.
   const subs = await queryRW<StoredTeamRow>(
     `SELECT t.team_id AS team_id, t.team_name AS name,
             t.roster_json AS roster_json, t.sixth_json AS sixth_json,
@@ -337,30 +350,42 @@ export async function drawOpponents(
         AND t.mode = $2
         AND u.name_norm <> $1
       ORDER BY random()
-      LIMIT ${FIELD}`,
+      LIMIT 200`,
     [myNameNorm, mode],
   );
 
   const teams: TournamentTeam[] = [];
   for (const row of subs) {
+    if (teams.length >= FIELD) break;
+    if (!sameTier(row.seed_net)) continue;
     const id = `team:${row.team_id ?? row.name_norm ?? row.name}`;
     const team = await hydrateStoredTeam(row, id, false, options);
     if (team) teams.push(team);
   }
 
-  // Top up with random ghosts.
-  const need = FIELD - teams.length;
-  if (need > 0) {
+  // Top up with ghosts: same-tier first, then any ghost as a last resort so the
+  // 16-team field is always complete. Fetch a pool and partition in JS by tier.
+  if (teams.length < FIELD) {
+    const usedGhostIds = new Set<string>();
     const ghosts = await queryRW<StoredTeamRow>(
       `SELECT ghost_id, name, roster_json, sixth_json, seed_net
          FROM nba_tournament.main.ghosts
         ORDER BY random()
-        LIMIT ${need}`,
+        LIMIT 200`,
     );
-    for (const row of ghosts) {
-      const id = `ghost:${row.ghost_id}`;
-      const team = await hydrateStoredTeam(row, id, true, options);
-      if (team) teams.push(team);
+    // Two passes: same-tier ghosts, then the rest.
+    for (const pass of [true, false]) {
+      for (const row of ghosts) {
+        if (teams.length >= FIELD) break;
+        const gid = String(row.ghost_id);
+        if (usedGhostIds.has(gid)) continue;
+        if (pass && !sameTier(row.seed_net)) continue;
+        const team = await hydrateStoredTeam(row, `ghost:${gid}`, true, options);
+        if (team) {
+          usedGhostIds.add(gid);
+          teams.push(team);
+        }
+      }
     }
   }
 
@@ -475,6 +500,7 @@ interface TeamSummaryRow {
   realized_margin: number;
   reached_round: number;
   champion_name: string;
+  seed_net: number;
   created_at: string | Date;
   roster_display: unknown; // { roster: BracketPlayer[]; sixthMan: BracketPlayer } | null
 }
@@ -486,7 +512,7 @@ export async function getUserTeams(
 ): Promise<TournamentTeamSummary[]> {
   const rows = await queryRW<TeamSummaryRow>(
     `SELECT team_id, team_name, mode, record_w, record_l, realized_margin, reached_round,
-            champion_name, created_at, roster_display
+            champion_name, seed_net, created_at, roster_display
        FROM nba_tournament.main.teams
       WHERE user_id = $1
       ORDER BY created_at DESC`,
@@ -506,6 +532,7 @@ export async function getUserTeams(
       realizedMargin: r.realized_margin,
       reachedRound: r.reached_round,
       championName: r.champion_name,
+      seedNet: Number.isFinite(r.seed_net) ? r.seed_net : 0,
       createdAt:
         r.created_at instanceof Date
           ? r.created_at.toISOString()

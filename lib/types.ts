@@ -240,6 +240,7 @@ export interface TournamentTeamSummary {
   realizedMargin: number; // avg point margin in the playoffs, e.g. +5.2
   championName: string;
   reachedRound: number; // 0 = lost R1 … 4 = champion
+  seedNet: number; // seeding net rating (drives the tier badge)
   createdAt: string; // ISO timestamp
   roster?: BracketPlayer[]; // the five starters (quick peek)
   sixthMan?: BracketPlayer;

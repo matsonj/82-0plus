@@ -13,6 +13,7 @@ import {
   NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
 import { TournamentResults } from "@/components/TournamentResults";
+import { TierBadge } from "@/components/TierBadge";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
 
 // reachedRound: 0 = lost R1 … 4 = champion. Short list-row phrasing.
@@ -97,6 +98,7 @@ function TeamRow({
         </div>
 
         <div className="flex items-center gap-2">
+          <TierBadge seedNet={team.seedNet} />
           {team.mode === "hoopiq" ? (
             <span className="md-capsule md-capsule--ink">HoopIQ</span>
           ) : (
