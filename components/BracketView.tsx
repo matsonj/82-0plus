@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { regWinsFromSeedNet } from "@/lib/tier";
 import type {
   BracketResult,
   BracketTeam,
@@ -208,8 +209,14 @@ function SeriesSide({
           {open ? "▴" : "▾"}
         </span>
       </button>
+      {/* Regular-season record (projected from the team's net rating). */}
+      {team && (
+        <span className="shrink-0 font-display text-[10px] tabular-nums text-[var(--md-ink-muted)]">
+          {regWinsFromSeedNet(team.seedNet)}&ndash;{82 - regWinsFromSeedNet(team.seedNet)}
+        </span>
+      )}
       <span
-        className={`shrink-0 font-display text-[14px] tabular-nums ${
+        className={`w-4 shrink-0 text-right font-display text-[14px] tabular-nums ${
           isWinner ? "font-bold" : "text-[var(--md-ink-muted)]"
         }`}
       >
