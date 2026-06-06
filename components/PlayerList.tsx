@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GameMode, PublicPlayer } from "@/lib/types";
 import type { Role } from "@/lib/positions";
-import { PlayerCard } from "@/components/PlayerCard";
+import { PlayerCardCarousel, CardGlyph, type CardPlayer } from "@/components/PlayerCard";
+import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
 
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -73,7 +74,7 @@ export function PlayerList({
   const [reloadKey, setReloadKey] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("mpg");
   const [posFilter, setPosFilter] = useState<"all" | Role>("all");
-  const [cardPlayer, setCardPlayer] = useState<PublicPlayer | null>(null);
+  const [cardIndex, setCardIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -121,6 +122,19 @@ export function PlayerList({
   }, [all, q, sortKey, posFilter, mode]);
 
   const noneEligible = status === "ok" && available.length === 0;
+
+  // The carousel scans the currently displayed rows (same order/index).
+  const cardPlayers = useMemo<CardPlayer[]>(
+    () =>
+      rows.map((p) => ({
+        entityId: p.entity_id,
+        playerName: p.player_name,
+        team,
+        season: p.best_season,
+        positions: p.positions,
+      })),
+    [rows, team],
+  );
 
   return (
     <div className="flex flex-col gap-2">
@@ -282,12 +296,14 @@ export function PlayerList({
             {mode === "classic" && (
               <button
                 type="button"
-                onClick={() => setCardPlayer(p)}
+                onClick={() => setCardIndex(i)}
+                onMouseEnter={() => prefetchPlayerSeasons(p.entity_id)}
+                onFocus={() => prefetchPlayerSeasons(p.entity_id)}
                 title="Career card"
                 aria-label={`${p.player_name} career card`}
-                className="shrink-0 border-l border-[var(--md-paper-3)] px-2.5 font-display text-sm text-[var(--md-ink-muted)] hover:bg-[var(--md-yellow)] hover:text-[var(--md-ink)]"
+                className="flex shrink-0 items-center border-l border-[var(--md-paper-3)] px-2.5 text-[var(--md-ink-muted)] hover:bg-[var(--md-yellow)] hover:text-[var(--md-ink)]"
               >
-                ▦
+                <CardGlyph />
               </button>
             )}
             </div>
@@ -295,14 +311,11 @@ export function PlayerList({
           })}
       </div>
 
-      {cardPlayer && (
-        <PlayerCard
-          entityId={cardPlayer.entity_id}
-          playerName={cardPlayer.player_name}
-          team={team}
-          season={cardPlayer.best_season}
-          positions={cardPlayer.positions}
-          onClose={() => setCardPlayer(null)}
+      {cardIndex !== null && cardPlayers[cardIndex] && (
+        <PlayerCardCarousel
+          players={cardPlayers}
+          index={cardIndex}
+          onClose={() => setCardIndex(null)}
         />
       )}
     </div>

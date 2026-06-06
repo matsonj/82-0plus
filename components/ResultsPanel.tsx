@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
 import { TierBadge } from "@/components/TierBadge";
-import { PlayerCard } from "@/components/PlayerCard";
+import { PlayerCardCarousel, type CardPlayer } from "@/components/PlayerCard";
+import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
 import { isEligible } from "@/lib/tier";
 
 // One line of the net-rating breakdown: a label (+ optional detail) and the
@@ -60,9 +61,25 @@ export function ResultsPanel({
   const [status, setStatus] = useState<"idle" | "working">("idle");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [cardLine, setCardLine] = useState<SimRosterLine | null>(null);
+  const [cardIndex, setCardIndex] = useState<number | null>(null);
   // Career cards reveal stats, so only in Classic (Ranked/Daily keep them hidden).
   const cardsOn = mode === "classic" && !isDaily;
+
+  const cardPlayers = useMemo<CardPlayer[]>(
+    () =>
+      roster.map((r) => ({
+        entityId: r.entity_id,
+        playerName: r.player_name,
+        team: r.team,
+        season: r.best_season,
+        positions: r.positions,
+      })),
+    [roster],
+  );
+  // Prefetch all five so the carousel is instant the moment a row is tapped.
+  useEffect(() => {
+    if (cardsOn) for (const c of cardPlayers) prefetchPlayerSeasons(c.entityId);
+  }, [cardsOn, cardPlayers]);
 
   const share = async () => {
     setStatus("working");
@@ -115,14 +132,11 @@ export function ResultsPanel({
 
   return (
     <>
-    {cardLine && (
-      <PlayerCard
-        entityId={cardLine.entity_id}
-        playerName={cardLine.player_name}
-        team={cardLine.team}
-        season={cardLine.best_season}
-        positions={cardLine.positions}
-        onClose={() => setCardLine(null)}
+    {cardIndex !== null && cardPlayers[cardIndex] && (
+      <PlayerCardCarousel
+        players={cardPlayers}
+        index={cardIndex}
+        onClose={() => setCardIndex(null)}
       />
     )}
     {shareUrl && (
@@ -251,7 +265,7 @@ export function ResultsPanel({
             PTS/REB/AST · <span className="text-[var(--md-teal)]">[GQ]</span>
           </span>
         </div>
-        {roster.map((r) => {
+        {roster.map((r, i) => {
           const body = (
             <>
               <span>
@@ -272,7 +286,7 @@ export function ResultsPanel({
             <button
               key={r.entity_id}
               type="button"
-              onClick={() => setCardLine(r)}
+              onClick={() => setCardIndex(i)}
               className={`${cls} transition-colors hover:bg-[var(--md-yellow)]`}
             >
               {body}
