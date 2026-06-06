@@ -79,12 +79,13 @@ export async function GET(req: NextRequest) {
       if (filtered.length >= 2) pool = filtered;
     }
     const team = weightedPick(pool);
-    // Signed receipt: proof the server randomly rolled this team, redeemable when
-    // entering the tournament. Bound to the team only (the decade-skip keeps it).
+    // Signed receipt: proof the server randomly rolled this (team, decade),
+    // redeemable when entering the tournament. The decade-skip exchanges it for a
+    // new-decade receipt via /api/team-decades.
     return jsonWithSessionHint(sessionHint, {
       team,
       decade,
-      receipt: signRoll(team),
+      receipt: signRoll(team, decade),
     });
   } catch (err) {
     console.error("[/api/slot]", err);

@@ -334,9 +334,16 @@ export default function Home() {
     // player list is hidden during the in-flight roll via `rolling`, not by
     // nulling the team (which would make the team reel spin too).
     try {
-      const res = await fetch(`/api/team-decades?team=${team}`);
+      // Present the current (team, decade) receipt so the server can EXCHANGE it
+      // for fresh per-era receipts (receipts are bound to team+decade now).
+      const res = await fetch(
+        `/api/team-decades?team=${team}&decade=${cur}&receipt=${encodeURIComponent(currentReceipt)}`,
+      );
       if (!res.ok) throw new Error("skip failed");
-      const { decades: teamDecades } = (await res.json()) as { decades: number[] };
+      const { decades: teamDecades, receipts } = (await res.json()) as {
+        decades: number[];
+        receipts?: Record<number, string>;
+      };
       if (rollSeq.current !== myId) return; // superseded
       const others = (teamDecades ?? []).filter((d) => d !== cur);
       if (others.length === 0) {
@@ -348,8 +355,10 @@ export default function Home() {
       for (const e of lineupRef.current) {
         if (e) usage[e.decade] = (usage[e.decade] ?? 0) + 1;
       }
-      // Same team, new era — keep the team's existing roll receipt (currentReceipt).
-      setCurrentDecade(pickWeightedDecade(others, usage));
+      // Same team, new era — adopt the freshly-minted receipt for that era.
+      const newDecade = pickWeightedDecade(others, usage);
+      setCurrentDecade(newDecade);
+      setCurrentReceipt(receipts?.[newDecade] ?? "");
     } catch {
       if (rollSeq.current === myId) {
         setError("Couldn't skip the decade. Try again.");
