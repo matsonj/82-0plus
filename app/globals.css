@@ -121,6 +121,35 @@ body {
   box-shadow: var(--md-shadow-sm);
 }
 
+/* ---------- Text input ---------- */
+.md-input {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--md-white);
+  border: 2px solid var(--md-ink);
+  border-radius: 0;
+  box-shadow: var(--md-shadow-sm);
+  font-family: var(--font-display-stack);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--md-ink);
+  line-height: 1.2;
+  outline: none;
+}
+.md-input::placeholder {
+  color: var(--md-ink-muted);
+  font-weight: 400;
+}
+.md-input:focus {
+  background: var(--md-paper);
+}
+/* A name field reads like an arcade high-score entry. */
+.md-input--name {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
 /* ---------- Team badge ---------- */
 .md-badge {
   display: inline-flex;

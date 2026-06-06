@@ -289,6 +289,24 @@ export async function getPlayers(
     .map((p) => toPublic(p, mode));
 }
 
+/** The entity_ids a team+decade actually OFFERS in the draft — the SAME top-60-
+ *  by-minutes set getPlayers/`/api/players` returns. Used by the tournament submit
+ *  to prove a pick was on the visible draft list (not a hidden/off-list player). */
+export async function getOfferedIds(
+  team: string,
+  decade: number,
+  options: QueryOptions = {},
+): Promise<Set<string>> {
+  const index = await getPlayerIndex(options);
+  return new Set(
+    index
+      .filter((p) => p.team === team && p.decade === decade)
+      .sort((a, b) => b.mpg - a.mpg)
+      .slice(0, 60)
+      .map((p) => p.entity_id),
+  );
+}
+
 /** Decades where a team has enough players to be offered (for the decade skip). */
 export async function getTeamDecades(
   team: string,

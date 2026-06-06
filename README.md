@@ -61,11 +61,39 @@ workspace. API routes set an anonymous HTTP-only session GUID cookie and pass it
 as MotherDuck's `session_hint`, so read-scaling replicas can preserve per-user
 affinity.
 
+## Tournament Edition
+
+Submit a drafted team (under an 8-char arcade name + PIN) into a 16-team, East/West
+single-elimination bracket that's simulated instantly and stored so you can return with
+NAME+PIN to watch your run. This is the app's only **write** path, so it needs a
+read-write token:
+
+`MOTHERDUCK_RW_TOKEN` — required for the tournament. Writes go to a separate
+`nba_tournament` database via the same PostgreSQL endpoint, on an isolated connection
+pool so the RW token never touches the read path. Tables are created lazily on first
+submit (`lib/tournamentDb.ts` → `ensureSchema()`).
+
+Before the first tournament can run, seed the "ghost" filler field (~60 teams sampled
+from the player index) so brackets fill even with few real submissions:
+
+```bash
+MOTHERDUCK_TOKEN=<read> MOTHERDUCK_RW_TOKEN=<rw> npx tsx scripts/seedGhosts.ts
+```
+
+Tune the matchup factors (`TOURNAMENT_CONFIG` in `lib/tournament.ts`) with the
+per-game modifier-log harness (seed ghosts first):
+
+```bash
+MOTHERDUCK_TOKEN=<read> MOTHERDUCK_RW_TOKEN=<rw> npx tsx scripts/tuneTournament.ts [N] [seedKey]
+```
+
 ## Scripts
 
 - `npm run dev` — dev server
 - `npm run build` / `npm start` — production
-- `npm test` — scoring model unit tests (vitest)
+- `npm test` — scoring model + tournament engine unit tests (vitest)
+- `npx tsx scripts/seedGhosts.ts` — seed the tournament ghost field (needs RW token)
+- `npx tsx scripts/tuneTournament.ts` — per-game modifier tuning harness
 
 ## Architecture
 

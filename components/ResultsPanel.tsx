@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
+import { TierBadge } from "@/components/TierBadge";
+import { isEligible } from "@/lib/tier";
 
 // One line of the net-rating breakdown: a label (+ optional detail) and the
 // signed net-rating points the factor moved.
@@ -41,6 +43,7 @@ export function ResultsPanel({
   modeLabel,
   mode,
   onReset,
+  onEnterTournament,
 }: {
   roster: SimRosterLine[];
   result: SimResult;
@@ -48,6 +51,7 @@ export function ResultsPanel({
   modeLabel: string;
   mode: GameMode;
   onReset: () => void;
+  onEnterTournament?: () => void;
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
   const [status, setStatus] = useState<"idle" | "working">("idle");
@@ -286,17 +290,39 @@ export function ResultsPanel({
         ))}
       </div>
 
-      <div className="flex flex-wrap justify-center gap-2">
-        <button
-          className="md-btn md-btn--lg md-btn--teal"
-          onClick={share}
-          disabled={status === "working"}
-        >
-          {status === "working" ? "Building…" : "Share result"}
-        </button>
-        <button className="md-btn md-btn--lg md-btn--ink" onClick={onReset}>
-          Play again
-        </button>
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <button
+            className="md-btn md-btn--lg md-btn--teal flex-1"
+            onClick={share}
+            disabled={status === "working"}
+          >
+            {status === "working" ? "Building…" : "Share result"}
+          </button>
+          <button className="md-btn md-btn--lg md-btn--ink flex-1" onClick={onReset}>
+            Play again
+          </button>
+        </div>
+        {onEnterTournament &&
+          (isEligible(netRating) ? (
+            <button
+              className="md-btn md-btn--lg flex w-full items-center justify-center gap-2"
+              style={{ background: "var(--md-orange)" }}
+              onClick={onEnterTournament}
+            >
+              <TierBadge seedNet={netRating} />
+              🏀 Enter this team in the Tournament
+            </button>
+          ) : (
+            <button
+              className="md-btn md-btn--lg w-full"
+              disabled
+              style={{ opacity: 0.5, cursor: "not-allowed" }}
+              title="A team needs 40+ projected wins to enter the tournament."
+            >
+              Needs 40+ wins for tournament
+            </button>
+          ))}
       </div>
     </div>
     </>

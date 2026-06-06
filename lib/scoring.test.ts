@@ -114,11 +114,31 @@ describe("simulateRoster", () => {
     expect(r.wins).toBeLessThan(simulateRoster(balancedRoster(0.8)).wins);
   });
 
-  it("five ball-dominant chuckers trigger the usage penalty", () => {
+  it("five ball-dominant chuckers max out the usage penalty", () => {
+    // poss ≈ 26 + 0.44·9 + 4 = 33.96/slot → ~170 total, ~70% over the 100 budget —
+    // well past USAGE_FULL_OVERAGE, so the convex penalty saturates at the cap.
     const hogs = balancedRoster(0.75).map((x) => ({ ...x, fga: 26, fta: 9, tov: 4 }));
     const r = simulateRoster(hogs);
     expect(r.usageFactor).toBeLessThan(0.85);
-    expect(r.usagePen).toBeGreaterThan(2);
+    expect(r.usagePen).toBe(C.USAGE_MAX_PEN);
+  });
+
+  it("usage penalty is convex: each step over budget costs progressively more", () => {
+    // Five identical players dialed to a target total-possession load. At/under the
+    // 100-possession budget there's no penalty; above it the cost grows faster than
+    // linearly, so the jump from 120→135 dwarfs the jump from 105→120.
+    const atLoad = (totalPoss: number) =>
+      simulateRoster(
+        Array.from({ length: 5 }, () => p({ gq: 0.8, fga: totalPoss / 5, tov: 0 })),
+      ).usagePen;
+    const onBudget = atLoad(100);
+    const slightlyOver = atLoad(120);
+    const wayOver = atLoad(135);
+    expect(onBudget).toBe(0); // at budget → free
+    expect(slightlyOver).toBeGreaterThan(0);
+    expect(wayOver).toBeGreaterThan(slightlyOver);
+    // Convexity: the second 15-possession step hurts more than the first.
+    expect(wayOver - slightlyOver).toBeGreaterThan(slightlyOver - onBudget);
   });
 
   it("teamBox: integer totals + attempt-weighted FG%/FT% (mpg=42, on-budget ⇒ raw sums)", () => {

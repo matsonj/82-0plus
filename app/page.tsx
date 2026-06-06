@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type {
   GameMode,
   PublicPlayer,
@@ -13,6 +14,7 @@ import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
+import { TournamentEntry } from "@/components/TournamentEntry";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
 import { encodeShare } from "@/lib/shareCode";
@@ -20,7 +22,7 @@ import { SITE_URL } from "@/lib/site";
 import { pacificDate } from "@/lib/dailyDate";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
-type Phase = "menu" | "play";
+type Phase = "menu" | "play" | "tournament";
 type GameType = "free" | "daily";
 
 // Each time a decade is used its odds drop 90% (weight × 0.1 per use) so the
@@ -41,6 +43,8 @@ export default function Home() {
   const [mode, setMode] = useState<GameMode>("classic");
   const [gameType, setGameType] = useState<GameType>("free");
   const [dailySlots, setDailySlots] = useState<{ team: string; decade: number }[]>([]);
+  // The daily tournament's fixed 6th-man slot (team+decade); null on sparse days.
+  const [dailyBench, setDailyBench] = useState<{ team: string; decade: number } | null>(null);
   const [dailyDate, setDailyDate] = useState<string>("");
   const [today, setToday] = useState<string>("");
   const [dailyResult, setDailyResult] = useState<
@@ -60,6 +64,10 @@ export default function Home() {
   const [rolling, setRolling] = useState(false);
   const [result, setResult] = useState<SimResult | null>(null);
   const [resultRoster, setResultRoster] = useState<SimRosterLine[]>([]);
+  // Signed roll receipt for the CURRENT (team, decade) — captured from /api/slot
+  // and the decade-skip, attached to each drafted player so the tournament can
+  // verify provenance. "" for Daily's seeded slots (which never enter a tournament).
+  const [currentReceipt, setCurrentReceipt] = useState<string>("");
   const [simulating, setSimulating] = useState(false);
   const [booting, setBooting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +112,7 @@ export default function Home() {
         const data = await res.json();
         if (rollSeq.current !== myId) return; // a newer roll superseded this one
         setCurrentTeam(data.team);
+        setCurrentReceipt(data.receipt ?? "");
       } catch {
         if (rollSeq.current === myId) setError("Couldn't roll a team. Try again.");
       } finally {
@@ -122,6 +131,7 @@ export default function Home() {
     setGameType(type);
     setResult(null);
     setResultRoster([]);
+    setCurrentReceipt("");
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
@@ -130,6 +140,7 @@ export default function Home() {
     setTeamSkips(1);
     setDecadeSkips(1);
     setDailySlots([]);
+    setDailyBench(null);
     setError(null);
     setPhase("play");
     setBooting(true);
@@ -137,12 +148,14 @@ export default function Home() {
       if (type === "daily") {
         const res = await fetch("/api/daily");
         if (!res.ok) throw new Error("load failed");
-        const { date, slots } = (await res.json()) as {
+        const { date, slots, benchSlot } = (await res.json()) as {
           date: string;
           slots: { team: string; decade: number }[];
+          benchSlot: { team: string; decade: number } | null;
         };
         setDailyDate(date);
         setDailySlots(slots);
+        setDailyBench(benchSlot);
       } else {
         const res = await fetch("/api/decades");
         if (!res.ok) throw new Error("load failed");
@@ -160,7 +173,9 @@ export default function Home() {
     setPhase("menu");
     setResult(null);
     setResultRoster([]);
+    setCurrentReceipt("");
     setDailySlots([]);
+    setDailyBench(null);
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
@@ -176,6 +191,7 @@ export default function Home() {
         setSelected(null);
         setCurrentDecade(slot.decade);
         setCurrentTeam(slot.team);
+        setCurrentReceipt(""); // Daily slots aren't server-rolled; no receipt.
       }
       return;
     }
@@ -214,7 +230,7 @@ export default function Home() {
 
   const placeAt = (player: PublicPlayer, i: number) => {
     if (currentTeam === null || currentDecade === null) return;
-    const entry: LineupEntry = { player, team: currentTeam, decade: currentDecade };
+    const entry: LineupEntry = { player, team: currentTeam, decade: currentDecade, receipt: currentReceipt };
     setLineup((prev) => prev.map((s, idx) => (idx === i ? entry : s)));
     setPending(null);
     setSelected(null);
@@ -318,9 +334,16 @@ export default function Home() {
     // player list is hidden during the in-flight roll via `rolling`, not by
     // nulling the team (which would make the team reel spin too).
     try {
-      const res = await fetch(`/api/team-decades?team=${team}`);
+      // Present the current (team, decade) receipt so the server can EXCHANGE it
+      // for fresh per-era receipts (receipts are bound to team+decade now).
+      const res = await fetch(
+        `/api/team-decades?team=${team}&decade=${cur}&receipt=${encodeURIComponent(currentReceipt)}`,
+      );
       if (!res.ok) throw new Error("skip failed");
-      const { decades: teamDecades } = (await res.json()) as { decades: number[] };
+      const { decades: teamDecades, receipts } = (await res.json()) as {
+        decades: number[];
+        receipts?: Record<number, string>;
+      };
       if (rollSeq.current !== myId) return; // superseded
       const others = (teamDecades ?? []).filter((d) => d !== cur);
       if (others.length === 0) {
@@ -332,7 +355,10 @@ export default function Home() {
       for (const e of lineupRef.current) {
         if (e) usage[e.decade] = (usage[e.decade] ?? 0) + 1;
       }
-      setCurrentDecade(pickWeightedDecade(others, usage)); // same team, new era
+      // Same team, new era — adopt the freshly-minted receipt for that era.
+      const newDecade = pickWeightedDecade(others, usage);
+      setCurrentDecade(newDecade);
+      setCurrentReceipt(receipts?.[newDecade] ?? "");
     } catch {
       if (rollSeq.current === myId) {
         setError("Couldn't skip the decade. Try again.");
@@ -545,12 +571,20 @@ export default function Home() {
               </p>
             </button>
           </div>
-          <button
-            className="mt-6 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-            onClick={() => setShowHowTo(true)}
-          >
-            How to play
-          </button>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
+            <button
+              className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+              onClick={() => setShowHowTo(true)}
+            >
+              How to play
+            </button>
+            <Link
+              href="/tournament"
+              className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+            >
+              My teams →
+            </Link>
+          </div>
         </section>
       )}
 
@@ -601,6 +635,24 @@ export default function Home() {
             modeLabel={modeLabel}
             mode={mode}
             onReset={backToMenu}
+            onEnterTournament={
+              gameType === "free" || (gameType === "daily" && dailyBench)
+                ? () => setPhase("tournament")
+                : undefined
+            }
+          />
+        </section>
+      )}
+
+      {/* ---------------- TOURNAMENT ENTRY ---------------- */}
+      {phase === "tournament" && (
+        <section className="relative z-10 mx-auto mt-4 w-full max-w-lg">
+          <TournamentEntry
+            initialLineup={lineup}
+            mode={gameType === "daily" ? "daily" : mode}
+            dailyBench={gameType === "daily" ? dailyBench : null}
+            dailyDate={gameType === "daily" ? dailyDate : null}
+            onBack={backToMenu}
           />
         </section>
       )}

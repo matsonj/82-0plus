@@ -35,7 +35,9 @@ export interface ScoringPlayer {
  * Construction factors that shape a five-star lineup (each shown on the result
  * as a net-rating adjustment off the GQ base, so the knobs are visible):
  *     • usage      — five ball-dominant stars can't all eat; possessions are a
- *                    fixed budget, so shot overlap throttles the lineup.
+ *                    fixed (~100) budget, and the penalty is CONVEX in how far the
+ *                    lineup runs over it, so each extra shot-hungry star costs more
+ *                    net than the last — stacking shooters can't be cruised through.
  *     • outside    — floor spacing by shooting QUALITY, not era-sensitive volume:
  *                    a "non-shooter" is FT% ≤ 65% (era-neutral touch tell) OR a
  *                    genuine bad 3pt shooter (shoots 3s and hits < 30%). One is
@@ -71,7 +73,7 @@ export const SCORING_CONFIG = {
   BASE_WINS: 41,
 
   // Fit penalties, in net-rating points subtracted at their worst.
-  USAGE_MAX_PEN: 13, // shot-overlap: stars must sacrifice usage to fit together
+  USAGE_MAX_PEN: 20, // shot-overlap: stars must sacrifice usage to fit together
   BALLHOG_MAX_PEN: 11, // iso-heavy, low assisted-FG%
   // Outside shooting (stepped): 0–1 non-shooters is fine, 2 hurts, 3+ is brutal.
   OUTSIDE_PEN_2: 5, // exactly two non-shooters
@@ -100,7 +102,14 @@ export const SCORING_CONFIG = {
   SYNERGY_FRAC: 0.12, // up to +12% of base net rating
 
   // Fit targets.
-  POSS_BUDGET_PER_SLOT: 22, // possessions (fga + 0.44·fta + tov) one slot can absorb
+  POSS_BUDGET_PER_SLOT: 22, // box-scale budget: possessions (fga + 0.44·fta + tov) one
+  //   slot can absorb before the per-game box totals are discounted/bumped (cosmetic).
+  // Usage PENALTY budget — deliberately tighter than the box budget (~real-NBA 100
+  //   possessions/game) and convex, so stacking ball-dominant shooters compounds:
+  //   the 2nd/3rd shot-hungry star costs far more net than the first.
+  USAGE_PEN_BUDGET_PER_SLOT: 20, // penalty kicks in past n×20 = 100 team possessions
+  USAGE_FULL_OVERAGE: 0.45, // overage fraction (totalPoss/budget − 1) at which the
+  //   full USAGE_MAX_PEN applies — 0.45 ⇒ ~145 possessions; quadratic ramp below it.
   USAGE_BOX_MIN: 0.6, // floor on the box usage-scale (heavy overload can't zero scoring)
   USAGE_BOX_MAX: 1.4, // cap on the box usage-scale (under-usage bump is bounded)
   ASSIST_RATE_TARGET: 0.55, // assisted-FG% at/above which the ball-hog tax is zero
@@ -186,7 +195,17 @@ export function simulateRoster(
   const assistedPct = totalFgm > 0 ? Math.min(1, totalAst / totalFgm) : 0;
   const assistFactor = clamp(assistedPct / cfg.ASSIST_RATE_TARGET, 0, 1);
 
-  const usagePen = cfg.USAGE_MAX_PEN * (1 - usageFactor);
+  // Usage penalty: convex in how far the lineup's combined possessions run OVER a
+  // tighter, real-NBA budget (n × USAGE_PEN_BUDGET_PER_SLOT ≈ 100). A small overage
+  // barely registers; a roster of ball-dominant shooters compounds quadratically up
+  // to USAGE_MAX_PEN at USAGE_FULL_OVERAGE over budget. (The box-score usage scale
+  // above keeps its own, looser POSS_BUDGET_PER_SLOT — that's cosmetic, not net.)
+  const penBudget = n * cfg.USAGE_PEN_BUDGET_PER_SLOT;
+  const usageOverage =
+    totalPoss > 0 ? Math.max(0, totalPoss / penBudget - 1) : 0;
+  const usagePen =
+    cfg.USAGE_MAX_PEN *
+    Math.min(1, (usageOverage / cfg.USAGE_FULL_OVERAGE) ** 2);
   const ballhogPen = cfg.BALLHOG_MAX_PEN * (1 - assistFactor);
 
   // Archetype balance by REAL position.
