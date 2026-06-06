@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
+import { TierBadge } from "@/components/TierBadge";
 
 // One line of the net-rating breakdown: a label (+ optional detail) and the
 // signed net-rating points the factor moved.
@@ -303,10 +304,11 @@ export function ResultsPanel({
         </div>
         {onEnterTournament && (
           <button
-            className="md-btn md-btn--lg w-full"
+            className="md-btn md-btn--lg flex w-full items-center justify-center gap-2"
             style={{ background: "var(--md-orange)" }}
             onClick={onEnterTournament}
           >
+            <TierBadge seedNet={netRating} />
             🏀 Enter this team in the Tournament
           </button>
         )}
