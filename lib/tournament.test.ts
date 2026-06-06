@@ -180,11 +180,11 @@ describe("gameScoreCompare", () => {
 });
 
 describe("gameScoreBuff — scales with category dominance", () => {
-  it("7-8 → +3, 6 → +2, 5 → +1.5, ≤4 → 0", () => {
-    expect(gameScoreBuff(8)).toBe(C.GAME_SCORE_BUFF_SWEEP); // 3
-    expect(gameScoreBuff(7)).toBe(C.GAME_SCORE_BUFF_SWEEP); // 3
-    expect(gameScoreBuff(6)).toBe(C.GAME_SCORE_BUFF_STRONG); // 2
-    expect(gameScoreBuff(5)).toBe(C.GAME_SCORE_BUFF_EDGE); // 1.5
+  it("7-8 → sweep, 6 → strong, 5 → edge, ≤4 → 0", () => {
+    expect(gameScoreBuff(8)).toBe(C.GAME_SCORE_BUFF_SWEEP); // 4.5
+    expect(gameScoreBuff(7)).toBe(C.GAME_SCORE_BUFF_SWEEP); // 4.5
+    expect(gameScoreBuff(6)).toBe(C.GAME_SCORE_BUFF_STRONG); // 3
+    expect(gameScoreBuff(5)).toBe(C.GAME_SCORE_BUFF_EDGE); // 2.25
     expect(gameScoreBuff(4)).toBe(0);
     expect(gameScoreBuff(0)).toBe(0);
   });

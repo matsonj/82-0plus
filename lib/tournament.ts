@@ -71,10 +71,11 @@ export const TOURNAMENT_CONFIG = {
   // Game-score buff — the one reward for TEAM COMPOSITION, so it's the strongest
   // matchup buff and it SCALES with how decisively you win the 8-category pairwise
   // comparison (winner's category count, out of 8):
-  //   7–8 → +3, 6 → +2, 5 → +1.5, 4-4 or worse → 0. Loser always 0.
-  GAME_SCORE_BUFF_SWEEP: 3, // 7 or 8 of 8 categories
-  GAME_SCORE_BUFF_STRONG: 2, // 6
-  GAME_SCORE_BUFF_EDGE: 1.5, // 5
+  //   7–8 → +4.5, 6 → +3, 5 → +2.25, 4-4 or worse → 0. Loser always 0.
+  // (Bumped 50% over the original 3/2/1.5 to make composition matter more.)
+  GAME_SCORE_BUFF_SWEEP: 4.5, // 7 or 8 of 8 categories
+  GAME_SCORE_BUFF_STRONG: 3, // 6
+  GAME_SCORE_BUFF_EDGE: 2.25, // 5
 
   // Captain effect: the captain's 2 highest-z categories get a ×(1+PCT) bump and
   // their single lowest-z gets ×(1-PCT), applied to EVERY player on the team
@@ -99,7 +100,9 @@ export const TOURNAMENT_CONFIG = {
   BENCH_RECOVERY_AGE_WEIGHT: 0.05,
 
   // Per-game luck, bounded ±, drawn from a seeded PRNG (never Math.random).
-  RANDOM_FACTOR_MAX: 1.5,
+  // Widened from ±1.5 to ±3.5 so the higher seed doesn't always win — a hot
+  // night can steal games (and occasionally a series).
+  RANDOM_FACTOR_MAX: 3.5,
 } as const;
 
 export type TournamentConfig = typeof TOURNAMENT_CONFIG;
