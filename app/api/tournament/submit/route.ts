@@ -24,6 +24,9 @@ import { simulateBracket } from "@/lib/tournament";
 import { deriveYou, deriveRecord, stripBreakdown } from "@/lib/tournamentRun";
 import { verifyRoll } from "@/lib/tournamentToken";
 import { isEligible, regWinsFromSeedNet, MIN_ELIGIBLE_WINS } from "@/lib/tier";
+import { pacificDate } from "@/lib/dailyDate";
+import { computeDailyBoard } from "@/lib/daily";
+import { ensureDailyGhosts } from "@/lib/dailyGhosts";
 import type { SimPick, TournamentRunResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -127,9 +130,9 @@ export async function POST(req: NextRequest) {
     }
     const teamName = normalizeTeamName(String(body.teamName));
 
-    // ---- Tournament mode (classic teams play classic, hoopiq play hoopiq) ----
+    // ---- Tournament mode: classic / hoopiq / daily. Each has its own pool. ----
     const mode = String(body?.mode ?? "");
-    if (mode !== "classic" && mode !== "hoopiq") {
+    if (mode !== "classic" && mode !== "hoopiq" && mode !== "daily") {
       return jsonWithSessionHint(
         sessionHint,
         { error: "invalid mode" },
@@ -173,47 +176,76 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ---- Provenance: every pick must carry a valid signed roll receipt for its
-    // (team, decade) — proof it came from a real server roll (/api/slot or the
-    // decade-skip), not five arbitrary combos invented in a direct POST. ----
-    const rawRoster = (Array.isArray(body?.roster) ? body.roster : []) as {
-      receipt?: unknown;
-    }[];
-    const rawSixth = (body?.sixthPick ?? {}) as { receipt?: unknown };
-    const receiptsOk =
-      picks.every((p, i) => verifyRoll(rawRoster[i]?.receipt, p.team)) &&
-      verifyRoll(rawSixth.receipt, sixthPick.team);
-    if (!receiptsOk) {
-      return jsonWithSessionHint(
-        sessionHint,
-        { error: "roll your team in a real game first" },
-        { status: 400 },
-      );
+    // ---- Provenance. Two models depending on mode:
+    //   • classic/hoopiq — every pick carries a signed roll receipt (proof of a
+    //     real server roll via /api/slot or the decade-skip);
+    //   • daily — picks must match TODAY'S deterministic daily board (the daily
+    //     analog of a receipt: the board is server-derived, so picks that don't
+    //     match it are forgeries). No receipts are issued for daily slots. ----
+    let dailyDate: string | null = null;
+    if (mode === "daily") {
+      const date = pacificDate();
+      const board = await computeDailyBoard(date, queryOptions);
+      if (!board.benchSlot || board.slots.length < KINDS.length) {
+        return jsonWithSessionHint(
+          sessionHint,
+          { error: "the daily challenge can't be entered today" },
+          { status: 400 },
+        );
+      }
+      const slotsMatch = picks.every((p) => {
+        const s = board.slots[p.slot];
+        return s && p.team === s.team && p.decade === s.decade;
+      });
+      const benchMatch =
+        sixthPick.team === board.benchSlot.team &&
+        sixthPick.decade === board.benchSlot.decade;
+      if (!slotsMatch || !benchMatch) {
+        return jsonWithSessionHint(
+          sessionHint,
+          { error: "those picks aren't from today's daily challenge" },
+          { status: 400 },
+        );
+      }
+      // Lazily generate this date's daily ghost field (idempotent) so the
+      // bracket has opponents constrained to the same board.
+      await ensureDailyGhosts(board, date, queryOptions);
+      dailyDate = date;
+    } else {
+      const rawRoster = (Array.isArray(body?.roster) ? body.roster : []) as {
+        receipt?: unknown;
+      }[];
+      const rawSixth = (body?.sixthPick ?? {}) as { receipt?: unknown };
+      const receiptsOk =
+        picks.every((p, i) => verifyRoll(rawRoster[i]?.receipt, p.team)) &&
+        verifyRoll(rawSixth.receipt, sixthPick.team);
+      if (!receiptsOk) {
+        return jsonWithSessionHint(
+          sessionHint,
+          { error: "roll your team in a real game first" },
+          { status: 400 },
+        );
+      }
+      // Each pick must come from its OWN server roll — distinct receipts (no
+      // single signed roll reused across rows). Distinct teams (below) covers
+      // the same ground since receipts are team-bound, but this is explicit.
+      const allReceipts = [...rawRoster.map((r) => r?.receipt), rawSixth.receipt];
+      if (new Set(allReceipts).size !== allReceipts.length) {
+        return jsonWithSessionHint(
+          sessionHint,
+          { error: "each pick must come from its own roll" },
+          { status: 400 },
+        );
+      }
     }
 
-    // Each of the six players must come from its OWN server roll. A real draft
-    // never repeats a team (each roll excludes the ones already taken), so:
-    //   • distinct teams across all six — blocks replaying one team's receipt
-    //     across multiple rows and blocks stacking one franchise's best five;
-    //   • distinct receipts — belt-and-suspenders against reusing a single
-    //     signed roll (already implied by distinct teams, since receipts are
-    //     team-bound, but checked explicitly so the invariant is self-evident).
+    // A real roster never repeats a team across the six (every mode): blocks
+    // replaying one team across multiple rows and stacking one franchise's best.
     const allTeams = [...picks.map((p) => p.team), sixthPick.team];
     if (new Set(allTeams).size !== allTeams.length) {
       return jsonWithSessionHint(
         sessionHint,
         { error: "each player must come from a different team — re-roll a duplicate" },
-        { status: 400 },
-      );
-    }
-    const allReceipts = [
-      ...rawRoster.map((r) => r?.receipt),
-      rawSixth.receipt,
-    ];
-    if (new Set(allReceipts).size !== allReceipts.length) {
-      return jsonWithSessionHint(
-        sessionHint,
-        { error: "each pick must come from its own roll" },
         { status: 400 },
       );
     }
@@ -296,7 +328,13 @@ export async function POST(req: NextRequest) {
       captainSlot,
     });
 
-    const opponents = await drawOpponents(nameNorm, mode, seedNet, queryOptions);
+    const opponents = await drawOpponents(
+      nameNorm,
+      mode,
+      seedNet,
+      dailyDate,
+      queryOptions,
+    );
     const field = [myTeam, ...opponents];
     if (field.length !== 16) {
       return jsonWithSessionHint(
@@ -318,6 +356,7 @@ export async function POST(req: NextRequest) {
       userId,
       teamName,
       mode,
+      dailyDate,
       rosterJson: picks,
       sixthJson: sixthPick,
       // Names for the teams-list roster peek (no extra bracket fetch needed).

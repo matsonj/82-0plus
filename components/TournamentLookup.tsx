@@ -99,7 +99,9 @@ function TeamRow({
 
         <div className="flex items-center gap-2">
           <TierBadge seedNet={team.seedNet} />
-          {team.mode === "hoopiq" ? (
+          {team.mode === "daily" ? (
+            <span className="md-capsule md-capsule--sky">Daily</span>
+          ) : team.mode === "hoopiq" ? (
             <span className="md-capsule md-capsule--ink">HoopIQ</span>
           ) : (
             <span className="md-capsule">Classic</span>

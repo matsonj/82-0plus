@@ -9,7 +9,7 @@ import {
   FG_BASELINE,
   FT_BASELINE,
   type BracketPlayer,
-  type GameMode,
+  type TournamentMode,
   type SimPick,
   type StatKey,
   type StatNorms,
@@ -324,35 +324,55 @@ async function hydrateStoredTeam(
  * projection the engine seeds with), not in SQL, to keep one source of truth.
  * Alt-stuffing within a tier is still possible — per-account/IP caps would close
  * it (accepted residual).
+ *
+ * DAILY mode is partitioned by DATE instead of a 24h window: the human field is
+ * that date's daily entries and the ghosts are that date's daily-constrained
+ * ghosts (ghost_type='daily'); pass `dailyDate`. Classic/HoopIQ use the standard
+ * ghost pool (ghost_type<>'daily').
  */
 export async function drawOpponents(
   myNameNorm: string,
   mode: string,
   seedNet: number,
+  dailyDate: string | null = null,
   options: QueryOptions = {},
   field = 15,
 ): Promise<TournamentTeam[]> {
   const FIELD = field;
+  const isDaily = mode === "daily";
   const myTier = tierForSeedNet(seedNet)?.key ?? null;
   const sameTier = (sn: number) =>
     myTier === null || tierForSeedNet(sn)?.key === myTier;
 
-  // Pull a generous random candidate set, then keep only same-tier teams. The
-  // pool is bounded so a busy mode doesn't fetch unboundedly; FIELD opponents
-  // are sampled from whatever same-tier teams surface.
-  const subs = await queryRW<StoredTeamRow>(
-    `SELECT t.team_id AS team_id, t.team_name AS name,
-            t.roster_json AS roster_json, t.sixth_json AS sixth_json,
-            t.captain_slot AS captain_slot, t.seed_net AS seed_net
-       FROM nba_tournament.main.teams t
-       JOIN nba_tournament.main.users u ON u.user_id = t.user_id
-      WHERE t.created_at >= now() - INTERVAL 24 HOUR
-        AND t.mode = $2
-        AND u.name_norm <> $1
-      ORDER BY random()
-      LIMIT 200`,
-    [myNameNorm, mode],
-  );
+  // Pull a generous random candidate set, then keep only same-tier teams. Daily
+  // pulls a date's full pool; classic/hoopiq pull the last 24h of that mode.
+  const subs = isDaily
+    ? await queryRW<StoredTeamRow>(
+        `SELECT t.team_id AS team_id, t.team_name AS name,
+                t.roster_json AS roster_json, t.sixth_json AS sixth_json,
+                t.captain_slot AS captain_slot, t.seed_net AS seed_net
+           FROM nba_tournament.main.teams t
+           JOIN nba_tournament.main.users u ON u.user_id = t.user_id
+          WHERE t.mode = 'daily'
+            AND t.daily_date = $2
+            AND u.name_norm <> $1
+          ORDER BY random()
+          LIMIT 200`,
+        [myNameNorm, dailyDate ?? ""],
+      )
+    : await queryRW<StoredTeamRow>(
+        `SELECT t.team_id AS team_id, t.team_name AS name,
+                t.roster_json AS roster_json, t.sixth_json AS sixth_json,
+                t.captain_slot AS captain_slot, t.seed_net AS seed_net
+           FROM nba_tournament.main.teams t
+           JOIN nba_tournament.main.users u ON u.user_id = t.user_id
+          WHERE t.created_at >= now() - INTERVAL 24 HOUR
+            AND t.mode = $2
+            AND u.name_norm <> $1
+          ORDER BY random()
+          LIMIT 200`,
+        [myNameNorm, mode],
+      );
 
   const teams: TournamentTeam[] = [];
   for (const row of subs) {
@@ -364,15 +384,26 @@ export async function drawOpponents(
   }
 
   // Top up with ghosts: same-tier first, then any ghost as a last resort so the
-  // 16-team field is always complete. Fetch a pool and partition in JS by tier.
+  // 16-team field is always complete. Daily uses that date's daily ghosts;
+  // classic/hoopiq use the standard (mode-agnostic) ghost pool.
   if (teams.length < FIELD) {
     const usedGhostIds = new Set<string>();
-    const ghosts = await queryRW<StoredTeamRow>(
-      `SELECT ghost_id, name, roster_json, sixth_json, seed_net
-         FROM nba_tournament.main.ghosts
-        ORDER BY random()
-        LIMIT 200`,
-    );
+    const ghosts = isDaily
+      ? await queryRW<StoredTeamRow>(
+          `SELECT ghost_id, name, roster_json, sixth_json, seed_net
+             FROM nba_tournament.main.ghosts
+            WHERE ghost_type = 'daily' AND ghost_date = $1
+            ORDER BY random()
+            LIMIT 200`,
+          [dailyDate ?? ""],
+        )
+      : await queryRW<StoredTeamRow>(
+          `SELECT ghost_id, name, roster_json, sixth_json, seed_net
+             FROM nba_tournament.main.ghosts
+            WHERE COALESCE(ghost_type, 'standard') <> 'daily'
+            ORDER BY random()
+            LIMIT 200`,
+        );
     // Two passes: same-tier ghosts, then the rest.
     for (const pass of [true, false]) {
       for (const row of ghosts) {
@@ -445,7 +476,8 @@ export interface InsertTeamArgs {
   teamId: string; // caller-generated (used as the bracket owner id before insert)
   userId: string;
   teamName: string; // this team's display name (franchise), distinct from the user
-  mode: string; // "classic" | "hoopiq" — segregates the bracket pool
+  mode: string; // "classic" | "hoopiq" | "daily" — segregates the bracket pool
+  dailyDate?: string | null; // set for mode='daily' — partitions the pool by day
   rosterJson: unknown;
   sixthJson: unknown;
   rosterDisplay: unknown; // { roster: BracketPlayer[]; sixthMan: BracketPlayer } — names for the list
@@ -467,15 +499,16 @@ export interface InsertTeamArgs {
 export async function insertTeam(args: InsertTeamArgs): Promise<void> {
   await queryRW(
     `INSERT INTO nba_tournament.main.teams
-       (team_id, user_id, team_name, mode, roster_json, sixth_json, roster_display,
+       (team_id, user_id, team_name, mode, daily_date, roster_json, sixth_json, roster_display,
         captain_slot, seed_net,
         record_w, record_l, realized_margin, reached_round, champion_name, bracket_json)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
     [
       args.teamId,
       args.userId,
       args.teamName,
       args.mode,
+      args.dailyDate ?? null,
       JSON.stringify(args.rosterJson),
       JSON.stringify(args.sixthJson),
       JSON.stringify(args.rosterDisplay),
@@ -526,7 +559,7 @@ export async function getUserTeams(
     return {
       teamId: r.team_id,
       teamName: r.team_name,
-      mode: r.mode as GameMode,
+      mode: r.mode as TournamentMode,
       recordW: r.record_w,
       recordL: r.record_l,
       realizedMargin: r.realized_margin,

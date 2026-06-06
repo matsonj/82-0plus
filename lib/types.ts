@@ -90,6 +90,11 @@ export interface SimResult {
 
 export type GameMode = "classic" | "hoopiq";
 
+// Which tournament pool a team belongs to. Distinct from GameMode (which only
+// governs stat visibility): "daily" teams hide stats like hoopiq but compete in
+// their own date-partitioned pool against daily-constrained ghosts.
+export type TournamentMode = "classic" | "hoopiq" | "daily";
+
 // ============================================================================
 // Tournament Edition
 //
@@ -234,7 +239,7 @@ export interface TournamentRunResponse {
 export interface TournamentTeamSummary {
   teamId: string;
   teamName: string;
-  mode: GameMode;
+  mode: TournamentMode;
   recordW: number;
   recordL: number;
   realizedMargin: number; // avg point margin in the playoffs, e.g. +5.2

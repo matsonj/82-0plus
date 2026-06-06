@@ -94,17 +94,30 @@ export function ensureSchema(): Promise<void> {
       );
       await queryRW(
         `CREATE TABLE IF NOT EXISTS ${TDB}.ghosts (
-           ghost_id INTEGER, name VARCHAR, roster_json JSON, sixth_json JSON, seed_net DOUBLE)`,
+           ghost_id INTEGER, name VARCHAR, roster_json JSON, sixth_json JSON, seed_net DOUBLE,
+           ghost_type VARCHAR DEFAULT 'standard', ghost_date VARCHAR)`,
       );
       // CREATE TABLE IF NOT EXISTS won't add columns introduced after a table
-      // already exists, so additively self-heal the evolving `teams` columns.
+      // already exists, so additively self-heal the evolving columns.
+      // teams: per-team display + the daily-tournament date partition.
       for (const col of [
         "team_name VARCHAR",
         "mode VARCHAR",
         "roster_display JSON",
+        "daily_date VARCHAR", // set for mode='daily' entries; partitions the daily pool by day
       ]) {
         await queryRW(
           `ALTER TABLE ${TDB}.teams ADD COLUMN IF NOT EXISTS ${col}`,
+        );
+      }
+      // ghosts: daily ghosts are tagged by type + date (standard ghosts predate
+      // these columns, so self-heal them; existing rows default to 'standard').
+      for (const col of [
+        "ghost_type VARCHAR DEFAULT 'standard'",
+        "ghost_date VARCHAR",
+      ]) {
+        await queryRW(
+          `ALTER TABLE ${TDB}.ghosts ADD COLUMN IF NOT EXISTS ${col}`,
         );
       }
     })().catch((err) => {
