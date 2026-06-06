@@ -54,10 +54,36 @@ export interface GeneratedDailyGhost {
 }
 
 /**
+ * Find an assignment of the 5 board slots to the 5 lineup positions
+ * [G,FLEX,W,FLEX,B] such that each position has at least one eligible player —
+ * exactly the freedom a human has (a slot's player can fill any position it's
+ * eligible for). `elig[boardSlot][position]` is the eligible-player list.
+ * Returns `assignment[position] = boardSlot` (a permutation), or null if no
+ * assignment works (a board that can't field a legal lineup at all). Searches in
+ * board-slot index order so the result is deterministic.
+ */
+function findAssignment(elig: IndexedPlayer[][][]): number[] | null {
+  const used = new Set<number>();
+  const assignment: number[] = [];
+  const bt = (pos: number): boolean => {
+    if (pos === KINDS.length) return true;
+    for (let bs = 0; bs < elig.length; bs++) {
+      if (used.has(bs) || elig[bs][pos].length === 0) continue;
+      used.add(bs);
+      assignment[pos] = bs;
+      if (bt(pos + 1)) return true;
+      used.delete(bs);
+    }
+    return false;
+  };
+  return bt(0) ? assignment : null;
+}
+
+/**
  * Build the daily ghost field for `board` from the player index, seeded by
  * `date` (so a given day always yields the same ghosts). Returns [] if the board
- * can't field a legal six (a sparse day where some slot has no eligible player —
- * the human would be stuck too, so there's simply no daily tournament that day).
+ * can't field a legal six (a sparse day where no position assignment works — the
+ * human would be stuck too, so there's simply no daily tournament that day).
  */
 export function buildDailyGhosts(
   board: DailyBoard,
@@ -69,24 +95,25 @@ export function buildDailyGhosts(
   const byCombo = (team: string, decade: number) =>
     index.filter((p) => p.team === team && p.decade === decade);
 
-  // Eligible candidates per starter slot (respecting the slot's position) + bench.
-  const starterCands = board.slots.map((s, i) =>
-    byCombo(s.team, s.decade).filter((p) => canPlay(p, KINDS[i])),
+  // For each board slot, the players it can field at each lineup position.
+  const comboPlayers = board.slots.map((s) => byCombo(s.team, s.decade));
+  const elig = comboPlayers.map((players) =>
+    KINDS.map((kind) => players.filter((p) => canPlay(p, kind))),
   );
+  const assignment = findAssignment(elig); // position → board slot
   const benchCands = byCombo(board.benchSlot.team, board.benchSlot.decade);
-  if (starterCands.some((c) => c.length === 0) || benchCands.length === 0) {
-    return [];
-  }
+  if (!assignment || benchCands.length === 0) return [];
 
   const rng = mulberry32(hashSeed(`daily-ghosts:${date}`));
   const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
 
   const ghosts: GeneratedDailyGhost[] = [];
   for (let i = 0; i < DAILY_GHOST_COUNT; i++) {
-    const starters = board.slots.map((_, slot) => ({
-      player: pick(starterCands[slot]),
-      slot,
-    }));
+    // Position j drafts an eligible player from its assigned board slot.
+    const starters = KINDS.map((_, pos) => {
+      const bs = assignment[pos];
+      return { player: pick(elig[bs][pos]), slot: pos };
+    });
     const sixth = pick(benchCands);
     const seedNet = simulateRoster(
       starters.map((s) => toScoring(s.player)),

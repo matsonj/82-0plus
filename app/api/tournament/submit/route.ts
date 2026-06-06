@@ -193,10 +193,17 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      const slotsMatch = picks.every((p) => {
-        const s = board.slots[p.slot];
-        return s && p.team === s.team && p.decade === s.decade;
-      });
+      // Set-based: a daily player can place a slot's pick at any eligible lineup
+      // position, so the five starters' (team, decade) must equal the board's
+      // five slots as a SET (each used once) — not positionally. Bench separate.
+      const boardKeys = new Set(
+        board.slots.map((s) => `${s.team}|${s.decade}`),
+      );
+      const pickKeys = picks.map((p) => `${p.team}|${p.decade}`);
+      const slotsMatch =
+        pickKeys.length === board.slots.length &&
+        new Set(pickKeys).size === pickKeys.length &&
+        pickKeys.every((k) => boardKeys.has(k));
       const benchMatch =
         sixthPick.team === board.benchSlot.team &&
         sixthPick.decade === board.benchSlot.decade;

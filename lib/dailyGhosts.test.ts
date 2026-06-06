@@ -58,13 +58,15 @@ describe("buildDailyGhosts", () => {
     const ghosts = buildDailyGhosts(board, fullIndex(), "2026-06-05");
     expect(ghosts).toHaveLength(DAILY_GHOST_COUNT);
 
+    const boardKeys = new Set(
+      board.slots.map((s) => `${s.team}|${s.decade}`),
+    );
     for (const g of ghosts) {
-      // 5 starters in slot order, each from its board slot's team+decade.
-      expect(g.roster.map((p) => p.slot)).toEqual([0, 1, 2, 3, 4]);
-      g.roster.forEach((p, i) => {
-        expect(p.team).toBe(board.slots[i].team);
-        expect(p.decade).toBe(board.slots[i].decade);
-      });
+      // 5 starters occupy lineup positions 0..4.
+      expect([...g.roster.map((p) => p.slot)].sort()).toEqual([0, 1, 2, 3, 4]);
+      // the five starters' (team, decade) equal the board's five slots as a set.
+      const keys = g.roster.map((p) => `${p.team}|${p.decade}`);
+      expect(new Set(keys)).toEqual(boardKeys);
       // sixth man from the bench slot.
       expect(g.sixth.team).toBe(board.benchSlot!.team);
       expect(g.sixth.decade).toBe(board.benchSlot!.decade);

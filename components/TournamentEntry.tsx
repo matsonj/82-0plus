@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   GameMode,
   PublicPlayer,
+  TournamentMode,
   TournamentRunResponse,
 } from "@/lib/types";
 import { type SlotKind } from "@/lib/positions";
@@ -48,13 +49,22 @@ type Step = "sixth" | "finalize";
 export function TournamentEntry({
   initialLineup,
   mode,
+  dailyBench = null,
   onBack,
 }: {
   initialLineup: (LineupEntry | null)[];
-  mode: GameMode;
+  mode: TournamentMode;
+  // For daily mode: the FIXED bench slot (team+decade) the sixth man is drafted
+  // from — no rolling, no team-skip, no receipt (the daily board is the
+  // provenance). Null/omitted for classic/hoopiq, which roll the bench.
+  dailyBench?: { team: string; decade: number } | null;
   onBack: () => void;
 }) {
-  // ----- league data (for the bench roll) -----
+  const isDaily = mode === "daily";
+  // Stat visibility mirrors the main game: daily hides stats like HoopIQ.
+  const listMode: GameMode = mode === "classic" ? "classic" : "hoopiq";
+
+  // ----- league data (for the bench roll; unused in daily) -----
   const [decades, setDecades] = useState<number[]>([]);
   const [booting, setBooting] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -127,8 +137,12 @@ export function TournamentEntry({
     setPin("");
   };
 
-  // ----- load decades on mount -----
+  // ----- load decades on mount (classic/hoopiq only — daily has fixed slots) -----
   useEffect(() => {
+    if (isDaily) {
+      setBooting(false);
+      return;
+    }
     let active = true;
     setBooting(true);
     fetch("/api/decades")
@@ -151,7 +165,7 @@ export function TournamentEntry({
     return () => {
       active = false;
     };
-  }, []);
+  }, [isDaily]);
 
   // Roll a team for the bench round. Excludes every team already on the roster
   // and down-weights eras the five already cover.
@@ -200,13 +214,23 @@ export function TournamentEntry({
     [decades],
   );
 
-  // Auto-roll the bench round until a sixth man is chosen.
+  // Auto-roll the bench round until a sixth man is chosen (classic/hoopiq only).
   useEffect(() => {
+    if (isDaily) return; // daily uses the fixed bench slot, not a roll
     if (booting || decades.length === 0 || result) return;
     if (step !== "sixth") return;
     if (currentDecade !== null || rollActive.current) return;
     rollRound({});
-  }, [booting, decades, result, step, currentDecade, rollRound]);
+  }, [isDaily, booting, decades, result, step, currentDecade, rollRound]);
+
+  // Daily: pin the bench round to the day's fixed bench slot (no roll). No
+  // receipt — the daily board is the provenance, verified server-side on submit.
+  useEffect(() => {
+    if (!isDaily || !dailyBench || result) return;
+    if (step !== "sixth" || currentDecade !== null) return;
+    setCurrentTeam(dailyBench.team);
+    setCurrentDecade(dailyBench.decade);
+  }, [isDaily, dailyBench, result, step, currentDecade]);
 
   const draftable = useCallback(
     (p: PublicPlayer) => !usedIds.includes(p.entity_id),
@@ -351,12 +375,13 @@ export function TournamentEntry({
           <span
             className="md-capsule"
             style={
-              mode === "hoopiq"
+              listMode === "hoopiq"
                 ? { background: "var(--md-ink)", color: "var(--md-white)" }
                 : undefined
             }
           >
-            {mode === "hoopiq" ? "HoopIQ" : "Classic"} Tournament
+            {mode === "daily" ? "Daily" : mode === "hoopiq" ? "HoopIQ" : "Classic"}{" "}
+            Tournament
           </span>
         </div>
         <LineupBoard
@@ -394,27 +419,32 @@ export function TournamentEntry({
       {step === "sixth" && (
         <div className="md-card md-card--lift flex flex-col items-center gap-4 p-4 sm:p-5">
           <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Draft your Sixth Man · any position
+            {isDaily
+              ? "Draft your Sixth Man · today's bench slot"
+              : "Draft your Sixth Man · any position"}
           </div>
           {currentDecade !== null && (
             <SlotMachine team={currentTeam} decade={currentDecade} size="lg" />
           )}
-          <div className="flex flex-wrap justify-center gap-2">
-            <button
-              className="md-btn md-btn--sm md-btn--secondary"
-              onClick={teamSkip}
-              disabled={teamSkips <= 0 || rolling}
-            >
-              ↻ Team skip ({teamSkips})
-            </button>
-          </div>
+          {/* Daily's bench is a fixed slot — no team-skip. */}
+          {!isDaily && (
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                className="md-btn md-btn--sm md-btn--secondary"
+                onClick={teamSkip}
+                disabled={teamSkips <= 0 || rolling}
+              >
+                ↻ Team skip ({teamSkips})
+              </button>
+            </div>
+          )}
           <div className="w-full">
             {currentTeam && currentDecade !== null && !rolling ? (
               <PlayerList
                 team={currentTeam}
                 decade={currentDecade}
-                mode={mode}
-                allowRespin
+                mode={listMode}
+                allowRespin={!isDaily}
                 draftable={draftable}
                 onPick={pickSixth}
                 onNoneEligible={() =>

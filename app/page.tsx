@@ -43,6 +43,8 @@ export default function Home() {
   const [mode, setMode] = useState<GameMode>("classic");
   const [gameType, setGameType] = useState<GameType>("free");
   const [dailySlots, setDailySlots] = useState<{ team: string; decade: number }[]>([]);
+  // The daily tournament's fixed 6th-man slot (team+decade); null on sparse days.
+  const [dailyBench, setDailyBench] = useState<{ team: string; decade: number } | null>(null);
   const [dailyDate, setDailyDate] = useState<string>("");
   const [today, setToday] = useState<string>("");
   const [dailyResult, setDailyResult] = useState<
@@ -138,6 +140,7 @@ export default function Home() {
     setTeamSkips(1);
     setDecadeSkips(1);
     setDailySlots([]);
+    setDailyBench(null);
     setError(null);
     setPhase("play");
     setBooting(true);
@@ -145,12 +148,14 @@ export default function Home() {
       if (type === "daily") {
         const res = await fetch("/api/daily");
         if (!res.ok) throw new Error("load failed");
-        const { date, slots } = (await res.json()) as {
+        const { date, slots, benchSlot } = (await res.json()) as {
           date: string;
           slots: { team: string; decade: number }[];
+          benchSlot: { team: string; decade: number } | null;
         };
         setDailyDate(date);
         setDailySlots(slots);
+        setDailyBench(benchSlot);
       } else {
         const res = await fetch("/api/decades");
         if (!res.ok) throw new Error("load failed");
@@ -170,6 +175,7 @@ export default function Home() {
     setResultRoster([]);
     setCurrentReceipt("");
     setDailySlots([]);
+    setDailyBench(null);
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
@@ -621,7 +627,9 @@ export default function Home() {
             mode={mode}
             onReset={backToMenu}
             onEnterTournament={
-              gameType === "free" ? () => setPhase("tournament") : undefined
+              gameType === "free" || (gameType === "daily" && dailyBench)
+                ? () => setPhase("tournament")
+                : undefined
             }
           />
         </section>
@@ -632,7 +640,8 @@ export default function Home() {
         <section className="relative z-10 mx-auto mt-4 w-full max-w-lg">
           <TournamentEntry
             initialLineup={lineup}
-            mode={mode}
+            mode={gameType === "daily" ? "daily" : mode}
+            dailyBench={gameType === "daily" ? dailyBench : null}
             onBack={backToMenu}
           />
         </section>
