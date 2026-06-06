@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { TournamentLookup } from "@/components/TournamentLookup";
 
-// Lookup-only landing. You ENTER the tournament from a finished Classic/HoopIQ
+// Lookup-only landing. You ENTER the tournament from a finished Classic/Ranked
 // game (the "Enter Tournament" button on the results), which carries your drafted
 // five + mode in. This page is just for checking your bracket later by name + PIN.
 export default function TournamentPage() {
@@ -36,7 +36,7 @@ export default function TournamentPage() {
         <p className="mx-auto mt-4 max-w-md text-[14px] leading-relaxed sm:text-[15px]">
           Look up your bracket by name + PIN. Haven&rsquo;t entered yet? Play a{" "}
           <Link href="/" className="text-[var(--md-blue)] underline">
-            Classic or HoopIQ
+            Classic or Ranked
           </Link>{" "}
           season, then hit <strong>Enter Tournament</strong> on your result.
         </p>

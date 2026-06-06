@@ -98,11 +98,12 @@ function TeamRow({
         </div>
 
         <div className="flex items-center gap-2">
-          <TierBadge seedNet={team.seedNet} />
+          {/* Daily is "Open" — tier-less — so no tier badge for daily teams. */}
+          {team.mode !== "daily" && <TierBadge seedNet={team.seedNet} />}
           {team.mode === "daily" ? (
             <span className="md-capsule md-capsule--sky">Daily</span>
           ) : team.mode === "hoopiq" ? (
-            <span className="md-capsule md-capsule--ink">HoopIQ</span>
+            <span className="md-capsule md-capsule--ink">Ranked</span>
           ) : (
             <span className="md-capsule">Classic</span>
           )}
@@ -348,7 +349,7 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
           <div className="md-card flex flex-col gap-1 p-5 text-center">
             <div className="font-display text-lg font-bold">No teams yet</div>
             <p className="text-[13px] text-[var(--md-ink-muted)]">
-              Play a Classic or HoopIQ season and hit Enter Tournament.
+              Play a Classic or Ranked season and hit Enter Tournament.
             </p>
           </div>
         ) : (

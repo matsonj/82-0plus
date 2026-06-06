@@ -1,9 +1,11 @@
 import type { SimResult } from "./types";
 import { primaryRole, type Role } from "./positions";
+import { paceAdj } from "./pace";
 
 /** A drafted player's box line plus their era-neutral Game Quality (peak-season median). */
 export interface ScoringPlayer {
   gq: number;
+  season: number; // drafted season's STARTING year — drives the era pace adjustment
   mpg: number;
   pts: number;
   reb: number;
@@ -64,6 +66,12 @@ export interface ScoringPlayer {
  *
  * Wins:  wins = 41 + 2.7 × netRating (nbastuffer projected win%). 82-0 ⇒ ≈ +15.2
  *   net — reachable only by an elite core that also spaces, shares, and fits.
+ *
+ * Penalty floor: the construction penalties are additive and could otherwise drag
+ *   an elite-talent roster to ~0 wins. The net is floored by a talent-scaled value
+ *   (see FLOOR_* config) so a high-talent but poorly-built team lands in B/A rather
+ *   than cratering. The floor is clamped below AA, so penalties still gate the
+ *   perfect season — they just can't ruin a great team.
  */
 export const SCORING_CONFIG = {
   GAMES: 82,
@@ -100,6 +108,17 @@ export const SCORING_CONFIG = {
   // Construction synergy: a well-spaced, ball-moving, non-overloaded AND balanced
   // roster amplifies talent — the upside that lets a great team reach 82-0.
   SYNERGY_FRAC: 0.12, // up to +12% of base net rating
+
+  // Talent-scaled penalty floor. The construction penalties stack additively and
+  // could otherwise drag an elite-talent roster to ~0 wins. We floor the net so a
+  // high-talent but poorly-built team lands in the B/A range rather than cratering
+  // — penalties knock you out of contention for a perfect season, they don't ruin
+  // the team. The floor only RESCUES teams whose talent earns it (baseNet above the
+  // 60-win mark); weaker rosters feel the full penalty. It is clamped below the AA
+  // band so a penalized team can never reach S/AA — construction still gates the top.
+  FLOOR_MIN_WINS: 60, // net at this win total is the floor's base for elite talent
+  FLOOR_TALENT_SHARE: 0.5, // each net point of talent past the 60-win mark lifts the floor by this
+  FLOOR_MAX_WINS: 79, // the floor can never exceed the top of A tier (no floored AA/S)
 
   // Fit targets.
   POSS_BUDGET_PER_SLOT: 22, // box-scale budget: possessions (fga + 0.44·fta + tov) one
@@ -141,7 +160,7 @@ export function simulateRoster(
   const n = roster.length;
   if (n === 0) {
     return {
-      wins: 0, losses: cfg.GAMES, perfect: false, netRating: 0, baseNet: 0, meanGQ: 0,
+      wins: 0, losses: cfg.GAMES, perfect: false, netRating: 0, baseNet: 0, teamFit: 0, meanGQ: 0,
       pf: 0, pa: 0,
       usageFactor: 1, assistFactor: 1, nonShooters: 0,
       totalAst: 0, assistedPct: 0,
@@ -149,13 +168,17 @@ export function simulateRoster(
       sizePen: 0, defBuff: 0, avgHeight: 0, allDefCount: 0,
       roleCounts: { G: 0, W: 0, B: 0 },
       totalPoss: 0,
-      teamBox: { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgPct: 0, ftPct: 0, tov: 0 },
+      teamBox: { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgPct: 0, ftPct: 0, tov: 0, fg3m: 0 },
     };
   }
 
   const sum = (f: (p: ScoringPlayer) => number) =>
     roster.reduce((acc, p) => acc + f(p), 0);
-  const poss = (p: ScoringPlayer) => p.fga + 0.44 * p.fta + p.tov;
+  // Era-relative possessions: a player's box possessions are scaled to a reference
+  // pace by season, so high-pace-era stars (Wilt's 39-FGA years) aren't punished on
+  // usage for an era where everyone shot more. See lib/pace.ts.
+  const poss = (p: ScoringPlayer) =>
+    (p.fga + 0.44 * p.fta + p.tov) * paceAdj(p.season);
 
   const meanGQ = sum((p) => p.gq) / n;
   const totalPoss = sum(poss);
@@ -249,9 +272,27 @@ export function simulateRoster(
       ? baseNet * cfg.SYNERGY_FRAC * fitRamp
       : 0;
 
-  const netRating =
+  const rawNet =
     baseNet - usagePen - outsidePen - ballhogPen - balancePen - sizePen +
     defBuff + synergyBonus;
+
+  // Talent-scaled floor: only elite-talent rosters (baseNet above the 60-win net)
+  // are rescued, and only up to the top of A tier — so penalties still cost the
+  // perfect season but can't ruin a great team.
+  const netFor = (w: number) => (w - cfg.BASE_WINS) / cfg.WINS_PER_NET;
+  const net60 = netFor(cfg.FLOOR_MIN_WINS);
+  const netFloor =
+    baseNet > net60
+      ? Math.min(
+          net60 + cfg.FLOOR_TALENT_SHARE * (baseNet - net60),
+          netFor(cfg.FLOOR_MAX_WINS),
+        )
+      : -Infinity;
+  const netRating = Math.max(rawNet, netFloor);
+  // Everything that isn't talent or the defensive margin buff, as one number — the
+  // "Team fit" line shown on the result (negative when construction hurt the team,
+  // positive when synergy + good fit helped). Reflects the floor.
+  const teamFit = netRating - baseNet - defBuff;
 
   const wins = clamp(
     Math.round(cfg.BASE_WINS + cfg.WINS_PER_NET * netRating),
@@ -284,6 +325,7 @@ export function simulateRoster(
     fgPct: pctOf(ext((p) => p.fgm), ext((p) => p.fga)),
     ftPct: pctOf(ext((p) => p.ftm), ext((p) => p.fta)),
     tov: Math.round(ext((p) => p.tov) * u),
+    fg3m: Math.round(ext((p) => p.fg3m) * u),
   };
 
   return {
@@ -292,9 +334,12 @@ export function simulateRoster(
     perfect: wins === cfg.GAMES,
     netRating: round1(netRating),
     baseNet: round1(baseNet),
+    teamFit: round1(teamFit),
     meanGQ: Math.round(meanGQ * 1000) / 1000,
     pf: teamBox.pts,
-    pa: Math.round(teamBox.pts - netRating),
+    // Reconcile the implied scoreline with the DISPLAYED (rounded) net so that
+    // pf − pa always equals the net rating shown on the card.
+    pa: Math.round(teamBox.pts - round1(netRating)),
     usageFactor: round2(usageFactor),
     assistFactor: round2(assistFactor),
     nonShooters,

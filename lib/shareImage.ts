@@ -1,10 +1,14 @@
 import type { SimResult, SimRosterLine, BracketPlayer } from "./types";
 
 // Draw a branded result card to a PNG (no deps). Square 1080 for share sheets.
+// `isDaily` redacts the roster: in the Daily Challenge everyone plays the SAME five
+// team/era rolls, so revealing which player you took from each slot spoils the
+// puzzle. Daily cards instead show the team's nine aggregate category stats.
 export async function buildShareImage(
   result: SimResult,
   roster: SimRosterLine[],
   label: string,
+  isDaily = false,
 ): Promise<Blob | null> {
   const W = 1080;
   const H = 1080;
@@ -64,23 +68,52 @@ export async function buildShareImage(
     y += 60;
   }
 
-  // Roster
-  ctx.textAlign = "left";
-  ctx.font = f(34, "normal");
-  for (const r of roster) {
-    ctx.fillStyle = orange;
-    ctx.fillText(`${r.team} '${String(r.best_season).slice(2)}`, 110, y);
-    ctx.fillStyle = ink;
-    const name =
-      r.player_name.length > 22
-        ? r.player_name.slice(0, 21) + "…"
-        : r.player_name;
-    ctx.fillText(name, 290, y);
-    ctx.textAlign = "right";
+  if (isDaily) {
+    // Daily: hide the roster entirely, show the team's nine category totals in a
+    // 3×3 grid so the card is rich without revealing any pick.
+    const b = result.teamBox;
+    const cells: [string, string][] = [
+      ["PTS", `${b.pts}`], ["REB", `${b.reb}`], ["AST", `${b.ast}`],
+      ["STL", `${b.stl}`], ["BLK", `${b.blk}`], ["3PM", `${b.fg3m}`],
+      ["FG%", `${b.fgPct}`], ["FT%", `${b.ftPct}`], ["TOV", `${b.tov}`],
+    ];
+    ctx.textAlign = "center";
     ctx.fillStyle = muted;
-    ctx.fillText(`${r.pts}/${r.reb}/${r.ast}`, W - 110, y);
+    ctx.font = f(28, "normal");
+    ctx.fillText("TEAM · PER GAME", W / 2, y + 6);
+    y += 70;
+    const cols = 3;
+    const colW = (W - 220) / cols;
+    for (let i = 0; i < cells.length; i++) {
+      const [lbl, val] = cells[i];
+      const cx = 110 + colW * (i % cols) + colW / 2;
+      const ry = y + Math.floor(i / cols) * 118;
+      ctx.fillStyle = ink;
+      ctx.font = f(58);
+      ctx.fillText(val, cx, ry);
+      ctx.fillStyle = muted;
+      ctx.font = f(26, "normal");
+      ctx.fillText(lbl, cx, ry + 36);
+    }
+  } else {
+    // Roster
     ctx.textAlign = "left";
-    y += 66;
+    ctx.font = f(34, "normal");
+    for (const r of roster) {
+      ctx.fillStyle = orange;
+      ctx.fillText(`${r.team} '${String(r.best_season).slice(2)}`, 110, y);
+      ctx.fillStyle = ink;
+      const name =
+        r.player_name.length > 22
+          ? r.player_name.slice(0, 21) + "…"
+          : r.player_name;
+      ctx.fillText(name, 290, y);
+      ctx.textAlign = "right";
+      ctx.fillStyle = muted;
+      ctx.fillText(`${r.pts}/${r.reb}/${r.ast}`, W - 110, y);
+      ctx.textAlign = "left";
+      y += 66;
+    }
   }
 
   ctx.textAlign = "center";
@@ -103,10 +136,11 @@ export async function buildTournamentShareImage(args: {
   regLosses: number;
   playoffWins: number;
   playoffLosses: number;
-  tier?: string; // S / AA / A / B / C / D — omitted if ineligible
-  modeLabel?: string; // which tournament — "DAILY 06-05-26" / "CLASSIC" / "HOOPIQ"
+  tier?: string; // S / AA / A / B / C / D — omitted if ineligible (and for daily, which is tier-less)
+  modeLabel?: string; // which tournament — "DAILY 06-05-26" / "CLASSIC" / "RANKED"
   roster: BracketPlayer[];
   sixthMan?: BracketPlayer;
+  hideRoster?: boolean; // Daily: show team+era slots but redact player NAMES (no spoilers)
 }): Promise<Blob | null> {
   const W = 1080;
   const H = 1080;
@@ -182,6 +216,13 @@ export async function buildTournamentShareImage(args: {
   for (const p of args.roster) {
     ctx.fillStyle = orange;
     ctx.fillText(`${p.team} '${String(p.season).slice(2)}`, 110, y);
+    if (args.hideRoster) {
+      // Daily: the team/era slot is public, but the PLAYER stays hidden.
+      ctx.fillStyle = muted;
+      ctx.fillText("· hidden", 290, y);
+      y += 60;
+      continue;
+    }
     ctx.fillStyle = ink;
     const nm = p.name.length > 24 ? p.name.slice(0, 23) + "…" : p.name;
     ctx.fillText(nm, 290, y);
@@ -224,8 +265,13 @@ export async function buildTournamentShareImage(args: {
       110,
       y,
     );
-    ctx.fillStyle = ink;
-    ctx.fillText(args.sixthMan.name, 290, y);
+    if (args.hideRoster) {
+      ctx.fillStyle = muted;
+      ctx.fillText("· hidden", 290, y);
+    } else {
+      ctx.fillStyle = ink;
+      ctx.fillText(args.sixthMan.name, 290, y);
+    }
   }
 
   if (args.isChampion) {

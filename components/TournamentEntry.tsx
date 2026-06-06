@@ -24,7 +24,7 @@ import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
 const HOWTO_KEY = "md820-seen-tournament-howto";
 
 // The starting five board — identical to the main game. The five are carried in
-// from the just-played Classic/HoopIQ game and locked; the tournament only adds
+// from the just-played Classic/Ranked game and locked; the tournament only adds
 // a sixth man + a captain on top.
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 
@@ -63,7 +63,7 @@ export function TournamentEntry({
   onBack: () => void;
 }) {
   const isDaily = mode === "daily";
-  // Stat visibility mirrors the main game: daily hides stats like HoopIQ.
+  // Stat visibility mirrors the main game: daily hides stats like Ranked.
   const listMode: GameMode = mode === "classic" ? "classic" : "hoopiq";
 
   // ----- league data (for the bench roll; unused in daily) -----
@@ -298,6 +298,7 @@ export function TournamentEntry({
           pin,
           teamName,
           mode,
+          dailyDate, // which daily board (today or an archived day) the picks are from
           roster,
           captainSlot,
           sixthPick: {
@@ -389,7 +390,7 @@ export function TournamentEntry({
                 : undefined
             }
           >
-            {mode === "daily" ? "Daily" : mode === "hoopiq" ? "HoopIQ" : "Classic"}{" "}
+            {mode === "daily" ? "Daily" : mode === "hoopiq" ? "Ranked" : "Classic"}{" "}
             Tournament
           </span>
         </div>
@@ -599,7 +600,7 @@ export function TournamentEntry({
 
               <label className="flex flex-col gap-1">
                 <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Team name
+                  ✎ Team name <span className="text-[var(--md-orange-deep)]">(tap to edit)</span>
                 </span>
                 <input
                   className="md-input md-input--name"
@@ -615,6 +616,12 @@ export function TournamentEntry({
                     )
                   }
                   placeholder="DREAMTEAM"
+                  // Tinted fill + hard shadow so it clearly reads as an editable
+                  // field (not a heading) against the white card.
+                  style={{
+                    background: "var(--md-paper-2)",
+                    boxShadow: "var(--md-shadow-md)",
+                  }}
                 />
                 <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
                   {teamName.length > 0 && !teamNameCheck.ok

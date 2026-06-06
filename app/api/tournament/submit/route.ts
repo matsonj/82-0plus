@@ -25,7 +25,7 @@ import { simulateBracket } from "@/lib/tournament";
 import { deriveYou, deriveRecord, stripBreakdown } from "@/lib/tournamentRun";
 import { verifyRoll } from "@/lib/tournamentToken";
 import { isEligible, regWinsFromSeedNet, MIN_ELIGIBLE_WINS } from "@/lib/tier";
-import { pacificDate } from "@/lib/dailyDate";
+import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import { computeDailyBoard } from "@/lib/daily";
 import { ensureDailyGhosts } from "@/lib/dailyGhosts";
 import type { SimPick, TournamentRunResponse } from "@/lib/types";
@@ -190,12 +190,15 @@ export async function POST(req: NextRequest) {
     //     match it are forgeries). No receipts are issued for daily slots. ----
     let dailyDate: string | null = null;
     if (mode === "daily") {
-      const date = pacificDate();
+      // The client may replay an archived daily (last 30 Pacific days); validate
+      // the requested date and fall back to today for anything out of window.
+      const requested = String(body?.dailyDate ?? "").slice(0, 10);
+      const date = isPlayableDailyDate(requested) ? requested : pacificDate();
       const board = await computeDailyBoard(date, queryOptions);
       if (!board.benchSlot || board.slots.length < KINDS.length) {
         return jsonWithSessionHint(
           sessionHint,
-          { error: "the daily challenge can't be entered today" },
+          { error: "the daily challenge can't be entered for that date" },
           { status: 400 },
         );
       }

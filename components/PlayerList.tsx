@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GameMode, PublicPlayer } from "@/lib/types";
 import type { Role } from "@/lib/positions";
+import { PlayerCard } from "@/components/PlayerCard";
 
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -72,6 +73,7 @@ export function PlayerList({
   const [reloadKey, setReloadKey] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("mpg");
   const [posFilter, setPosFilter] = useState<"all" | Role>("all");
+  const [cardPlayer, setCardPlayer] = useState<PublicPlayer | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -107,7 +109,7 @@ export function PlayerList({
         (posFilter === "all" || p.positions.includes(posFilter)) &&
         (nq === "" || norm(p.player_name).includes(nq)),
     );
-    // Default + HoopIQ stay on the server's minutes order; Classic can re-sort.
+    // Default + Ranked stay on the server's minutes order; Classic can re-sort.
     // Non-eligible players keep their natural sort position — just greyed, not
     // pushed to the bottom.
     if (mode === "classic") {
@@ -211,12 +213,15 @@ export function PlayerList({
             // shown rather than hidden so you can see who's on the roster.
             const eligible = draftable(p);
             return (
-            <button
+            <div
               key={p.entity_id}
+              className="flex items-stretch border-b border-[var(--md-paper-3)]"
+            >
+            <button
               onClick={() => onPick(p)}
               disabled={!eligible}
               title={eligible ? undefined : "No open slot fits his position"}
-              className={`flex w-full items-center justify-between gap-3 border-b border-[var(--md-paper-3)] px-3 py-2 text-left transition-colors ${
+              className={`flex flex-1 items-center justify-between gap-3 px-3 py-2 text-left transition-colors ${
                 eligible
                   ? "hover:bg-[var(--md-yellow)]"
                   : "cursor-not-allowed opacity-40"
@@ -272,9 +277,34 @@ export function PlayerList({
                 )}
               </div>
             </button>
+            {/* Classic only: open the player's career card (stats are hidden in
+                Ranked/Daily, so the card would be a spoiler there). */}
+            {mode === "classic" && (
+              <button
+                type="button"
+                onClick={() => setCardPlayer(p)}
+                title="Career card"
+                aria-label={`${p.player_name} career card`}
+                className="shrink-0 border-l border-[var(--md-paper-3)] px-2.5 font-display text-sm text-[var(--md-ink-muted)] hover:bg-[var(--md-yellow)] hover:text-[var(--md-ink)]"
+              >
+                ▦
+              </button>
+            )}
+            </div>
             );
           })}
       </div>
+
+      {cardPlayer && (
+        <PlayerCard
+          entityId={cardPlayer.entity_id}
+          playerName={cardPlayer.player_name}
+          team={team}
+          season={cardPlayer.best_season}
+          positions={cardPlayer.positions}
+          onClose={() => setCardPlayer(null)}
+        />
+      )}
     </div>
   );
 }

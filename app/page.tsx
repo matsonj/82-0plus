@@ -14,6 +14,7 @@ import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
+import { DailyArchive } from "@/components/DailyArchive";
 import { TournamentEntry } from "@/components/TournamentEntry";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
@@ -125,9 +126,20 @@ export default function Home() {
     [decades],
   );
 
-  const startGame = useCallback(async (m: GameMode, type: GameType) => {
-    if (type === "daily" && dailyResultRef.current) return; // already played today
-    setMode(type === "daily" ? "hoopiq" : m); // daily hides stats like HoopIQ
+  const startGame = useCallback(async (m: GameMode, type: GameType, dateOverride?: string) => {
+    // Daily is one attempt per date, ever. Today's lock lives in dailyResultRef;
+    // an archived date is checked against its own localStorage key.
+    if (type === "daily") {
+      if (!dateOverride && dailyResultRef.current) return;
+      if (dateOverride) {
+        try {
+          if (localStorage.getItem(`md820-daily-${dateOverride}`)) return;
+        } catch {
+          /* localStorage unavailable */
+        }
+      }
+    }
+    setMode(type === "daily" ? "hoopiq" : m); // daily hides stats like Ranked
     setGameType(type);
     setResult(null);
     setResultRoster([]);
@@ -146,7 +158,9 @@ export default function Home() {
     setBooting(true);
     try {
       if (type === "daily") {
-        const res = await fetch("/api/daily");
+        const res = await fetch(
+          dateOverride ? `/api/daily?date=${dateOverride}` : "/api/daily",
+        );
         if (!res.ok) throw new Error("load failed");
         const { date, slots, benchSlot } = (await res.json()) as {
           date: string;
@@ -398,13 +412,15 @@ export default function Home() {
       setResultRoster((data.roster as SimRosterLine[]) ?? []);
       if (gameType === "daily") {
         const rec = { wins: r.wins, losses: r.losses, perfect: r.perfect };
-        const key = `md820-daily-${today || dailyDate}`;
+        // Lock the DATE that was played (today, or an archived day on replay).
+        const playedDate = dailyDate || today;
         try {
-          localStorage.setItem(key, JSON.stringify(rec));
+          localStorage.setItem(`md820-daily-${playedDate}`, JSON.stringify(rec));
         } catch {
           /* localStorage unavailable */
         }
-        setDailyResult(rec);
+        // Only the home banner tracks TODAY's result.
+        if (playedDate === today) setDailyResult(rec);
       }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
@@ -422,7 +438,7 @@ export default function Home() {
     gameType === "daily"
       ? `Daily ${dailyDate}`
       : mode === "hoopiq"
-        ? "HoopIQ"
+        ? "Ranked"
         : "Classic";
   // Encode the finished season into a shareable link that renders a rich
   // preview (dynamic OG image) when pasted into Slack/Twitter/etc.
@@ -434,23 +450,31 @@ export default function Home() {
           n: result.netRating,
           p: result.perfect,
           m: modeLabel,
-          r: resultRoster.map((r) => ({
-            t: r.team,
-            s: r.best_season,
-            name: r.player_name,
-            pts: r.pts,
-            reb: r.reb,
-            ast: r.ast,
-          })),
+          // Daily is a shared puzzle — the link/OG preview must not reveal which
+          // players were used, so the roster is dropped for daily shares.
+          r:
+            gameType === "daily"
+              ? []
+              : resultRoster.map((r) => ({
+                  t: r.team,
+                  s: r.best_season,
+                  name: r.player_name,
+                  pts: r.pts,
+                  reb: r.reb,
+                  ast: r.ast,
+                })),
         }),
       )}`
     : SITE_URL;
   const shareText = result
     ? [
         `82-0+ 🏀 ${result.wins}-${result.losses} (${result.netRating >= 0 ? "+" : ""}${result.netRating} net) · ${modeLabel}`,
-        ...resultRoster.map(
-          (r) => `${r.team} '${String(r.best_season).slice(2)} ${r.player_name}`,
-        ),
+        // Daily: don't list the picks in the copyable text either (no spoilers).
+        ...(gameType === "daily"
+          ? []
+          : resultRoster.map(
+              (r) => `${r.team} '${String(r.best_season).slice(2)} ${r.player_name}`,
+            )),
         shareUrl,
       ].join("\n")
     : "";
@@ -478,7 +502,7 @@ export default function Home() {
                 : undefined
             }
           >
-            {mode === "hoopiq" ? "HoopIQ" : "Classic"}
+            {mode === "hoopiq" ? "Ranked" : "Classic"}
           </span>
         )}
       </header>
@@ -545,6 +569,14 @@ export default function Home() {
             </button>
           )}
 
+          {/* Replay any of the last ~30 daily challenges. */}
+          {today && (
+            <DailyArchive
+              today={today}
+              onPlay={(date) => startGame("classic", "daily", date)}
+            />
+          )}
+
           <div className="mt-6 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
             or free play
           </div>
@@ -564,7 +596,7 @@ export default function Home() {
               onClick={() => startGame("hoopiq", "free")}
             >
               <div className="font-display text-xl font-bold text-[var(--md-white)]">
-                HoopIQ
+                Ranked
               </div>
               <p className="mt-1 text-[13px] text-[var(--md-paper-3)]">
                 Stats hidden. Draft from memory — true hoops IQ.
@@ -634,6 +666,7 @@ export default function Home() {
             shareText={shareText}
             modeLabel={modeLabel}
             mode={mode}
+            isDaily={gameType === "daily"}
             onReset={backToMenu}
             onEnterTournament={
               gameType === "free" || (gameType === "daily" && dailyBench)
@@ -698,7 +731,7 @@ export default function Home() {
           )}
 
           {!draftDone && !pending && currentDecade !== null && (
-            <div className="md-card md-card--lift flex flex-col items-center gap-4 p-4 sm:p-5">
+            <div className="md-card md-card--lift flex flex-col items-center gap-3 p-3 sm:gap-4 sm:p-5">
               <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
                 Round {draftedCount + 1} of {KINDS.length}
               </div>

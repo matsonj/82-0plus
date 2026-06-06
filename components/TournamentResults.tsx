@@ -229,7 +229,7 @@ function tournamentModeLabel(
     }
     return "Daily";
   }
-  return mode === "hoopiq" ? "HoopIQ" : "Classic";
+  return mode === "hoopiq" ? "Ranked" : "Classic";
 }
 
 export function TournamentResults({
@@ -246,7 +246,16 @@ export function TournamentResults({
   const { bracket, you } = data;
   const isChampion = bracket.championId === you.id;
   const myTeam = bracket.teams.find((t) => t.id === you.id);
-  const tier = myTeam ? tierForSeedNet(myTeam.seedNet) : null;
+  const isDaily = mode === "daily";
+  // Daily is "Open" — tier-less. Instead of a tier, rank the team within the whole
+  // (untiered) field it played by seeding net.
+  const tier = isDaily || !myTeam ? null : tierForSeedNet(myTeam.seedNet);
+  const openRank = (() => {
+    if (!isDaily || !myTeam) return null;
+    const sorted = [...bracket.teams].sort((a, b) => b.seedNet - a.seedNet);
+    const r = sorted.findIndex((t) => t.id === you.id) + 1;
+    return r > 0 ? { rank: r, total: bracket.teams.length } : null;
+  })();
   const [showRoster, setShowRoster] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -270,10 +279,11 @@ export function TournamentResults({
         regLosses: reg.l,
         playoffWins: playoff.totalW,
         playoffLosses: playoff.totalL,
-        tier: tierForSeedNet(myTeam.seedNet)?.label,
+        tier: isDaily ? undefined : tierForSeedNet(myTeam.seedNet)?.label,
         modeLabel: tournamentModeLabel(mode, dailyDate),
         roster: myTeam.roster ?? [],
         sixthMan: myTeam.sixthMan,
+        hideRoster: isDaily, // Daily share card redacts player names (no spoilers).
       });
       try {
         await navigator.clipboard.writeText(shareLink); // link on the clipboard too
@@ -382,6 +392,11 @@ export function TournamentResults({
                 {tier.label}-Tier
               </span>
             )}
+            {openRank && (
+              <span className="md-capsule md-capsule--teal">
+                Open · #{openRank.rank} of {openRank.total}
+              </span>
+            )}
             <span className="md-capsule">#{you.seed} Seed</span>
             <span
               className={`md-capsule ${
@@ -401,7 +416,7 @@ export function TournamentResults({
             <ProgressPips reachedRound={you.reachedRound} isChampion={isChampion} />
           </div>
 
-          {/* Team rating (the five's net at the end of Classic/HoopIQ — no
+          {/* Team rating (the five's net at the end of Classic/Ranked — no
               tournament buffs, no sixth man) + a roster reveal. Kept understated
               and rounded, on purpose. */}
           {myTeam && (

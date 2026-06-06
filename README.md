@@ -38,8 +38,8 @@ across the decades and see if it can go **82-0**. Powered by the
   to a box-line heuristic where bio is missing. The full model lives in
   `lib/scoring.ts` (unit-tested, tunable via `SCORING_CONFIG`).
 
-Three modes: **Classic** (stats visible), **HoopIQ** (draft blind), and **Daily**
-(a date-seeded HoopIQ challenge — the same five rolls for everyone, once per
+Three modes: **Classic** (stats visible), **Ranked** (draft blind), and **Daily**
+(a date-seeded Ranked challenge — the same five rolls for everyone, once per
 Pacific day).
 
 ## Setup

@@ -108,11 +108,13 @@ export function SlotMachine({
 
   const dim =
     size === "lg"
-      ? "h-28 w-44 text-5xl"
+      ? // Compact on phones so the roster below is the focus; full size at sm+.
+        "h-16 w-28 text-3xl sm:h-28 sm:w-44 sm:text-5xl"
       : size === "sm"
         ? "h-11 w-16 text-base"
         : "h-16 w-20 text-2xl";
-  const label = size === "lg" ? "text-sm" : "text-[11px]";
+  const label =
+    size === "lg" ? "text-[11px] sm:text-sm" : "text-[11px]";
 
   return (
     <div className="flex flex-col items-center gap-2">
