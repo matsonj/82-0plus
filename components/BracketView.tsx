@@ -189,6 +189,8 @@ function SeriesSide({
       className={`flex items-center gap-2 px-2 py-1 ${
         isWinner ? "" : "opacity-60"
       }`}
+      // Highlight only YOUR row (not the whole card).
+      style={isYou ? { background: "var(--md-yellow)" } : undefined}
     >
       <SeedBadge seed={team?.seed} />
       <button
@@ -253,7 +255,7 @@ function SeriesCard({
   return (
     <div
       className={`md-card ${involvesYou || isFinal ? "md-card--lift" : ""}`}
-      style={{ background: involvesYou ? "var(--md-yellow)" : "var(--md-white)" }}
+      style={{ background: "var(--md-white)" }}
     >
       {/* The matchup — higher seed on top. Each name toggles its roster panel. */}
       <div className="divide-y divide-[var(--md-paper-3)]">
