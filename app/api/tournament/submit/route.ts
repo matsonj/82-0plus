@@ -2,6 +2,7 @@ import { scryptSync, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
 import { simulateRoster } from "@/lib/scoring";
 import { canPlay, type SlotKind } from "@/lib/positions";
+import { getOfferedIds } from "@/lib/queries";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import {
   validateName,
@@ -176,6 +177,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Ensure the tournament schema (tables + self-healed columns) exists BEFORE
+    // anything reads/writes it — the daily branch below seeds ghosts, which would
+    // otherwise query ghost_type/ghost_date before they exist on a fresh DB.
+    await ensureSchema();
+
     // ---- Provenance. Two models depending on mode:
     //   • classic/hoopiq — every pick carries a signed roll receipt (proof of a
     //     real server roll via /api/slot or the decade-skip);
@@ -258,7 +264,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await ensureSchema();
+    // Off-list guard: every pick must be one of the players actually OFFERED for
+    // its (team, decade) — the top-60-by-minutes set /api/players returns.
+    // Receipts/board prove the team+decade was rolled; this proves the PLAYER was
+    // on the visible draft list, so a direct POST can't inject a hidden off-list
+    // (e.g. higher-GQ low-minute) player.
+    for (const pk of [...picks, sixthPick]) {
+      const offered = await getOfferedIds(pk.team, pk.decade, queryOptions);
+      if (!offered.has(pk.entity_id)) {
+        return jsonWithSessionHint(
+          sessionHint,
+          { error: "that player wasn't in the draft list" },
+          { status: 400 },
+        );
+      }
+    }
 
     // ---- Identity = the (name, PIN) PAIR (90s arcade auth). The same name with
     // a DIFFERENT PIN is a separate account; the same name + same PIN reuses the
