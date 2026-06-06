@@ -42,8 +42,8 @@ export interface TournamentTeam {
   starters: ScoringPlayer[];  // exactly 5, slot order [G,FLEX,W,FLEX,B]
   sixthMan: ScoringPlayer;    // the bench player (NOT in the starting five)
   captainSlot: number;        // 0..4, index into starters
-  ageAtPeak: number;          // team age proxy: AVERAGE of starters' age-at-peak
-  sixthManAge: number;        // sixth man's age proxy (experience at peak); drives recovery
+  ageAtPeak: number;          // team age proxy: AVERAGE age-at-peak across all SIX (starters + sixth man)
+  sixthManAge: number;        // sixth man's age proxy (experience at peak); nudges recovery
   seedNet: number;            // netRating of the FIVE via simulateRoster — NO buffs.
   // OPTIONAL display fields threaded into the stored bracket for the expandable
   // team panel. Optional so the test factory / any caller still compiles.
@@ -90,14 +90,20 @@ export const TOURNAMENT_CONFIG = {
   // the knob stays explicit for tuning / to document the assumption.
   SIXTH_MAN_FATIGUE_MULT: 0.5,
 
-  // Recovery between rounds is the SIXTH MAN's job: a better and younger bench
-  // shortens the carried fatigue. recoveryFactor (0..1 — the fraction of the
-  // carry relieved) = BASE + (sixthGQ − 0.5)·GQ_WEIGHT + (LEAGUE_AVG_EXP −
-  // sixthAge)·AGE_WEIGHT, clamped. An average bench at league-average age
-  // relieves half; an elite young bench nearly all; a poor old bench none.
-  BENCH_RECOVERY_BASE: 0.5,
-  BENCH_RECOVERY_GQ_WEIGHT: 1.5,
-  BENCH_RECOVERY_AGE_WEIGHT: 0.05,
+  // Recovery between rounds: the PREVIOUS series' end-of-series fatigue rolls
+  // over, recovered by a fraction keyed off how long that series went — a
+  // dominant short series rests you, a grind doesn't. Only a SWEEP (4 games)
+  // fully resets; 5/6/7-game series recover 80/55/30%. The carried fatigue is
+  // endFatigue × (1 − recovery%).
+  SERIES_RECOVERY_PCT: { 4: 1, 5: 0.8, 6: 0.55, 7: 0.3 } as Record<number, number>,
+  // A non-sweep never fully resets even with a great bench (some fatigue always
+  // carries), so cap the recovery for 5+ game series below 1.
+  NON_SWEEP_RECOVERY_CAP: 0.95,
+  // The SIXTH MAN then nudges recovery on top of the series-length base: a better
+  // (higher GQ) and YOUNGER bench recovers a bit more. Deliberately a SMALL
+  // effect (series length dominates) — was the primary driver before, too strong.
+  BENCH_RECOVERY_GQ_WEIGHT: 0.4,
+  BENCH_RECOVERY_AGE_WEIGHT: 0.02,
 
   // Per-game luck, bounded ±, drawn from a seeded PRNG (never Math.random).
   // Widened from ±1.5 to ±3.5 so the higher seed doesn't always win — a hot
@@ -318,30 +324,35 @@ export function fatigue(
 }
 
 /**
- * Recovery carry (a POSITIVE amount SUBTRACTED, constant within a series) from
- * how the team's PREVIOUS series ended. Base, keyed off games-over-the-minimum:
- *   swept (0 over) → 0, +1 → 0.5, +2 → 1.2, +3 (best-of-7 only) → 2.0.
- * The SIXTH MAN then relieves a fraction of that base: a better (higher GQ) and
- * YOUNGER bench recovers more. recoveryFactor ∈ [0,1] = BASE + (sixthGQ − .5)·
- * GQ_WEIGHT + (LEAGUE_AVG_EXP − sixthAge)·AGE_WEIGHT. Round 1 has no previous
- * series → base 0 → returns 0.
+ * Recovery carry (a POSITIVE amount SUBTRACTED, constant within a series): the
+ * fatigue a team brings INTO this series from how its PREVIOUS series ended.
+ *
+ * The previous series' end-of-series fatigue ROLLS OVER, recovered by a fraction
+ * keyed off how long that series went:
+ *   swept (4 games) → 100% recovered → carry 0 (ONLY a sweep fully resets);
+ *   5 → 80%, 6 → 55%, 7 → 30% recovered.
+ * A better/younger SIXTH MAN recovers a bit more on top (a small nudge — series
+ * length dominates), but a non-sweep never fully resets (recovery capped < 1).
+ * `gamesPlayedPrev` is how many games the team's last series went (4–7), or 0 in
+ * round 1 (no previous series → carry 0). carry = endFatigue × (1 − recovery).
  */
 export function recoveryCarry(
-  gamesOverMin: number,
-  sixthGQ: number,
-  sixthAge: number,
+  team: TournamentTeam,
+  gamesPlayedPrev: number,
   cfg: TournamentConfig = TOURNAMENT_CONFIG,
 ): number {
-  const tiers = [0, 0.5, 1.2, 2.0];
-  const base = tiers[clamp(Math.round(gamesOverMin), 0, 3)];
-  const recoveryFactor = clamp(
-    cfg.BENCH_RECOVERY_BASE +
-      (sixthGQ - 0.5) * cfg.BENCH_RECOVERY_GQ_WEIGHT +
-      (cfg.LEAGUE_AVG_EXP - sixthAge) * cfg.BENCH_RECOVERY_AGE_WEIGHT,
-    0,
-    1,
-  );
-  return base * (1 - recoveryFactor);
+  if (gamesPlayedPrev <= 0) return 0; // round 1 — no prior series
+  const games = clamp(Math.round(gamesPlayedPrev), 4, 7);
+  const baseRecovery = cfg.SERIES_RECOVERY_PCT[games];
+  const benchBonus =
+    (team.sixthMan.gq - 0.5) * cfg.BENCH_RECOVERY_GQ_WEIGHT +
+    (cfg.LEAGUE_AVG_EXP - team.sixthManAge) * cfg.BENCH_RECOVERY_AGE_WEIGHT;
+  // A sweep always fully resets; otherwise the bench can nudge recovery but never
+  // to a full reset, so some fatigue always carries out of a 5+ game series.
+  const recovery =
+    games <= 4 ? 1 : clamp(baseRecovery + benchBonus, 0, cfg.NON_SWEEP_RECOVERY_CAP);
+  const endFatigue = fatigue(team, games, cfg); // fatigue accrued by the last game
+  return endFatigue * (1 - recovery);
 }
 
 // ---------------------------------------------------------------------------
@@ -391,9 +402,12 @@ export function regionScore(team: TournamentTeam): number {
   return score;
 }
 
-/** Summed real height of a team's five starters (drives the size matchup). */
-function starterHeight(team: TournamentTeam): number {
-  return team.starters.reduce((a, p) => a + p.height_in, 0);
+/** Summed real height of all SIX players (five starters + sixth man) — drives
+ *  the size matchup. The bench player's height counts. */
+function teamHeight(team: TournamentTeam): number {
+  return (
+    team.starters.reduce((a, p) => a + p.height_in, 0) + team.sixthMan.height_in
+  );
 }
 
 /** Every round is best-of-7 (clinch = 4). The bo5 entries remain for the type
@@ -592,8 +606,8 @@ export function simulateBracket(
     if (cmp.aWins > cmp.bWins) gsBuff[hi.id] = gameScoreBuff(cmp.aWins, cfg);
     else if (cmp.bWins > cmp.aWins) gsBuff[lo.id] = gameScoreBuff(cmp.bWins, cfg);
 
-    // Height: zero-sum, capped both directions, from summed-starter-height diff.
-    const diff = starterHeight(hi) - starterHeight(lo);
+    // Height: zero-sum, capped both directions, from the six-player height diff.
+    const diff = teamHeight(hi) - teamHeight(lo);
     const hiHeight = clamp(diff * cfg.HEIGHT_PER_INCH, -cfg.HEIGHT_CAP, cfg.HEIGHT_CAP);
     const heightBuff: Record<string, number> = { [hi.id]: hiHeight, [lo.id]: -hiHeight };
 
@@ -626,13 +640,13 @@ export function simulateBracket(
       // Higher seed = the team with the better seedNet (tie-break id) = home court.
       const [hi, lo] =
         byStrength(sa.team, sb.team) <= 0 ? [sa.team, sb.team] : [sb.team, sa.team];
+      // Games the team's PREVIOUS series went (gamesOverMin + clinch), or 0 if it
+      // hasn't played yet (round 1). Drives how much fatigue rolls over.
+      const gamesPlayedPrev = (id: string) =>
+        lastGamesOver.has(id) ? lastGamesOver.get(id)! + CLINCH[7] : 0;
       const carry: Record<string, number> = {
-        [hi.id]: recoveryCarry(
-          lastGamesOver.get(hi.id) ?? 0, hi.sixthMan.gq, hi.sixthManAge, cfg,
-        ),
-        [lo.id]: recoveryCarry(
-          lastGamesOver.get(lo.id) ?? 0, lo.sixthMan.gq, lo.sixthManAge, cfg,
-        ),
+        [hi.id]: recoveryCarry(hi, gamesPlayedPrev(hi.id), cfg),
+        [lo.id]: recoveryCarry(lo, gamesPlayedPrev(lo.id), cfg),
       };
       const statics = computeStatics(hi, lo, carry);
       const { result, gamesOverMin } = playSeries(

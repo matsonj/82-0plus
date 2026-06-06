@@ -189,9 +189,9 @@ export async function hydrateTournamentRoster(
     season: sixthRow.best_season,
   };
 
-  // Age proxy: years of experience at the drafted (best) season. Average across
-  // the five starters for the team; the sixth man's own age drives recovery.
-  // Missing debut → NEUTRAL_EXP.
+  // Age proxy: years of experience at the drafted (best) season. Averaged across
+  // ALL SIX (five starters + sixth man) — the bench player ages the team too.
+  // The sixth man's own age additionally nudges recovery. Missing debut → NEUTRAL_EXP.
   const debuts = await getDebutSeasons(
     [...players.map((p) => p.entity_id), sixthRow.entity_id],
     options,
@@ -200,15 +200,17 @@ export async function hydrateTournamentRoster(
     const debut = debuts.get(entityId);
     return debut ? bestSeason - debut : NEUTRAL_EXP;
   };
-  let expSum = 0;
-  for (const p of players) expSum += expAt(p.entity_id, p.best_season);
-  const ageAtPeak = players.length > 0 ? expSum / players.length : NEUTRAL_EXP;
   const sixthManAge = expAt(sixthRow.entity_id, sixthRow.best_season);
+  let expSum = sixthManAge;
+  for (const p of players) expSum += expAt(p.entity_id, p.best_season);
+  const ageAtPeak = (players.length + 1 > 0) ? expSum / (players.length + 1) : NEUTRAL_EXP;
 
-  const heightTotal = players.reduce(
-    (acc, p) => acc + (Number.isFinite(p.height_in) ? p.height_in : 79),
-    0,
-  );
+  // Summed real height of all six (starters + sixth man) — the bench counts too.
+  const heightTotal =
+    players.reduce(
+      (acc, p) => acc + (Number.isFinite(p.height_in) ? p.height_in : 79),
+      0,
+    ) + (Number.isFinite(sixthRow.height_in) ? sixthRow.height_in : 79);
 
   // Starter display info in slot order (players is IndexedPlayer[] slot-ordered).
   const starterInfo: BracketPlayer[] = players.map((p) => ({

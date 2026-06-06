@@ -216,36 +216,46 @@ describe("fatigue", () => {
   });
 });
 
-describe("recovery carry (driven by the sixth man's quality + age)", () => {
+describe("recovery carry (series-length recovery + sixth-man nudge)", () => {
   const AVG = C.LEAGUE_AVG_EXP; // a league-average-age bench
+  // A team with a specific bench GQ + age (everything else neutral).
+  const benchTeam = (gq: number, age: number) =>
+    team({ sixthMan: p({ gq }), sixthManAge: age });
 
-  it("swept → 0 regardless of the bench", () => {
-    expect(recoveryCarry(0, 0.5, AVG)).toBe(0);
-    expect(recoveryCarry(0, 0.9, 1)).toBe(0);
+  it("round 1 (no prior series) and a sweep both carry nothing", () => {
+    const t = benchTeam(0.5, AVG);
+    expect(recoveryCarry(t, 0)).toBe(0); // round 1
+    expect(recoveryCarry(t, 4)).toBe(0); // swept → 100% recovered
+    // A sweep resets even with a poor old bench.
+    expect(recoveryCarry(benchTeam(0.2, 14), 4)).toBe(0);
   });
 
-  it("an average bench at league age relieves half the base carry", () => {
-    // recoveryFactor = BASE (0.5) → carry = base × 0.5.
-    expect(recoveryCarry(1, 0.5, AVG)).toBeCloseTo(0.5 * 0.5, 6);
-    expect(recoveryCarry(2, 0.5, AVG)).toBeCloseTo(1.2 * 0.5, 6);
-    expect(recoveryCarry(3, 0.5, AVG)).toBeCloseTo(2.0 * 0.5, 6);
-  });
-
-  it("a longer previous series carries more (same bench)", () => {
-    expect(recoveryCarry(3, 0.5, AVG)).toBeGreaterThan(recoveryCarry(1, 0.5, AVG));
+  it("a longer previous series carries more (same bench): 5 < 6 < 7", () => {
+    const t = benchTeam(0.5, AVG);
+    const c5 = recoveryCarry(t, 5);
+    const c6 = recoveryCarry(t, 6);
+    const c7 = recoveryCarry(t, 7);
+    expect(c5).toBeGreaterThan(0);
+    expect(c6).toBeGreaterThan(c5);
+    expect(c7).toBeGreaterThan(c6);
   });
 
   it("a better sixth man recovers more (less carry)", () => {
-    expect(recoveryCarry(3, 0.8, AVG)).toBeLessThan(recoveryCarry(3, 0.4, AVG));
+    expect(recoveryCarry(benchTeam(0.85, AVG), 6)).toBeLessThan(
+      recoveryCarry(benchTeam(0.35, AVG), 6),
+    );
   });
 
   it("a younger sixth man recovers more (less carry)", () => {
-    expect(recoveryCarry(3, 0.5, 2)).toBeLessThan(recoveryCarry(3, 0.5, 12));
+    expect(recoveryCarry(benchTeam(0.5, 2), 6)).toBeLessThan(
+      recoveryCarry(benchTeam(0.5, 12), 6),
+    );
   });
 
-  it("an elite, young bench fully recovers; a poor, old bench gets no relief", () => {
-    expect(recoveryCarry(3, 0.9, 1)).toBe(0); // recoveryFactor clamps to 1
-    expect(recoveryCarry(3, 0.35, 14)).toBeCloseTo(2.0, 6); // factor clamps to 0 → full base
+  it("a non-sweep never fully resets, even with an elite young bench", () => {
+    // Recovery is capped < 1 for 5+ game series, so some fatigue always carries.
+    expect(recoveryCarry(benchTeam(1, 1), 5)).toBeGreaterThan(0);
+    expect(recoveryCarry(benchTeam(1, 1), 7)).toBeGreaterThan(0);
   });
 });
 
