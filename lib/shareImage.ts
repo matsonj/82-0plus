@@ -186,13 +186,26 @@ export async function buildTournamentShareImage(args: {
     const nm = p.name.length > 24 ? p.name.slice(0, 23) + "…" : p.name;
     ctx.fillText(nm, 290, y);
     if (p.captain) {
-      // Measure the NAME at its own font (34) before switching to the badge
-      // font — otherwise the badge gets placed using the smaller font's width
-      // and lands on top of the end of the name.
+      // A small [C] pill (yellow fill, ink border) after the name — mirrors the
+      // in-app captain chip. Measure the NAME at its own font (34) before drawing
+      // so the pill lands clear of the name, not on top of it.
       const nameWidth = ctx.measureText(nm).width;
-      ctx.font = f(22);
+      const px = 290 + nameWidth + 16;
+      const pw = 30;
+      const ph = 30;
+      const py = y - 26; // pill top relative to the text baseline
+      ctx.fillStyle = yellow;
+      ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(px, py, pw, ph);
       ctx.fillStyle = ink;
-      ctx.fillText("★ CAPTAIN", 290 + nameWidth + 24, y);
+      ctx.font = f(20);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("C", px + pw / 2, py + ph / 2 + 1);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
       ctx.font = f(34, "normal");
     }
     y += 60;
