@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
 import { TierBadge } from "@/components/TierBadge";
+import { isEligible } from "@/lib/tier";
 
 // One line of the net-rating breakdown: a label (+ optional detail) and the
 // signed net-rating points the factor moved.
@@ -302,16 +303,26 @@ export function ResultsPanel({
             Play again
           </button>
         </div>
-        {onEnterTournament && (
-          <button
-            className="md-btn md-btn--lg flex w-full items-center justify-center gap-2"
-            style={{ background: "var(--md-orange)" }}
-            onClick={onEnterTournament}
-          >
-            <TierBadge seedNet={netRating} />
-            🏀 Enter this team in the Tournament
-          </button>
-        )}
+        {onEnterTournament &&
+          (isEligible(netRating) ? (
+            <button
+              className="md-btn md-btn--lg flex w-full items-center justify-center gap-2"
+              style={{ background: "var(--md-orange)" }}
+              onClick={onEnterTournament}
+            >
+              <TierBadge seedNet={netRating} />
+              🏀 Enter this team in the Tournament
+            </button>
+          ) : (
+            <button
+              className="md-btn md-btn--lg w-full"
+              disabled
+              style={{ opacity: 0.5, cursor: "not-allowed" }}
+              title="A team needs 40+ projected wins to enter the tournament."
+            >
+              Needs 40+ wins for tournament
+            </button>
+          ))}
       </div>
     </div>
     </>
