@@ -246,6 +246,7 @@ export function TournamentResults({
   const { bracket, you } = data;
   const isChampion = bracket.championId === you.id;
   const myTeam = bracket.teams.find((t) => t.id === you.id);
+  const tier = myTeam ? tierForSeedNet(myTeam.seedNet) : null;
   const [showRoster, setShowRoster] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -374,8 +375,13 @@ export function TournamentResults({
           >
             {you.name}
           </div>
-          {/* Seed + conference as tight capsules, like ResultsPanel's headers. */}
+          {/* Tier + seed + conference as tight capsules, like ResultsPanel's headers. */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+            {tier && (
+              <span className="md-capsule" style={{ background: tier.color }}>
+                {tier.label}-Tier
+              </span>
+            )}
             <span className="md-capsule">#{you.seed} Seed</span>
             <span
               className={`md-capsule ${

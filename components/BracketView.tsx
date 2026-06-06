@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { TierBadge } from "@/components/TierBadge";
 import type {
   BracketResult,
   BracketTeam,
@@ -191,7 +190,6 @@ function SeriesSide({
       }`}
     >
       <SeedBadge seed={team?.seed} />
-      {team && <TierBadge seedNet={team.seedNet} />}
       <button
         type="button"
         onClick={onToggle}
