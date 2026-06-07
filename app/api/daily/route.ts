@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { pacificDate } from "@/lib/dailyDate";
+import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import { computeDailyBoard } from "@/lib/daily";
 
 export const runtime = "nodejs";
@@ -10,8 +10,11 @@ export async function GET(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   const queryOptions = { sessionHint: sessionHint.value };
   try {
-    // Daily resets at midnight Pacific (see lib/dailyDate).
-    const date = (req.nextUrl.searchParams.get("date") ?? pacificDate()).slice(0, 10);
+    // Daily resets at midnight Pacific (see lib/dailyDate). A `date` param lets
+    // players replay the archive, but only within the last 30 Pacific days (no
+    // future dates) — older/invalid requests fall back to today.
+    const requested = (req.nextUrl.searchParams.get("date") ?? "").slice(0, 10);
+    const date = isPlayableDailyDate(requested) ? requested : pacificDate();
     // The board is the 5 starter slots + a 6th bench slot (for the daily
     // tournament's sixth man). The starter slots are unchanged from before.
     const { slots, benchSlot } = await computeDailyBoard(date, queryOptions);

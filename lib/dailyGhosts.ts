@@ -57,7 +57,7 @@ const NAME_POOL = [
 /** Map an indexed player into the scoring shape (mirrors hydrateRoster). */
 function toScoring(p: IndexedPlayer): ScoringPlayer {
   return {
-    gq: p.value, mpg: p.mpg,
+    gq: p.value, season: p.best_season, mpg: p.mpg,
     pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
     fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
     fgm: p.fgm, ftm: p.ftm,

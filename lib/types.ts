@@ -5,7 +5,7 @@ import type { Role } from "./positions";
  * Public, client-safe player shape returned by /api/players. Deliberately omits
  * Game Quality (`value`) and the scoring-only inputs (FGA/FG3A/FG3M/FTA/TOV) so
  * those never reach the browser. Display stats + mpg are populated in Classic
- * mode and null in HoopIQ.
+ * mode and null in Ranked.
  */
 export interface PublicPlayer {
   entity_id: string;
@@ -39,6 +39,7 @@ export interface SimRosterLine {
   player_name: string;
   team: string;
   best_season: number;
+  positions: Role[]; // eligible lineup roles (G/W/B) — for the player card's pills
   pts: number;
   reb: number;
   ast: number;
@@ -53,6 +54,7 @@ export interface SimResult {
   perfect: boolean;
   netRating: number; // team point differential per game (after all adjustments)
   baseNet: number; // GQ-derived net rating BEFORE construction adjustments
+  teamFit: number; // all construction factors collapsed (= netRating − baseNet − defBuff), after the floor
   meanGQ: number; // era-neutral team quality (avg peak GQ)
   pf: number; // implied points for (display)
   pa: number; // implied points allowed (display)
@@ -85,6 +87,7 @@ export interface SimResult {
     fgPct: number;
     ftPct: number;
     tov: number;
+    fg3m: number; // made threes (9th category; shown on the daily share card)
   };
 }
 

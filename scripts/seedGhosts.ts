@@ -96,6 +96,7 @@ const BANDS: Band[] = [
 function toScoring(p: IndexedPlayer): ScoringPlayer {
   return {
     gq: p.value,
+    season: p.best_season,
     mpg: p.mpg,
     pts: p.pts,
     reb: p.reb,

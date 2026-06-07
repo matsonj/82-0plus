@@ -34,7 +34,7 @@ export function TournamentHowToPlay({ onClose }: { onClose: () => void }) {
           <li>
             <strong>Get seeded into a 16-team bracket.</strong> Teams split into
             East &amp; West by their players&rsquo; real conferences, seeded by net
-            rating. Classic teams play Classic, HoopIQ plays HoopIQ.
+            rating. Classic teams play Classic, Ranked plays Ranked.
           </li>
           <li>
             <strong>Survive the series.</strong> Every round is a best-of-7. Home

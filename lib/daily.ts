@@ -5,7 +5,7 @@
 // the board is deterministic, so picks that don't match it are forgeries).
 //
 // The board is 5 starter slots (lineup order [G,FLEX,W,FLEX,B]) plus a 6th BENCH
-// slot for the sixth man — the same six a Classic/HoopIQ team fields. The first
+// slot for the sixth man — the same six a Classic/Ranked team fields. The first
 // five are byte-identical to what /api/daily has always produced; the bench is a
 // 6th draw appended to the same seeded sequence (so existing days don't shift).
 

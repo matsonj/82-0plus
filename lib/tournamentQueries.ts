@@ -135,7 +135,7 @@ export async function getDebutSeasons(
 /** Map an indexed player into the scoring shape (mirrors hydrateRoster). */
 function toScoring(p: IndexedPlayer): ScoringPlayer {
   return {
-    gq: p.value, mpg: p.mpg,
+    gq: p.value, season: p.best_season, mpg: p.mpg,
     pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
     fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
     fgm: p.fgm, ftm: p.ftm,
@@ -334,8 +334,9 @@ async function hydrateStoredTeam(
  *
  * DAILY mode is partitioned by DATE instead of a recency window: the human field is
  * that date's daily entries and the ghosts are that date's daily-constrained
- * ghosts (ghost_type='daily'); pass `dailyDate`. Classic/HoopIQ use the standard
- * ghost pool (ghost_type<>'daily').
+ * ghosts (ghost_type='daily'); pass `dailyDate`. Classic/Ranked use the standard
+ * ghost pool (ghost_type<>'daily'). Daily is also "Open" — NOT tier-segmented: the
+ * field spans every tier for that date (the tier filter is bypassed for daily).
  */
 export async function drawOpponents(
   myNameNorm: string,
@@ -348,8 +349,11 @@ export async function drawOpponents(
   const FIELD = field;
   const isDaily = mode === "daily";
   const myTier = tierForSeedNet(seedNet)?.key ?? null;
+  // Daily is "Open": no tier segmentation — your team is drawn against the WHOLE
+  // field for that date (every daily entrant + every daily ghost), ranked head to
+  // head. Classic/Ranked stay tier-segmented (you face teams in your own tier).
   const sameTier = (sn: number) =>
-    myTier === null || tierForSeedNet(sn)?.key === myTier;
+    isDaily || myTier === null || tierForSeedNet(sn)?.key === myTier;
 
   const teams: TournamentTeam[] = [];
   const usedTeamKeys = new Set<string>();
@@ -386,7 +390,7 @@ export async function drawOpponents(
       ),
     );
   } else {
-    // Classic/HoopIQ: prefer RECENT submissions (a tight 1h window), widening
+    // Classic/Ranked: prefer RECENT submissions (a tight 1h window), widening
     // only if that's too thin to fill the field. Recent-first means a change to
     // team methodology transitions seamlessly — new-methodology teams dominate
     // the pool within an hour, and stale older teams only backfill a shortfall.

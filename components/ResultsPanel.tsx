@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
 import { TierBadge } from "@/components/TierBadge";
+import { PlayerCardCarousel, type CardPlayer } from "@/components/PlayerCard";
+import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
 import { isEligible } from "@/lib/tier";
 
 // One line of the net-rating breakdown: a label (+ optional detail) and the
@@ -42,6 +44,7 @@ export function ResultsPanel({
   shareText,
   modeLabel,
   mode,
+  isDaily = false,
   onReset,
   onEnterTournament,
 }: {
@@ -50,6 +53,7 @@ export function ResultsPanel({
   shareText: string;
   modeLabel: string;
   mode: GameMode;
+  isDaily?: boolean;
   onReset: () => void;
   onEnterTournament?: () => void;
 }) {
@@ -57,11 +61,30 @@ export function ResultsPanel({
   const [status, setStatus] = useState<"idle" | "working">("idle");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [cardIndex, setCardIndex] = useState<number | null>(null);
+  // Career cards reveal stats, so only in Classic (Ranked/Daily keep them hidden).
+  const cardsOn = mode === "classic" && !isDaily;
+
+  const cardPlayers = useMemo<CardPlayer[]>(
+    () =>
+      roster.map((r) => ({
+        entityId: r.entity_id,
+        playerName: r.player_name,
+        team: r.team,
+        season: r.best_season,
+        positions: r.positions,
+      })),
+    [roster],
+  );
+  // Prefetch all five so the carousel is instant the moment a row is tapped.
+  useEffect(() => {
+    if (cardsOn) for (const c of cardPlayers) prefetchPlayerSeasons(c.entityId);
+  }, [cardsOn, cardPlayers]);
 
   const share = async () => {
     setStatus("working");
     try {
-      const blob = await buildShareImage(result, roster, modeLabel);
+      const blob = await buildShareImage(result, roster, modeLabel, isDaily);
       const file = blob
         ? new File([blob], "82-0-season.png", { type: "image/png" })
         : null;
@@ -109,6 +132,13 @@ export function ResultsPanel({
 
   return (
     <>
+    {cardIndex !== null && cardPlayers[cardIndex] && (
+      <PlayerCardCarousel
+        players={cardPlayers}
+        index={cardIndex}
+        onClose={() => setCardIndex(null)}
+      />
+    )}
     {shareUrl && (
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -205,17 +235,14 @@ export function ResultsPanel({
           <span>Score breakdown</span>
           <span>net rating</span>
         </div>
-        {/* Talent is the base; the rest only appear when they actually moved net. */}
+        {/* Talent is the base. Construction (usage, spacing, ball movement,
+            balance, size, synergy) is collapsed into one "Team fit" line; the
+            All-Defense margin shows separately. Lines appear only when nonzero. */}
         <Adj label="Talent" value={result.baseNet} />
         {(
           [
-            ["Usage fit", -result.usagePen],
-            ["Outside shooting", -result.outsidePen],
-            ["Ball movement", -result.ballhogPen],
-            ["Lineup balance", -result.balancePen],
-            ["Size", -result.sizePen],
+            ["Team fit", result.teamFit],
             ["Defense", result.defBuff],
-            ["Synergy", result.synergyBonus],
           ] as const
         )
           .filter(([, v]) => Math.round(v * 10) / 10 !== 0)
@@ -233,28 +260,43 @@ export function ResultsPanel({
 
       <div className="grid gap-1">
         <div className="flex items-baseline justify-between font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          <span>Your roster</span>
+          <span>Your roster{cardsOn ? " · tap for card" : ""}</span>
           <span className="text-[10px]">
             PTS/REB/AST · <span className="text-[var(--md-teal)]">[GQ]</span>
           </span>
         </div>
-        {roster.map((r) => (
-          <div
-            key={r.entity_id}
-            className="flex items-baseline justify-between gap-2 border-b border-[var(--md-paper-3)] py-0.5 font-display text-sm"
-          >
-            <span>
-              <span className="text-[var(--md-orange-deep)]">{r.team}</span> &rsquo;
-              {String(r.best_season).slice(2)} · {r.player_name}
-              {mode === "classic" &&
-                (r.allDef === 1 ? " 🥇" : r.allDef === 2 ? " 🥈" : "")}
-            </span>
-            <span className="text-[var(--md-ink-muted)]">
-              {r.pts}/{r.reb}/{r.ast}{" "}
-              <span className="text-[var(--md-teal)]">[{r.gq}]</span>
-            </span>
-          </div>
-        ))}
+        {roster.map((r, i) => {
+          const body = (
+            <>
+              <span>
+                <span className="text-[var(--md-orange-deep)]">{r.team}</span> &rsquo;
+                {String(r.best_season).slice(2)} · {r.player_name}
+                {mode === "classic" &&
+                  (r.allDef === 1 ? " 🥇" : r.allDef === 2 ? " 🥈" : "")}
+              </span>
+              <span className="text-[var(--md-ink-muted)]">
+                {r.pts}/{r.reb}/{r.ast}{" "}
+                <span className="text-[var(--md-teal)]">[{r.gq}]</span>
+              </span>
+            </>
+          );
+          const cls =
+            "flex w-full items-baseline justify-between gap-2 border-b border-[var(--md-paper-3)] py-0.5 text-left font-display text-sm";
+          return cardsOn ? (
+            <button
+              key={r.entity_id}
+              type="button"
+              onClick={() => setCardIndex(i)}
+              className={`${cls} transition-colors hover:bg-[var(--md-yellow)]`}
+            >
+              {body}
+            </button>
+          ) : (
+            <div key={r.entity_id} className={cls}>
+              {body}
+            </div>
+          );
+        })}
       </div>
 
       <div className="grid gap-1.5">
@@ -310,8 +352,9 @@ export function ResultsPanel({
               style={{ background: "var(--md-orange)" }}
               onClick={onEnterTournament}
             >
-              <TierBadge seedNet={netRating} />
-              🏀 Enter this team in the Tournament
+              {/* Daily is "Open" — tier-less — so no tier badge there. */}
+              {isDaily ? null : <TierBadge seedNet={netRating} />}
+              Enter this team in the {isDaily ? "Daily Tournament" : "Tournament"}
             </button>
           ) : (
             <button

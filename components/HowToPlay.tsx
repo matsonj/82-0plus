@@ -53,7 +53,7 @@ export function HowToPlay({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <strong className="text-[var(--md-ink)]">Classic</strong> — stats
-            shown. <strong className="text-[var(--md-ink)]">HoopIQ</strong> —
+            shown. <strong className="text-[var(--md-ink)]">Ranked</strong> —
             stats hidden, draft from memory.
           </div>
         </div>

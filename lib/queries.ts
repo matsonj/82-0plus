@@ -250,6 +250,66 @@ function computePlayerIndexLive(
   );
 }
 
+/** One season row on a player's detail card: the era-aware median Game Quality
+ *  plus the nine box categories as per-game averages (FG/FT as whole percents). */
+export interface PlayerSeasonRow {
+  season: number;
+  team: string; // the team the player logged the most games for that season
+  gq: number; // median game_quality that season (0–1) — drives the chart
+  usg: number; // per-game possession load (fga + 0.44·fta + tov) — the model's usage number
+  gp: number;
+  pts: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  fg_pct: number;
+  ft_pct: number;
+  tov: number;
+  fg3m: number;
+}
+
+/**
+ * Full career-by-season history for ONE player (by entity_id): median Game Quality
+ * and the nine box categories per game, season by season. Powers the Classic-mode
+ * player card. Reads `game_quality` directly (not the cached index), so it always
+ * reflects the live era-aware view. Seasons are merged across teams (a traded-
+ * mid-year player gets one combined row), oldest first.
+ */
+export async function getPlayerSeasonHistory(
+  entityId: string,
+  options: QueryOptions = {},
+): Promise<PlayerSeasonRow[]> {
+  return query<PlayerSeasonRow>(
+    `SELECT s.season_year AS season,
+            mode(b.team_abbreviation) AS team,
+            round(median(g.game_quality), 3) AS gq,
+            round(avg(b.fg_attempted) + 0.44 * avg(b.ft_attempted) + avg(b.turnovers), 1) AS usg,
+            count(*) AS gp,
+            round(avg(b.points), 1)   AS pts,
+            round(avg(b.rebounds), 1) AS reb,
+            round(avg(b.assists), 1)  AS ast,
+            round(avg(b.steals), 1)   AS stl,
+            round(avg(b.blocks), 1)   AS blk,
+            COALESCE(round(100.0 * sum(b.fg_made) / nullif(sum(b.fg_attempted), 0)), 0) AS fg_pct,
+            COALESCE(round(100.0 * sum(b.ft_made) / nullif(sum(b.ft_attempted), 0)), 0) AS ft_pct,
+            round(avg(b.turnovers), 1) AS tov,
+            round(avg(b.fg3_made), 1)  AS fg3m
+       FROM ${DB}.game_quality g
+       JOIN ${DB}.box_scores b
+         ON g.game_id = b.game_id AND g.entity_id = b.entity_id AND b.period = 'FullGame'
+       JOIN ${DB}.schedule s ON g.game_id = s.game_id
+      WHERE g.entity_id = $1
+        AND g.game_quality >= 0
+        AND s.season_type = 'Regular Season'
+      GROUP BY 1
+     HAVING count(*) >= 5
+      ORDER BY 1`,
+    [entityId],
+    options,
+  );
+}
+
 /** Begin computing the index without blocking (used to warm the cache at game start). */
 export function warmPlayerIndex(): void {
   void getPlayerIndex().catch(() => {});
@@ -348,7 +408,7 @@ export async function hydrateRoster(
     if (!p) throw new Error(`unknown roster pick: ${pick.entity_id}`);
     players.push(p);
     scoring.push({
-      gq: p.value, mpg: p.mpg,
+      gq: p.value, season: p.best_season, mpg: p.mpg,
       pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
       fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
       fgm: p.fgm, ftm: p.ftm,
@@ -360,7 +420,8 @@ export async function hydrateRoster(
     });
     lines.push({
       entity_id: p.entity_id, player_name: p.player_name, team: p.team,
-      best_season: p.best_season, pts: p.pts, reb: p.reb, ast: p.ast,
+      best_season: p.best_season, positions: eligiblePositions(p),
+      pts: p.pts, reb: p.reb, ast: p.ast,
       gq: Math.round((p.value ?? 0) * 100), // 0–100, revealed only post-sim
       allDef: p.all_def ?? 0,
     });

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GameMode, PublicPlayer } from "@/lib/types";
 import type { Role } from "@/lib/positions";
+import { PlayerCardCarousel, CardGlyph, type CardPlayer } from "@/components/PlayerCard";
+import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
 
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -72,6 +74,7 @@ export function PlayerList({
   const [reloadKey, setReloadKey] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("mpg");
   const [posFilter, setPosFilter] = useState<"all" | Role>("all");
+  const [cardIndex, setCardIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -107,7 +110,7 @@ export function PlayerList({
         (posFilter === "all" || p.positions.includes(posFilter)) &&
         (nq === "" || norm(p.player_name).includes(nq)),
     );
-    // Default + HoopIQ stay on the server's minutes order; Classic can re-sort.
+    // Default + Ranked stay on the server's minutes order; Classic can re-sort.
     // Non-eligible players keep their natural sort position — just greyed, not
     // pushed to the bottom.
     if (mode === "classic") {
@@ -119,6 +122,19 @@ export function PlayerList({
   }, [all, q, sortKey, posFilter, mode]);
 
   const noneEligible = status === "ok" && available.length === 0;
+
+  // The carousel scans the currently displayed rows (same order/index).
+  const cardPlayers = useMemo<CardPlayer[]>(
+    () =>
+      rows.map((p) => ({
+        entityId: p.entity_id,
+        playerName: p.player_name,
+        team,
+        season: p.best_season,
+        positions: p.positions,
+      })),
+    [rows, team],
+  );
 
   return (
     <div className="flex flex-col gap-2">
@@ -211,12 +227,15 @@ export function PlayerList({
             // shown rather than hidden so you can see who's on the roster.
             const eligible = draftable(p);
             return (
-            <button
+            <div
               key={p.entity_id}
+              className="flex items-stretch border-b border-[var(--md-paper-3)]"
+            >
+            <button
               onClick={() => onPick(p)}
               disabled={!eligible}
               title={eligible ? undefined : "No open slot fits his position"}
-              className={`flex w-full items-center justify-between gap-3 border-b border-[var(--md-paper-3)] px-3 py-2 text-left transition-colors ${
+              className={`flex flex-1 items-center justify-between gap-3 px-3 py-2 text-left transition-colors ${
                 eligible
                   ? "hover:bg-[var(--md-yellow)]"
                   : "cursor-not-allowed opacity-40"
@@ -272,9 +291,41 @@ export function PlayerList({
                 )}
               </div>
             </button>
+            {/* Classic only: open the player's career card (stats are hidden in
+                Ranked/Daily, so the card would be a spoiler there). */}
+            {mode === "classic" && (
+              <button
+                type="button"
+                onClick={() => setCardIndex(i)}
+                onMouseEnter={() => prefetchPlayerSeasons(p.entity_id)}
+                onFocus={() => prefetchPlayerSeasons(p.entity_id)}
+                title="Career card"
+                aria-label={`${p.player_name} career card`}
+                className="flex shrink-0 items-center border-l border-[var(--md-paper-3)] px-2.5 text-[var(--md-ink-muted)] hover:bg-[var(--md-yellow)] hover:text-[var(--md-ink)]"
+              >
+                <CardGlyph />
+              </button>
+            )}
+            </div>
             );
           })}
       </div>
+
+      {cardIndex !== null && cardPlayers[cardIndex] && (
+        <PlayerCardCarousel
+          players={cardPlayers}
+          index={cardIndex}
+          onClose={() => setCardIndex(null)}
+          canDraft={(i) => !!rows[i] && draftable(rows[i])}
+          onDraft={(i) => {
+            const row = rows[i];
+            if (row && draftable(row)) {
+              onPick(row);
+              setCardIndex(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

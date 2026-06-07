@@ -8,7 +8,8 @@ import {
 
 function p(over: Partial<ScoringPlayer>): ScoringPlayer {
   return {
-    gq: 0.5, mpg: 36, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0,
+    // season 2010's league pace == REF_PACE, so paceAdj == 1.0 (usage unaffected).
+    gq: 0.5, season: 2010, mpg: 36, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0,
     fga: 0, fg3a: 0, fg3m: 0, fta: 0, tov: 0, fgm: 0, ftm: 0, tsplus: 1.0,
     height_in: 79, pos: null, allDef: 0,
     ...over,
@@ -155,6 +156,7 @@ describe("simulateRoster", () => {
       fgPct: 50, // 45/90
       ftPct: 80, // 20/25
       tov: 9, // 1.8 × 5
+      fg3m: 0, // no threes in this fixture
     });
   });
 
@@ -185,6 +187,39 @@ describe("simulateRoster", () => {
     const r = simulateRoster(five);
     expect(r.pf).toBe(r.teamBox.pts);
     expect(r.pa).toBe(Math.round(r.pf - r.netRating));
+  });
+
+  it("talent-scaled floor: an elite-talent but badly-built roster lands in B/A, not 0", () => {
+    // High talent (baseNet ≫ 60-win mark) but maximally penalized: ball-dominant
+    // chuckers, all bad shooters, no guard. Without the floor this craters to ~0.
+    const wrecking = balancedRoster(0.85).map((x) => ({
+      ...x,
+      ast: 0.3, fga: 28, fta: 9, tov: 4, ftm: 3, fg3a: 0, fg3m: 0, reb: 11, blk: 1.5,
+    }));
+    const r = simulateRoster(wrecking);
+    expect(r.baseNet).toBeGreaterThan(C.NET_PER_GQ * 0); // sanity: positive talent
+    // Raw (un-floored) net would be deeply negative; the floor rescues it.
+    expect(r.usagePen + r.outsidePen + r.ballhogPen + r.balancePen).toBeGreaterThan(20);
+    expect(r.wins).toBeGreaterThanOrEqual(60); // floored into B/A, not ruined
+    expect(r.perfect).toBe(false); // …but still can't be S/AA
+    expect(r.wins).toBeLessThanOrEqual(79); // floor clamped below AA
+  });
+
+  it("floor doesn't bind a clean elite roster (still reaches 82-0) nor rescue weak teams", () => {
+    // Clean elite: floor is below rawNet, so unchanged — still perfect.
+    expect(simulateRoster(balancedRoster(0.92)).perfect).toBe(true);
+    // Weak talent (baseNet ≤ 60-win net): penalties bite fully, no floor rescue.
+    const weakIso = balancedRoster(0.55).map((x) => ({ ...x, ast: 0.3 }));
+    const weakPassing = simulateRoster(balancedRoster(0.55));
+    expect(simulateRoster(weakIso).wins).toBeLessThan(weakPassing.wins);
+  });
+
+  it("teamFit collapses the construction factors (= net − talent − defense)", () => {
+    const r = simulateRoster(balancedRoster(0.78));
+    expect(r.teamFit).toBeCloseTo(
+      Math.round((r.netRating - r.baseNet - r.defBuff) * 10) / 10,
+      1,
+    );
   });
 
   it("better players (higher GQ) win more, all else equal", () => {
