@@ -291,8 +291,8 @@ export async function getPlayerSeasonHistory(
             round(avg(b.assists), 1)  AS ast,
             round(avg(b.steals), 1)   AS stl,
             round(avg(b.blocks), 1)   AS blk,
-            round(100.0 * sum(b.fg_made) / nullif(sum(b.fg_attempted), 0)) AS fg_pct,
-            round(100.0 * sum(b.ft_made) / nullif(sum(b.ft_attempted), 0)) AS ft_pct,
+            COALESCE(round(100.0 * sum(b.fg_made) / nullif(sum(b.fg_attempted), 0)), 0) AS fg_pct,
+            COALESCE(round(100.0 * sum(b.ft_made) / nullif(sum(b.ft_attempted), 0)), 0) AS ft_pct,
             round(avg(b.turnovers), 1) AS tov,
             round(avg(b.fg3_made), 1)  AS fg3m
        FROM ${DB}.game_quality g

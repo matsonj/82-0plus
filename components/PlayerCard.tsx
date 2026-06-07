@@ -23,7 +23,10 @@ const ROLE_BG: Record<Role, string> = {
 };
 
 const gq100 = (gq: number) => Math.round(gq * 100);
-const f1 = (n: number) => n.toFixed(1);
+// Tolerate null/undefined cells (e.g. a season with zero shot attempts) so a
+// sparse career card renders instead of throwing on .toFixed.
+const f1 = (n: number | null | undefined) =>
+  typeof n === "number" && Number.isFinite(n) ? n.toFixed(1) : "—";
 
 /** A little card glyph (rounded card with stat lines) — the "open card" affordance. */
 export function CardGlyph({ size = 16 }: { size?: number }) {
