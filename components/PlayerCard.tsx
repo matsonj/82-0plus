@@ -144,8 +144,19 @@ function usePlayerSeasons(entityId: string) {
   return { seasons: seasons ?? [], status };
 }
 
-// ── The full, centered card ──────────────────────────────────────────────────
-function CenterCard({ player, onClose }: { player: CardPlayer; onClose: () => void }) {
+// ── A full player card. The center card is interactive (close / draft); the side
+// cards reuse this same full-size render behind the center (blurred by the parent).
+function FullCard({
+  player,
+  onClose,
+  onDraft,
+  draftable = true,
+}: {
+  player: CardPlayer;
+  onClose?: () => void;
+  onDraft?: () => void;
+  draftable?: boolean;
+}) {
   const { seasons, status } = usePlayerSeasons(player.entityId);
   return (
     <div className="md-card md-card--lift flex max-h-[86vh] w-full flex-col overflow-hidden p-0">
@@ -159,7 +170,9 @@ function CenterCard({ player, onClose }: { player: CardPlayer; onClose: () => vo
             <span className="text-[var(--md-orange-deep)]">{player.team}</span> · drafted &rsquo;{String(player.season).slice(2)} · career card
           </div>
         </div>
-        <button type="button" aria-label="Close" onClick={onClose} className="font-display text-lg text-[var(--md-ink)] hover:text-[var(--md-coral)]">✕</button>
+        {onClose && (
+          <button type="button" aria-label="Close" onClick={onClose} className="font-display text-lg text-[var(--md-ink)] hover:text-[var(--md-coral)]">✕</button>
+        )}
       </div>
 
       <div className="md-scroll flex-1 overflow-auto p-4">
@@ -214,33 +227,49 @@ function CenterCard({ player, onClose }: { player: CardPlayer; onClose: () => vo
           </>
         )}
       </div>
+
+      {/* Draft straight from the card (draft-list context only). */}
+      {onDraft && (
+        <div className="border-t-2 border-[var(--md-ink)] p-3">
+          <button
+            type="button"
+            className="md-btn md-btn--lg md-btn--teal w-full"
+            onClick={onDraft}
+            disabled={!draftable}
+            style={draftable ? undefined : { opacity: 0.5, cursor: "not-allowed" }}
+            title={draftable ? undefined : "No open slot fits his position"}
+          >
+            Draft {player.playerName}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── A small, blurred side preview (click to bring to center) ─────────────────
-function SidePreview({ player, onClick }: { player: CardPlayer; onClick: () => void }) {
-  const { seasons, status } = usePlayerSeasons(player.entityId);
+// ── A full-size side card, tucked partially behind the center (click to focus) ─
+function SideCard({
+  player,
+  side,
+  onClick,
+}: {
+  player: CardPlayer;
+  side: "left" | "right";
+  onClick: () => void;
+}) {
+  // Same full card as the center, shifted ~58% off so only its outer edge peeks
+  // out from behind the center card, blurred and dimmed.
+  const shift = side === "left" ? "-58%" : "58%";
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={`Show ${player.playerName}`}
-      className="block w-full text-left"
-      style={{ filter: "blur(1.5px)", opacity: 0.6 }}
+      className="absolute left-0 top-1/2 z-0 w-full text-left"
+      style={{ transform: `translate(${shift}, -50%)`, filter: "blur(2px)", opacity: 0.5 }}
     >
-      <div className="md-card flex flex-col gap-2 p-2">
-        <div className="min-w-0">
-          <div className="truncate font-display text-[11px] font-bold leading-tight">{player.playerName}</div>
-          <div className="truncate font-display text-[9px] uppercase tracking-wide text-[var(--md-orange-deep)]">
-            {player.team} &rsquo;{String(player.season).slice(2)}
-          </div>
-        </div>
-        {status === "ok" && seasons.length > 0 ? (
-          <GqChart seasons={seasons} draftedSeason={player.season} compact />
-        ) : (
-          <div className="h-12 border-2 border-[var(--md-ink)] bg-[var(--md-white)]" />
-        )}
+      <div className="pointer-events-none">
+        <FullCard player={player} />
       </div>
     </button>
   );
@@ -251,10 +280,14 @@ export function PlayerCardCarousel({
   players,
   index,
   onClose,
+  onDraft,
+  canDraft,
 }: {
   players: CardPlayer[];
   index: number;
   onClose: () => void;
+  onDraft?: (index: number) => void;
+  canDraft?: (index: number) => boolean;
 }) {
   const [cur, setCur] = useState(index);
   const touchX = useRef<number | null>(null);
@@ -291,7 +324,7 @@ export function PlayerCardCarousel({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3" style={{ background: "rgba(56,56,56,0.55)" }} onClick={onClose}>
       <div
-        className="relative flex w-full max-w-3xl items-center justify-center gap-1 sm:gap-3"
+        className="relative mx-auto w-full max-w-lg"
         onClick={(e) => e.stopPropagation()}
         onTouchStart={(e) => (touchX.current = e.touches[0]?.clientX ?? null)}
         onTouchEnd={(e) => {
@@ -302,25 +335,26 @@ export function PlayerCardCarousel({
           touchX.current = null;
         }}
       >
-        {/* Left peek (or a spacer so the center stays centered). */}
-        <div className="w-12 shrink-0 sm:w-36">
-          {prev && <SidePreview player={prev} onClick={() => setCur(cur - 1)} />}
+        {/* Full-size neighbours, tucked behind the center card and blurred. */}
+        {prev && <SideCard player={prev} side="left" onClick={() => setCur(cur - 1)} />}
+        {next && <SideCard player={next} side="right" onClick={() => setCur(cur + 1)} />}
+
+        {/* The focused card, on top. */}
+        <div className="relative z-10">
+          <FullCard
+            player={center}
+            onClose={onClose}
+            onDraft={onDraft ? () => onDraft(cur) : undefined}
+            draftable={canDraft ? canDraft(cur) : true}
+          />
         </div>
 
-        <div className="z-10 w-full min-w-0 max-w-lg">
-          <CenterCard player={center} onClose={onClose} />
-        </div>
-
-        <div className="w-12 shrink-0 sm:w-36">
-          {next && <SidePreview player={next} onClick={() => setCur(cur + 1)} />}
-        </div>
-
-        {/* Arrow controls (always available, e.g. mobile where peeks are slim). */}
+        {/* Arrow controls (always available, e.g. mobile where peeks run off-screen). */}
         {prev && (
-          <button type="button" aria-label="Previous card" onClick={() => setCur(cur - 1)} className="md-card md-card--lift absolute left-0 top-1/2 z-20 -translate-y-1/2 px-2 py-3 font-display text-xl font-bold">‹</button>
+          <button type="button" aria-label="Previous card" onClick={() => setCur(cur - 1)} className="md-card md-card--lift absolute -left-2 top-1/2 z-20 -translate-y-1/2 px-2 py-3 font-display text-xl font-bold">‹</button>
         )}
         {next && (
-          <button type="button" aria-label="Next card" onClick={() => setCur(cur + 1)} className="md-card md-card--lift absolute right-0 top-1/2 z-20 -translate-y-1/2 px-2 py-3 font-display text-xl font-bold">›</button>
+          <button type="button" aria-label="Next card" onClick={() => setCur(cur + 1)} className="md-card md-card--lift absolute -right-2 top-1/2 z-20 -translate-y-1/2 px-2 py-3 font-display text-xl font-bold">›</button>
         )}
       </div>
     </div>

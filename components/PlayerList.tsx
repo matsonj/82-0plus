@@ -316,6 +316,14 @@ export function PlayerList({
           players={cardPlayers}
           index={cardIndex}
           onClose={() => setCardIndex(null)}
+          canDraft={(i) => !!rows[i] && draftable(rows[i])}
+          onDraft={(i) => {
+            const row = rows[i];
+            if (row && draftable(row)) {
+              onPick(row);
+              setCardIndex(null);
+            }
+          }}
         />
       )}
     </div>

@@ -354,7 +354,7 @@ export function ResultsPanel({
             >
               {/* Daily is "Open" — tier-less — so no tier badge there. */}
               {isDaily ? null : <TierBadge seedNet={netRating} />}
-              🏀 Enter this team in the {isDaily ? "Daily Tournament" : "Tournament"}
+              Enter this team in the {isDaily ? "Daily Tournament" : "Tournament"}
             </button>
           ) : (
             <button
