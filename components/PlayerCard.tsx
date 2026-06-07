@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { PlayerSeasonRow } from "@/lib/queries";
 import type { Role } from "@/lib/positions";
 import { loadPlayerSeasons, prefetchPlayerSeasons } from "@/lib/playerSeasons";
@@ -318,7 +319,11 @@ export function PlayerCardCarousel({
   const hasPrev = cur > 0;
   const hasNext = cur < players.length - 1;
 
-  return (
+  // Portal to <body> so the fixed overlay escapes any ancestor stacking context
+  // (e.g. transformed draft cards) and reliably sits above page chrome/footer.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 overflow-hidden"
       style={{ background: "rgba(56,56,56,0.6)" }}
@@ -373,6 +378,7 @@ export function PlayerCardCarousel({
 
       {hasPrev && <Arrow dir="left" onClick={() => move(-1)} />}
       {hasNext && <Arrow dir="right" onClick={() => move(1)} />}
-    </div>
+    </div>,
+    document.body,
   );
 }
