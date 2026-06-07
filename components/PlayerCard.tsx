@@ -113,6 +113,7 @@ const COLS: { key: keyof PlayerSeasonRow; label: string }[] = [
   { key: "ft_pct", label: "FT%" },
   { key: "tov", label: "TOV" },
   { key: "fg3m", label: "3PM" },
+  { key: "usg", label: "USG" },
 ];
 
 function PositionPills({ positions }: { positions?: Role[] }) {
@@ -170,9 +171,23 @@ function FullCard({
             <span className="text-[var(--md-orange-deep)]">{player.team}</span> · drafted &rsquo;{String(player.season).slice(2)} · career card
           </div>
         </div>
-        {onClose && (
-          <button type="button" aria-label="Close" onClick={onClose} className="font-display text-lg text-[var(--md-ink)] hover:text-[var(--md-coral)]">✕</button>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {onDraft && (
+            <button
+              type="button"
+              className="md-btn md-btn--sm md-btn--teal"
+              onClick={onDraft}
+              disabled={!draftable}
+              style={draftable ? undefined : { opacity: 0.5, cursor: "not-allowed" }}
+              title={draftable ? "Draft this player" : "No open slot fits his position"}
+            >
+              Draft
+            </button>
+          )}
+          {onClose && (
+            <button type="button" aria-label="Close" onClick={onClose} className="font-display text-lg leading-none text-[var(--md-ink)] hover:text-[var(--md-coral)]">✕</button>
+          )}
+        </div>
       </div>
 
       <div className="md-scroll flex-1 overflow-auto p-4">
@@ -194,8 +209,7 @@ function FullCard({
               <table className="w-full border-collapse font-display text-[11px] tabular-nums">
                 <thead>
                   <tr style={{ background: "var(--md-paper-2)" }}>
-                    <th className="sticky left-0 z-10 px-2 py-1 text-left" style={{ background: "var(--md-paper-2)" }}>YR</th>
-                    <th className="px-2 py-1 text-right text-[var(--md-teal)]">GQ</th>
+                    <th className="sticky left-0 z-10 px-2 py-1 text-left" style={{ background: "var(--md-white)" }}>YR</th>
                     <th className="px-2 py-1 text-right">GP</th>
                     {COLS.map((c) => (
                       <th key={c.key} className="px-2 py-1 text-right">{c.label}</th>
@@ -207,10 +221,9 @@ function FullCard({
                     const away = s.team !== player.team;
                     return (
                       <tr key={s.season} className={`border-t border-[var(--md-paper-3)] ${away ? "text-[var(--md-ink-muted)]" : ""}`}>
-                        <th scope="row" className="sticky left-0 z-10 px-2 py-1 text-left font-bold" style={{ background: away ? "var(--md-paper-2)" : "var(--md-white)" }}>
+                        <th scope="row" className="sticky left-0 z-10 px-2 py-1 text-left font-bold" style={{ background: "var(--md-white)" }}>
                           &rsquo;{String(s.season).slice(2)}
                         </th>
-                        <td className={`px-2 py-1 text-right font-bold ${away ? "" : "text-[var(--md-teal)]"}`}>{gq100(s.gq)}</td>
                         <td className="px-2 py-1 text-right text-[var(--md-ink-muted)]">{s.gp}</td>
                         {COLS.map((c) => (
                           <td key={c.key} className="px-2 py-1 text-right">{f1(s[c.key] as number)}</td>
@@ -227,55 +240,32 @@ function FullCard({
           </>
         )}
       </div>
-
-      {/* Draft straight from the card (draft-list context only). */}
-      {onDraft && (
-        <div className="border-t-2 border-[var(--md-ink)] p-3">
-          <button
-            type="button"
-            className="md-btn md-btn--lg md-btn--teal w-full"
-            onClick={onDraft}
-            disabled={!draftable}
-            style={draftable ? undefined : { opacity: 0.5, cursor: "not-allowed" }}
-            title={draftable ? undefined : "No open slot fits his position"}
-          >
-            Draft {player.playerName}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
 
-// ── A full-size side card, tucked partially behind the center (click to focus) ─
-function SideCard({
-  player,
-  side,
-  onClick,
-}: {
-  player: CardPlayer;
-  side: "left" | "right";
-  onClick: () => void;
-}) {
-  // Same full card as the center, shifted ~58% off so only its outer edge peeks
-  // out from behind the center card, blurred and dimmed.
-  const shift = side === "left" ? "-58%" : "58%";
+// A circular arrow control (on-brand: ink border, white fill, hard shadow).
+function Arrow({ dir, onClick }: { dir: "left" | "right"; onClick: () => void }) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      aria-label={`Show ${player.playerName}`}
-      className="absolute left-0 top-1/2 z-0 w-full text-left"
-      style={{ transform: `translate(${shift}, -50%)`, filter: "blur(2px)", opacity: 0.5 }}
+      aria-label={dir === "left" ? "Previous card" : "Next card"}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`absolute top-1/2 z-40 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[var(--md-ink)] bg-[var(--md-white)] font-display text-2xl font-bold leading-none text-[var(--md-ink)] transition-transform hover:-translate-y-1/2 hover:scale-110 ${dir === "left" ? "left-2 sm:left-4" : "right-2 sm:right-4"}`}
+      style={{ boxShadow: "var(--md-shadow-sm)" }}
     >
-      <div className="pointer-events-none">
-        <FullCard player={player} />
-      </div>
+      {dir === "left" ? "‹" : "›"}
     </button>
   );
 }
 
 // ── The carousel modal ───────────────────────────────────────────────────────
+// A sliding window: the focused card is centered at full size; neighbours sit
+// scaled-down, blurred and dimmed to each side; the rest wait off-stage. Every
+// card transitions its transform/opacity, so moving slides the deck smoothly.
 export function PlayerCardCarousel({
   players,
   index,
@@ -296,67 +286,90 @@ export function PlayerCardCarousel({
     (i: number) => Math.max(0, Math.min(players.length - 1, i)),
     [players.length],
   );
-  const goto = useCallback((i: number) => setCur((c) => clamp(i ?? c)), [clamp]);
+  const move = useCallback((d: number) => setCur((c) => clamp(c + d)), [clamp]);
 
   // Prefetch the current card and its neighbours so movement is instant.
   useEffect(() => {
-    for (const i of [cur - 1, cur, cur + 1]) {
+    for (const i of [cur - 2, cur - 1, cur, cur + 1, cur + 2]) {
       if (players[i]) prefetchPlayerSeasons(players[i].entityId);
     }
   }, [cur, players]);
 
-  // Keyboard: ← → to move, Esc to close.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") setCur((c) => clamp(c - 1));
-      else if (e.key === "ArrowRight") setCur((c) => clamp(c + 1));
+      if (e.key === "ArrowLeft") move(-1);
+      else if (e.key === "ArrowRight") move(1);
       else if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [clamp, onClose]);
+  }, [move, onClose]);
 
-  const prev = players[cur - 1];
-  const next = players[cur + 1];
-  const center = players[cur];
-  if (!center) return null;
+  if (!players[cur]) return null;
+
+  // Render a ±2 window so neighbours can slide in/out from off-stage.
+  const windowed = players
+    .map((player, idx) => ({ player, idx, slot: idx - cur }))
+    .filter((w) => Math.abs(w.slot) <= 2);
+
+  const hasPrev = cur > 0;
+  const hasNext = cur < players.length - 1;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3" style={{ background: "rgba(56,56,56,0.55)" }} onClick={onClose}>
-      <div
-        className="relative mx-auto w-full max-w-lg"
-        onClick={(e) => e.stopPropagation()}
-        onTouchStart={(e) => (touchX.current = e.touches[0]?.clientX ?? null)}
-        onTouchEnd={(e) => {
-          if (touchX.current === null) return;
-          const dx = (e.changedTouches[0]?.clientX ?? touchX.current) - touchX.current;
-          if (dx > 45) setCur((c) => clamp(c - 1));
-          else if (dx < -45) setCur((c) => clamp(c + 1));
-          touchX.current = null;
-        }}
-      >
-        {/* Full-size neighbours, tucked behind the center card and blurred. */}
-        {prev && <SideCard player={prev} side="left" onClick={() => setCur(cur - 1)} />}
-        {next && <SideCard player={next} side="right" onClick={() => setCur(cur + 1)} />}
+    <div
+      className="fixed inset-0 z-50 overflow-hidden"
+      style={{ background: "rgba(56,56,56,0.6)" }}
+      onClick={onClose}
+      onTouchStart={(e) => (touchX.current = e.touches[0]?.clientX ?? null)}
+      onTouchEnd={(e) => {
+        if (touchX.current === null) return;
+        const dx = (e.changedTouches[0]?.clientX ?? touchX.current) - touchX.current;
+        if (dx > 45) move(-1);
+        else if (dx < -45) move(1);
+        touchX.current = null;
+      }}
+    >
+      {windowed.map(({ player, idx, slot }) => {
+        const isCenter = slot === 0;
+        const off = Math.abs(slot);
+        const style: React.CSSProperties = {
+          transform: `translate(-50%, -50%) translateX(${slot * 56}%) scale(${isCenter ? 1 : 0.82})`,
+          opacity: isCenter ? 1 : off === 1 ? 0.45 : 0,
+          filter: isCenter ? "none" : "blur(3px)",
+          zIndex: 30 - off * 10,
+          pointerEvents: off <= 1 ? "auto" : "none",
+          transitionProperty: "transform, opacity, filter",
+          transitionDuration: "320ms",
+          transitionTimingFunction: "cubic-bezier(0.22, 0.61, 0.36, 1)",
+        };
+        return (
+          <div
+            key={player.entityId}
+            className="absolute left-1/2 top-1/2 w-[92vw] max-w-lg"
+            style={style}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isCenter) setCur(idx);
+            }}
+          >
+            {isCenter ? (
+              <FullCard
+                player={player}
+                onClose={onClose}
+                onDraft={onDraft ? () => onDraft(cur) : undefined}
+                draftable={canDraft ? canDraft(cur) : true}
+              />
+            ) : (
+              <div className="pointer-events-none">
+                <FullCard player={player} />
+              </div>
+            )}
+          </div>
+        );
+      })}
 
-        {/* The focused card, on top. */}
-        <div className="relative z-10">
-          <FullCard
-            player={center}
-            onClose={onClose}
-            onDraft={onDraft ? () => onDraft(cur) : undefined}
-            draftable={canDraft ? canDraft(cur) : true}
-          />
-        </div>
-
-        {/* Arrow controls (always available, e.g. mobile where peeks run off-screen). */}
-        {prev && (
-          <button type="button" aria-label="Previous card" onClick={() => setCur(cur - 1)} className="md-card md-card--lift absolute -left-2 top-1/2 z-20 -translate-y-1/2 px-2 py-3 font-display text-xl font-bold">‹</button>
-        )}
-        {next && (
-          <button type="button" aria-label="Next card" onClick={() => setCur(cur + 1)} className="md-card md-card--lift absolute -right-2 top-1/2 z-20 -translate-y-1/2 px-2 py-3 font-display text-xl font-bold">›</button>
-        )}
-      </div>
+      {hasPrev && <Arrow dir="left" onClick={() => move(-1)} />}
+      {hasNext && <Arrow dir="right" onClick={() => move(1)} />}
     </div>
   );
 }

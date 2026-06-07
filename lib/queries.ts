@@ -255,7 +255,8 @@ function computePlayerIndexLive(
 export interface PlayerSeasonRow {
   season: number;
   team: string; // the team the player logged the most games for that season
-  gq: number; // median game_quality that season (0–1)
+  gq: number; // median game_quality that season (0–1) — drives the chart
+  usg: number; // per-game possession load (fga + 0.44·fta + tov) — the model's usage number
   gp: number;
   pts: number;
   reb: number;
@@ -283,6 +284,7 @@ export async function getPlayerSeasonHistory(
     `SELECT s.season_year AS season,
             mode(b.team_abbreviation) AS team,
             round(median(g.game_quality), 3) AS gq,
+            round(avg(b.fg_attempted) + 0.44 * avg(b.ft_attempted) + avg(b.turnovers), 1) AS usg,
             count(*) AS gp,
             round(avg(b.points), 1)   AS pts,
             round(avg(b.rebounds), 1) AS reb,
