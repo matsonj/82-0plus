@@ -1,5 +1,7 @@
 "use client";
 
+import type { SimPick } from "@/lib/types";
+
 // Same-device "pending completion" lock for the Daily challenge.
 //
 // daily_results on the account is the real replay gate, but the completion POST
@@ -19,9 +21,14 @@ export interface PendingDaily {
   wins: number;
   losses: number;
   perfect: boolean;
+  // The drafted picks, kept so a failed /api/daily/complete can be RETRIED — not
+  // merely detected. Without them the lock could never resolve, stranding the
+  // result in a permanent local lock. Cleared with the lock once the server has it.
+  picks: SimPick[];
 }
 
-const key = (date: string) => `md820-pending-daily-${date}`;
+const PREFIX = "md820-pending-daily-";
+const key = (date: string) => `${PREFIX}${date}`;
 
 export function setPendingDaily(date: string, rec: PendingDaily): void {
   if (typeof window === "undefined") return;
@@ -49,4 +56,19 @@ export function clearPendingDaily(date: string): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Every date with an unflushed completion lock — used to retry saves on load. */
+export function listPendingDailyDates(): string[] {
+  if (typeof window === "undefined") return [];
+  const dates: string[] = [];
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k?.startsWith(PREFIX)) dates.push(k.slice(PREFIX.length));
+    }
+  } catch {
+    /* ignore */
+  }
+  return dates;
 }

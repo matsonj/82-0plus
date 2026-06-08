@@ -27,6 +27,7 @@ import {
   setPendingDaily,
   getPendingDaily,
   clearPendingDaily,
+  listPendingDailyDates,
 } from "@/lib/dailyPending";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
@@ -222,6 +223,36 @@ export default function Home() {
     }
   }, []);
 
+  // Retry persisting a completion whose save never confirmed (the lock kept its
+  // picks). "saved" = the server now has it; "rejected" = picks invalid, so no
+  // record can ever exist and the lock is dropped; "pending" = still couldn't
+  // reach the server; "none" = nothing was pending.
+  const flushPendingDaily = useCallback(
+    async (date: string): Promise<"saved" | "rejected" | "pending" | "none"> => {
+      const pending = getPendingDaily(date);
+      if (!pending) return "none";
+      const u = getSavedUser();
+      if (!u) return "pending"; // can't retry without credentials
+      const saved = await saveDailyCompletion({
+        name: u.username,
+        pin: u.pin,
+        date,
+        picks: pending.picks,
+      });
+      if (saved.ok) {
+        clearPendingDaily(date);
+        if (saved.share) setDailyShareToken(saved.share);
+        return "saved";
+      }
+      if (saved.rejected) {
+        clearPendingDaily(date);
+        return "rejected";
+      }
+      return "pending";
+    },
+    [],
+  );
+
   // Entry point for the Daily (today or an archived date): require login, then
   // check the player's ACCOUNT for an existing completion (cross-device / cleared
   // localStorage) before drafting — a finished day routes to its result/compare so
@@ -248,24 +279,37 @@ export default function Home() {
         });
         if (!res.ok) throw new Error(`lookup ${res.status}`);
         const { result } = await res.json();
-        setDailyChecking(false);
         if (result) {
           // Already completed this date → show the result/compare, don't re-draft.
           // The server owns the gate now, so drop any stale same-device lock.
           clearPendingDaily(date);
+          setDailyChecking(false);
           window.location.assign(`/d/${date}`);
           return;
         }
         // No server record. If this device has an unconfirmed completion for the
-        // day (a failed/slow /api/daily/complete), fail closed — re-drafting would
-        // let the account post a fresher result/share for a day it already played.
+        // day, try to FLUSH it first (the lock kept the picks) — that persists the
+        // result AND stops the day being re-drafted for a better score. Only if the
+        // save still can't reach the server do we hold a locked state; the Retry
+        // button re-runs this and re-attempts the save.
         if (getPendingDaily(date)) {
-          setDailyGateError(
-            "Your result for this day is still syncing and is locked on this device — check your connection and try again.",
-          );
-          return;
+          const outcome = await flushPendingDaily(date);
+          setDailyChecking(false);
+          if (outcome === "saved") {
+            window.location.assign(`/d/${date}`);
+            return;
+          }
+          if (outcome === "pending") {
+            setDailyGateError(
+              "Your result for this day hasn't saved yet — check your connection and try again.",
+            );
+            return;
+          }
+          // "rejected"/"none": lock cleared, no valid record can exist → fall through.
+        } else {
+          setDailyChecking(false);
         }
-        // Server CONFIRMED no stored result → safe to draft.
+        // Server CONFIRMED no stored result (and nothing pending) → safe to draft.
         startGame("classic", "daily", dateOverride);
       } catch {
         // Fail closed: never draft on a lookup failure (that's the replay hole).
@@ -275,7 +319,7 @@ export default function Home() {
         );
       }
     },
-    [startGame],
+    [startGame, flushPendingDaily],
   );
 
   // Deep link: /?d=YYYY-MM-DD (from a shared daily link) starts that day's
@@ -289,6 +333,12 @@ export default function Home() {
       playDaily(d);
     }
   }, [playDaily]);
+
+  // Self-heal: on load, retry any completion whose save never reached the server
+  // (e.g. the tab closed mid-save) so a pending lock can never strand a result.
+  useEffect(() => {
+    for (const date of listPendingDailyDates()) void flushPendingDaily(date);
+  }, [flushPendingDaily]);
 
   const backToMenu = () => {
     setPhase("menu");
@@ -542,27 +592,16 @@ export default function Home() {
         // the head-to-head share compare). The server RECOMPUTES the result from
         // these picks (it never trusts client stats), so we just send the picks +
         // date. Daily play is login-gated, so a saved user exists.
-        const u = getSavedUser();
-        if (u) {
+        if (getSavedUser()) {
           // Drop a same-device lock BEFORE the network call so a failed/slow save
-          // can't be replayed for a better score on a refresh. Cleared only once
-          // the server confirms the record (then daily_results owns the gate) or
-          // definitively rejects the picks; otherwise the day stays fail-closed.
-          setPendingDaily(playedDate, rec);
-          const saved = await saveDailyCompletion({
-            name: u.username,
-            pin: u.pin,
-            date: playedDate,
-            picks,
-          });
-          if (saved.ok) {
-            clearPendingDaily(playedDate);
-            if (saved.share) setDailyShareToken(saved.share);
-          } else if (saved.rejected) {
-            // Server rejected the picks — no valid record can exist for them, so
-            // don't lock the player out over it.
-            clearPendingDaily(playedDate);
-          }
+          // can't be replayed for a better score on a refresh. It carries the PICKS
+          // so the save can be RETRIED later (gate retry / next load), not just
+          // detected. flushPendingDaily does the actual POST (with retries) and
+          // clears the lock once the server confirms the record (then daily_results
+          // owns the gate) or rejects the picks; on a hard failure the lock stays so
+          // the day is fail-closed and the save is retried later.
+          setPendingDaily(playedDate, { ...rec, picks });
+          await flushPendingDaily(playedDate);
         }
       }
       window.scrollTo({ top: 0, behavior: "smooth" });
