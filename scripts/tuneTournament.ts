@@ -10,10 +10,10 @@
  * ghost re-hydration go through the read pool).
  *
  * HOW TO RUN:
- *   MOTHERDUCK_TOKEN=<read token> \
- *   MOTHERDUCK_RW_TOKEN=<read-write token> \
- *     npx tsx scripts/tuneTournament.ts [N] [seedKey]
+ *   npx tsx scripts/tuneTournament.ts [N] [seedKey]
  *
+ *   Tokens load from .env.local (see ./_env) — never paste them inline on the
+ *   command line (they leak into shell history / terminal logs).
  *   - MOTHERDUCK_TOKEN     (read)  — stat norms + roster hydration.
  *   - MOTHERDUCK_RW_TOKEN  (write-token, used READ-ONLY here) — drawOpponents
  *       SELECTs the ghosts table through the RW pool (queryRW). No writes occur.
@@ -23,6 +23,7 @@
  *   - seedKey  optional, default "tune" — base bracket seed; bracket i uses `${seedKey}-${i}`.
  */
 
+import "./_env"; // loads .env.local before any lib/* module reads process.env
 import { drawOpponents, getStatNorms } from "../lib/tournamentQueries";
 import {
   TOURNAMENT_CONFIG,

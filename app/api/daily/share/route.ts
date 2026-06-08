@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { authenticate, getDailyResult } from "@/lib/dailyResults";
 import { signDailyShare } from "@/lib/dailyShareToken";
+import { assertTournamentSecret } from "@/lib/secret";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return jsonWithSessionHint(sessionHint, { error: "invalid date" }, { status: 400 });
     }
+    // Fail before authenticate() (which can create an account) if signing is
+    // misconfigured — never mutate when we couldn't return a valid token anyway.
+    assertTournamentSecret();
     const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
     if (!auth.ok) {
       return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });

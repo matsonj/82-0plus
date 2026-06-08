@@ -2,8 +2,7 @@ import { scryptSync, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { validateName, validatePin, normalizeName } from "@/lib/tournamentValidation";
-import { ensureSchema } from "@/lib/tournamentDb";
-import { getUsersByName, getUserTeams } from "@/lib/tournamentQueries";
+import { getUsersByNameRO, getUserTeamsRO } from "@/lib/tournamentReadQueries";
 import type { TournamentLookupResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -30,13 +29,13 @@ export async function POST(req: NextRequest) {
     }
     const nameNorm = normalizeName(String(body.name));
 
-    await ensureSchema();
-
     // Identity is the (name, PIN) pair — find the account whose PIN verifies
     // among any accounts sharing this name. timingSafeEqual throws on mismatched
     // lengths, so length-guard first. Same generic 404 on any miss (no enum).
+    // Public, no-PIN-gated table access goes through the dedicated read-only
+    // tournament pool (no DDL, low-privilege token — see lib/tournamentReadDb).
     const matchingUserIds: string[] = [];
-    for (const u of await getUsersByName(nameNorm)) {
+    for (const u of await getUsersByNameRO(nameNorm)) {
       const candidate = scryptSync(pin, u.pin_salt, 32);
       const stored = Buffer.from(u.pin_hash, "hex");
       if (candidate.length === stored.length && timingSafeEqual(candidate, stored)) {
@@ -47,7 +46,9 @@ export async function POST(req: NextRequest) {
       return jsonWithSessionHint(sessionHint, NOT_FOUND, { status: 404 });
     }
 
-    const teams = (await Promise.all(matchingUserIds.map(getUserTeams)))
+    const teams = (
+      await Promise.all(matchingUserIds.map((uid) => getUserTeamsRO(uid)))
+    )
       .flat()
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     return jsonWithSessionHint(

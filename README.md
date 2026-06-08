@@ -70,21 +70,53 @@ read-write token:
 
 `MOTHERDUCK_RW_TOKEN` — required for the tournament. Writes go to a separate
 `nba_tournament` database via the same PostgreSQL endpoint, on an isolated connection
-pool so the RW token never touches the read path. Tables are created lazily on first
-submit (`lib/tournamentDb.ts` → `ensureSchema()`).
+pool so the RW token never touches the read path. Tables are created lazily on the
+write paths (`lib/tournamentDb.ts` → `ensureSchema()`); public read paths
+(`/api/tournament/{bracket,team,lookup}`) never run DDL.
+
+`TOURNAMENT_SECRET` — **required in production.** It's the HMAC key for signed roll
+receipts and daily share tokens. It is intentionally NOT derived from a database
+token (signing must not be backed by a DB credential). In production the app throws
+if it's unset; dev/test fall back to a fixed placeholder. Rotating it invalidates
+outstanding roll receipts and daily share links.
+
+`MOTHERDUCK_TOURNAMENT_RO_TOKEN` — **required in production.** A dedicated
+read-only token for the public read paths (`/api/tournament/{bracket,team,lookup}`,
+which read the `users` auth table and `teams`). Kept separate from `MOTHERDUCK_TOKEN`
+(so a leak of the app-wide read token can't brute-force PINs against the auth table)
+and from the RW token (so this one can't write). Expose the tournament tables to it
+with a MotherDuck share:
+
+```sql
+-- on the RW account (owns nba_tournament):
+CREATE SHARE nba_tournament_share FROM nba_tournament (ACCESS ORGANIZATION, UPDATE AUTOMATIC);
+-- on the RO token's account, once:
+ATTACH 'md:_share/nba_tournament/<token-from-create-share>' AS nba_tournament;
+```
+
+Auto-update lags writes by ~1 min (fine for share-link / returning-player reads).
+Outside production it falls back to `MOTHERDUCK_RW_TOKEN` so local dev needn't
+provision a separate token + share.
+
+`TOURNAMENT_RO_DB` (optional, default `nba_tournament`) — the database name the
+public read paths SELECT from on the RO token. Set it if you ATTACH the share under
+a different alias.
+
+Tokens for these scripts load from `.env.local` (the same file `next dev` uses) —
+don't paste them inline on the command line, where they leak into shell history.
 
 Before the first tournament can run, seed the "ghost" filler field (~60 teams sampled
 from the player index) so brackets fill even with few real submissions:
 
 ```bash
-MOTHERDUCK_TOKEN=<read> MOTHERDUCK_RW_TOKEN=<rw> npx tsx scripts/seedGhosts.ts
+npx tsx scripts/seedGhosts.ts
 ```
 
 Tune the matchup factors (`TOURNAMENT_CONFIG` in `lib/tournament.ts`) with the
 per-game modifier-log harness (seed ghosts first):
 
 ```bash
-MOTHERDUCK_TOKEN=<read> MOTHERDUCK_RW_TOKEN=<rw> npx tsx scripts/tuneTournament.ts [N] [seedKey]
+npx tsx scripts/tuneTournament.ts [N] [seedKey]
 ```
 
 ## Scripts

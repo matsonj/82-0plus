@@ -19,9 +19,11 @@ function prettyDate(date: string): string {
 }
 
 // The sharer's record comes ONLY from a server-signed token — an unsigned/edited
-// link yields no sharer (so the head-to-head numbers can't be forged).
-function sharerFrom(s?: string): Sharer | null {
-  const v = s ? verifyDailyShare(s) : null;
+// link yields no sharer (so the head-to-head numbers can't be forged). The token
+// must also be bound to the date being viewed: a valid token for a DIFFERENT
+// daily is rejected, so a real result can't be re-pinned onto another day's board.
+function sharerFrom(s: string | undefined, routeDate: string): Sharer | null {
+  const v = s ? verifyDailyShare(s, routeDate) : null;
   if (!v) return null;
   return { name: v.u || "A player", wins: v.w, losses: v.l, margin: v.n, perfect: v.p };
 }
@@ -35,7 +37,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { date } = await params;
   const { s } = await searchParams;
-  const sharer = sharerFrom(s);
+  const sharer = sharerFrom(s, date);
   const day = prettyDate(date);
   const title = sharer
     ? `82-0+ Daily ${day} — ${sharer.name} went ${sharer.wins}–${sharer.losses}. Can you beat it?`
@@ -76,5 +78,5 @@ export default async function DailySharePage({
 }) {
   const { date } = await params;
   const { s } = await searchParams;
-  return <DailyShareLanding date={date} sharer={sharerFrom(s)} />;
+  return <DailyShareLanding date={date} sharer={sharerFrom(s, date)} />;
 }

@@ -5,10 +5,10 @@
  * One-off local dev script. NOT part of the request path or the build.
  *
  * HOW TO RUN:
- *   MOTHERDUCK_TOKEN=<read token> \
- *   MOTHERDUCK_RW_TOKEN=<read-write token> \
- *     npx tsx scripts/seedGhosts.ts
+ *   npx tsx scripts/seedGhosts.ts
  *
+ *   Tokens load from .env.local (see ./_env) — never paste them inline on the
+ *   command line (they leak into shell history / terminal logs).
  *   - MOTHERDUCK_TOKEN     (read)  — used by getPlayerIndex / simulateRoster inputs.
  *   - MOTHERDUCK_RW_TOKEN  (write) — used by ensureSchema + the ghost inserts.
  *
@@ -28,6 +28,7 @@
  *   seed_net    : DOUBLE      -> simulateRoster(starters).netRating
  */
 
+import "./_env"; // loads .env.local before any lib/* module reads process.env
 import type { SlotKind } from "../lib/positions";
 import { canPlay } from "../lib/positions";
 import { getPlayerIndex, type IndexedPlayer } from "../lib/queries";
