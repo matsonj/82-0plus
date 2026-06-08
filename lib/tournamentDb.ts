@@ -58,7 +58,7 @@ function getPool(): Pool {
   return pool;
 }
 
-export type QueryParam = string | number | null;
+export type QueryParam = string | number | boolean | null;
 
 /** Run a write (or read-after-write) query. Params bind to `$1`, `$2`, … */
 export async function queryRW<T = Record<string, unknown>>(
@@ -97,6 +97,18 @@ export function ensureSchema(): Promise<void> {
            ghost_id INTEGER, name VARCHAR, roster_json JSON, sixth_json JSON, seed_net DOUBLE,
            ghost_type VARCHAR DEFAULT 'standard', ghost_date VARCHAR)`,
       );
+      // Per-account daily CHALLENGE completion (distinct from a tournament entry):
+      // one row per (user, Pacific date). Stores the projected scoring margin, the
+      // 9-stat team box (for the share card) and the reg-season roster the player
+      // drafted (so they can review their own picks across devices). PK guards
+      // one-per-day; INSERT OR IGNORE keeps the first attempt.
+      await queryRW(
+        `CREATE TABLE IF NOT EXISTS ${TDB}.daily_results (
+           user_id UUID, daily_date VARCHAR, wins INTEGER, losses INTEGER,
+           margin DOUBLE, perfect BOOLEAN, box_json JSON, roster_json JSON,
+           created_at TIMESTAMP DEFAULT now(),
+           PRIMARY KEY (user_id, daily_date))`,
+      );
       // CREATE TABLE IF NOT EXISTS won't add columns introduced after a table
       // already exists, so additively self-heal the evolving columns.
       // teams: per-team display + the daily-tournament date partition.
@@ -105,6 +117,7 @@ export function ensureSchema(): Promise<void> {
         "mode VARCHAR",
         "roster_display JSON",
         "daily_date VARCHAR", // set for mode='daily' entries; partitions the daily pool by day
+        "team_box_json JSON", // 9-stat reg-season team box (for the daily tournament share card)
       ]) {
         await queryRW(
           `ALTER TABLE ${TDB}.teams ADD COLUMN IF NOT EXISTS ${col}`,

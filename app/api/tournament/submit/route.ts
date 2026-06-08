@@ -381,6 +381,8 @@ export async function POST(req: NextRequest) {
 
     const you = deriveYou(bracket, myTeam.id);
     const rec = deriveRecord(bracket, myTeam.id);
+    // The five's reg-season 9-stat box (no buffs) — for the spoiler-free daily card.
+    const teamBox = simulateRoster(hydrated.scoring).teamBox;
 
     await insertTeam({
       teamId,
@@ -400,6 +402,7 @@ export async function POST(req: NextRequest) {
       reachedRound: rec.reachedRound,
       championName: bracket.championName,
       bracketJson: bracket,
+      teamBoxJson: teamBox,
     });
 
     // Strip the per-game modifier breakdown unless debug is on (don't leak the
@@ -407,7 +410,13 @@ export async function POST(req: NextRequest) {
     const out = DEBUG ? bracket : stripBreakdown(bracket);
     return jsonWithSessionHint(
       sessionHint,
-      { bracket: out, you, teamId } satisfies TournamentRunResponse,
+      {
+        bracket: out,
+        you,
+        teamId,
+        teamBox,
+        realizedMargin: rec.realizedMargin,
+      } satisfies TournamentRunResponse,
     );
   } catch (err) {
     console.error("[/api/tournament/submit]", err);

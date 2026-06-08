@@ -12,6 +12,10 @@ import { buildTournamentShareImage } from "@/lib/shareImage";
 import { SITE_URL } from "@/lib/site";
 import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
 
+// Fallback so a daily card never falls back to rendering the roster (a spoiler)
+// even if an older stored team lacks team_box_json.
+const EMPTY_BOX = { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgPct: 0, ftPct: 0, tov: 0, fg3m: 0 };
+
 // Reg-season W-L from the team rating (the five's net), via the shared tier
 // projection (single source of truth for wins = 41 + 2.7·net, clamped to 82).
 function regSeasonRecord(seedNet: number): { w: number; l: number } {
@@ -281,9 +285,13 @@ export function TournamentResults({
         playoffLosses: playoff.totalL,
         tier: isDaily ? undefined : tierForSeedNet(myTeam.seedNet)?.label,
         modeLabel: tournamentModeLabel(mode, dailyDate),
-        roster: myTeam.roster ?? [],
-        sixthMan: myTeam.sixthMan,
-        hideRoster: isDaily, // Daily share card redacts player names (no spoilers).
+        // Daily cards reveal NOTHING about the picks: pass the team's 9 stats +
+        // the actual playoff margin instead of the roster. (box falls back to the
+        // reg-season teamBox from the run/lookup response.)
+        roster: isDaily ? [] : myTeam.roster ?? [],
+        sixthMan: isDaily ? undefined : myTeam.sixthMan,
+        box: isDaily ? (data.teamBox ?? EMPTY_BOX) : undefined,
+        actualMargin: isDaily ? data.realizedMargin : undefined,
       });
       try {
         await navigator.clipboard.writeText(shareLink); // link on the clipboard too

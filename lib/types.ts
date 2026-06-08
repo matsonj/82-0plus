@@ -236,6 +236,10 @@ export interface TournamentRunResponse {
   bracket: BracketResult;
   you: TournamentYou;
   teamId?: string; // the persisted team this run was saved as
+  // For the (spoiler-free) daily share card: the five's reg-season 9-stat box and
+  // the ACTUAL avg playoff scoring margin.
+  teamBox?: SimResult["teamBox"];
+  realizedMargin?: number;
 }
 
 /** One memorialized team in a user's list (lightweight — no bracket payload). */
