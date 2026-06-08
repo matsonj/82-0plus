@@ -214,16 +214,25 @@ export async function buildTournamentShareImage(args: {
     // under the records, an aligned header row, then a balanced 3×3 grid.
     const b = args.box;
 
+    // The champion banner (top at H-152) steals ~96px from the bottom. Rather than
+    // squeezing the 3×3 grid below the legibility of its own text, pull the whole
+    // stats block up a notch on champion cards so the rows keep a comfortable, FIXED
+    // pitch. Non-champion cards are unchanged — there the grid runs to the footer.
+    const champ = args.isChampion;
+    const dividerY = champ ? 500 : 512;
+    const headY = champ ? 548 : 560;
+    const top = champ ? 620 : 648; // value baseline of the first grid row
+    const rowH = champ ? 112 : 132; // row pitch — fixed per layout, never collapsed
+
     // Divider between the records and the team stats.
     ctx.strokeStyle = "#E1D6CB"; // paper-3
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(110, 512);
-    ctx.lineTo(W - 110, 512);
+    ctx.moveTo(110, dividerY);
+    ctx.lineTo(W - 110, dividerY);
     ctx.stroke();
 
     // Header row: section label (left) + actual margin (right), shared baseline.
-    const headY = 560;
     ctx.textAlign = "left";
     ctx.fillStyle = muted;
     ctx.font = f(28, "normal");
@@ -244,13 +253,6 @@ export async function buildTournamentShareImage(args: {
     ctx.textAlign = "center";
     const cols = 3;
     const colW = (W - 220) / cols;
-    const top = 648; // value baseline of the first row
-    // Whatever sits below the grid sets the floor: the champion banner (top at
-    // H-152) when present, otherwise just the footer (H-56). Shrink the row pitch
-    // so the last row's label (top + 2*rowH + 40) always clears it with a gap —
-    // a fixed 132 made the third row collide with the TOURNAMENT CHAMPION banner.
-    const bottomGuard = args.isChampion ? H - 152 : H - 56;
-    const rowH = Math.min(132, Math.floor((bottomGuard - 80 - top) / 2));
     for (let i = 0; i < cells.length; i++) {
       const [lbl, val] = cells[i];
       const cx = 110 + colW * (i % cols) + colW / 2;
