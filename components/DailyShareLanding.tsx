@@ -87,15 +87,20 @@ export function DailyShareLanding({
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then(async (d) => {
+      .then((d) => {
         const you = d.result as DailyResult | null;
         if (!you) {
           setState({ kind: "play" });
           return;
         }
-        // Best-effort: surface the tournament run for this day if they entered one.
-        const tournament = await findTournamentRun(u.username, u.pin, date);
-        setState({ kind: "result", you, tournament });
+        // Show the result + share link immediately. The tournament run is purely
+        // additive, so we fetch it in the background and patch it in when it lands
+        // — a slow/hung /api/tournament/lookup must never block the daily result.
+        setState({ kind: "result", you, tournament: null });
+        void findTournamentRun(u.username, u.pin, date).then((tournament) => {
+          if (!tournament) return;
+          setState((s) => (s.kind === "result" ? { ...s, tournament } : s));
+        });
       })
       .catch(() => setState({ kind: "error" }));
   };

@@ -245,7 +245,12 @@ export async function buildTournamentShareImage(args: {
     const cols = 3;
     const colW = (W - 220) / cols;
     const top = 648; // value baseline of the first row
-    const rowH = 132;
+    // Whatever sits below the grid sets the floor: the champion banner (top at
+    // H-152) when present, otherwise just the footer (H-56). Shrink the row pitch
+    // so the last row's label (top + 2*rowH + 40) always clears it with a gap —
+    // a fixed 132 made the third row collide with the TOURNAMENT CHAMPION banner.
+    const bottomGuard = args.isChampion ? H - 152 : H - 56;
+    const rowH = Math.min(132, Math.floor((bottomGuard - 80 - top) / 2));
     for (let i = 0; i < cells.length; i++) {
       const [lbl, val] = cells[i];
       const cx = 110 + colW * (i % cols) + colW / 2;
