@@ -70,21 +70,36 @@ read-write token:
 
 `MOTHERDUCK_RW_TOKEN` — required for the tournament. Writes go to a separate
 `nba_tournament` database via the same PostgreSQL endpoint, on an isolated connection
-pool so the RW token never touches the read path. Tables are created lazily on first
-submit (`lib/tournamentDb.ts` → `ensureSchema()`).
+pool so the RW token never touches the read path. Tables are created lazily on the
+write paths (`lib/tournamentDb.ts` → `ensureSchema()`); public read paths
+(`/api/tournament/{bracket,team,lookup}`) never run DDL.
+
+`TOURNAMENT_SECRET` — **required in production.** It's the HMAC key for signed roll
+receipts and daily share tokens. It is intentionally NOT derived from a database
+token (signing must not be backed by a DB credential). In production the app throws
+if it's unset; dev/test fall back to a fixed placeholder. Rotating it invalidates
+outstanding roll receipts and daily share links.
+
+`TOURNAMENT_RO_DB` (optional, default `nba_tournament`) — the database name the
+public read paths SELECT from on the **read** token. If you expose the tournament
+tables to the read token via a MotherDuck share attached under a different alias,
+set this to that alias.
+
+Tokens for these scripts load from `.env.local` (the same file `next dev` uses) —
+don't paste them inline on the command line, where they leak into shell history.
 
 Before the first tournament can run, seed the "ghost" filler field (~60 teams sampled
 from the player index) so brackets fill even with few real submissions:
 
 ```bash
-MOTHERDUCK_TOKEN=<read> MOTHERDUCK_RW_TOKEN=<rw> npx tsx scripts/seedGhosts.ts
+npx tsx scripts/seedGhosts.ts
 ```
 
 Tune the matchup factors (`TOURNAMENT_CONFIG` in `lib/tournament.ts`) with the
 per-game modifier-log harness (seed ghosts first):
 
 ```bash
-MOTHERDUCK_TOKEN=<read> MOTHERDUCK_RW_TOKEN=<rw> npx tsx scripts/tuneTournament.ts [N] [seedKey]
+npx tsx scripts/tuneTournament.ts [N] [seedKey]
 ```
 
 ## Scripts

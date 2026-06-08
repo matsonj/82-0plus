@@ -1,15 +1,11 @@
+import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { getTournamentSecret } from "./secret";
 
 // A signed, tamper-proof token for a daily share link. The sharer's record is
 // minted SERVER-SIDE from their stored daily_results row, so a recipient page can
 // trust it without re-auth — and a hand-edited link can't forge a fake record
 // (no secret → no valid signature). Server-only (node:crypto).
-
-const SECRET =
-  process.env.TOURNAMENT_SECRET ||
-  process.env.MOTHERDUCK_RW_TOKEN ||
-  process.env.MOTHERDUCK_TOKEN ||
-  "82-0plus-dev-secret";
 
 export interface DailyShare {
   d: string; // date YYYY-MM-DD
@@ -28,7 +24,7 @@ function fromB64url(s: string): string {
   return Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
 }
 const sig = (body: string) =>
-  createHmac("sha256", SECRET).update(body).digest("hex").slice(0, 24);
+  createHmac("sha256", getTournamentSecret()).update(body).digest("hex").slice(0, 24);
 
 export function signDailyShare(p: DailyShare): string {
   const body = b64url(
@@ -37,7 +33,14 @@ export function signDailyShare(p: DailyShare): string {
   return `${body}.${sig(body)}`;
 }
 
-export function verifyDailyShare(token: unknown): DailyShare | null {
+// `expectedDate` (the route date) binds a token to the daily it was minted for:
+// a valid signed token from one day can't be pasted onto another day's URL to
+// present a real result as a mismatched head-to-head opponent. A date mismatch is
+// treated exactly like an invalid/missing token (returns null).
+export function verifyDailyShare(
+  token: unknown,
+  expectedDate?: string,
+): DailyShare | null {
   if (typeof token !== "string") return null;
   const dot = token.lastIndexOf(".");
   if (dot <= 0) return null;
@@ -48,10 +51,14 @@ export function verifyDailyShare(token: unknown): DailyShare | null {
   if (!timingSafeEqual(Buffer.from(got), Buffer.from(want))) return null;
   try {
     const a = JSON.parse(fromB64url(body)) as [string, string, number, number, number, number];
-    return {
+    const share: DailyShare = {
       d: String(a[0]), u: String(a[1]),
       w: Number(a[2]), l: Number(a[3]), n: Number(a[4]) / 10, p: a[5] === 1,
     };
+    // The signed date must equal the date being viewed — otherwise the token is
+    // mis-bound (a real record from a different daily).
+    if (expectedDate !== undefined && share.d !== expectedDate) return null;
+    return share;
   } catch {
     return null;
   }

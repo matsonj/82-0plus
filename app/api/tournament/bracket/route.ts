@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { ensureSchema, queryRW, TDB } from "@/lib/tournamentDb";
+import { getBracketByIdRO } from "@/lib/tournamentReadQueries";
 import { stripBreakdown } from "@/lib/tournamentRun";
 import type { BracketResult } from "@/lib/types";
 
@@ -10,14 +10,10 @@ export const dynamic = "force-dynamic";
 const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "1";
 
 // Brackets aren't secret — this is a read-only, no-PIN endpoint for the public
-// share page: GET /api/tournament/bracket?id=<team_id>.
+// share page: GET /api/tournament/bracket?id=<team_id>. It reads through the
+// read-scaling pool (never the RW pool) and runs no schema DDL.
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-interface BracketRow {
-  bracket_json: unknown;
-  champion_name: string;
-}
 
 export async function GET(req: NextRequest) {
   const sessionHint = getSessionHint(req);
@@ -31,16 +27,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    await ensureSchema();
-
-    const rows = await queryRW<BracketRow>(
-      `SELECT bracket_json, champion_name
-         FROM ${TDB}.teams
-        WHERE team_id = $1
-        LIMIT 1`,
-      [id],
-    );
-    const row = rows[0];
+    const row = await getBracketByIdRO(id, { sessionHint: sessionHint.value });
     if (!row) {
       return jsonWithSessionHint(
         sessionHint,
@@ -49,14 +36,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // The pg endpoint returns JSON columns as strings — parse defensively.
-    let bracket: BracketResult;
-    try {
-      bracket =
-        typeof row.bracket_json === "string"
-          ? (JSON.parse(row.bracket_json) as BracketResult)
-          : (row.bracket_json as BracketResult);
-    } catch {
+    // getBracketByIdRO already parses the JSON column; guard the shape.
+    const bracket = row.bracketJson as BracketResult;
+    if (!bracket || !Array.isArray(bracket.teams)) {
       return jsonWithSessionHint(
         sessionHint,
         { error: "tournament not found" },

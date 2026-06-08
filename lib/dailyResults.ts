@@ -1,3 +1,4 @@
+import "server-only";
 import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
 import { queryRW, ensureSchema } from "./tournamentDb";
 import { getUsersByName, insertUser } from "./tournamentQueries";

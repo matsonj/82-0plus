@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { ensureSchema } from "@/lib/tournamentDb";
-import { getTeamBracket } from "@/lib/tournamentQueries";
+import { getTeamBracketRO } from "@/lib/tournamentReadQueries";
 import { deriveYou, stripBreakdown } from "@/lib/tournamentRun";
 import type { BracketResult, TournamentRunResponse } from "@/lib/types";
 
@@ -11,7 +10,8 @@ export const dynamic = "force-dynamic";
 const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "1";
 
 // Public, no-PIN endpoint: a team's bracket isn't secret (the PIN only gates the
-// user's list of teams). GET /api/tournament/team?id=<team_id>.
+// user's list of teams). GET /api/tournament/team?id=<team_id>. Reads through the
+// read-scaling pool (never the RW pool) and runs no schema DDL.
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -27,9 +27,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    await ensureSchema();
-
-    const row = await getTeamBracket(id);
+    const row = await getTeamBracketRO(id, { sessionHint: sessionHint.value });
     if (!row) {
       return jsonWithSessionHint(
         sessionHint,

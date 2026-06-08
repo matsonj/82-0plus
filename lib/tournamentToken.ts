@@ -18,19 +18,15 @@
 // Server-only (node:crypto). The secret is shared by /api/slot and the verifying
 // route — both run server-side with the same env.
 
+import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
-
-const SECRET =
-  process.env.TOURNAMENT_SECRET ||
-  process.env.MOTHERDUCK_RW_TOKEN ||
-  process.env.MOTHERDUCK_TOKEN ||
-  "82-0plus-dev-secret";
+import { getTournamentSecret } from "./secret";
 
 // How long a roll stays redeemable — generous, to cover a full draft + entry.
 const TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 function hmac(data: string): string {
-  return createHmac("sha256", SECRET).update(data).digest("hex");
+  return createHmac("sha256", getTournamentSecret()).update(data).digest("hex");
 }
 
 /** Issue a receipt for a server roll of `team` in `decade`: `<issuedAt>.<hmac>`.
