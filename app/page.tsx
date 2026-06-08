@@ -15,6 +15,8 @@ import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { DailyArchive } from "@/components/DailyArchive";
+import { DailySignIn } from "@/components/DailySignIn";
+import { getSavedUser } from "@/lib/tournamentSession";
 import { TournamentEntry } from "@/components/TournamentEntry";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
@@ -79,6 +81,9 @@ export default function Home() {
   lineupRef.current = lineup;
   const dailyResultRef = useRef(dailyResult); // latest daily lock for startGame guard
   dailyResultRef.current = dailyResult;
+  // Daily play requires a (name, PIN) login; the pending date waits for sign-in.
+  const [showDailySignIn, setShowDailySignIn] = useState(false);
+  const pendingDaily = useRef<{ date?: string } | null>(null);
 
   const draftedCount = lineup.filter(Boolean).length;
   const draftDone = draftedCount === KINDS.length;
@@ -182,6 +187,19 @@ export default function Home() {
       setBooting(false);
     }
   }, []);
+
+  // Entry point for the Daily (today or an archived date): gate on login, then play.
+  const playDaily = useCallback(
+    (dateOverride?: string) => {
+      if (getSavedUser()) {
+        startGame("classic", "daily", dateOverride);
+        return;
+      }
+      pendingDaily.current = { date: dateOverride };
+      setShowDailySignIn(true);
+    },
+    [startGame],
+  );
 
   const backToMenu = () => {
     setPhase("menu");
@@ -421,6 +439,36 @@ export default function Home() {
         }
         // Only the home banner tracks TODAY's result.
         if (playedDate === today) setDailyResult(rec);
+        // Record the completion against the player's account (cross-device lock +
+        // the head-to-head share compare). Daily play is login-gated, so a saved
+        // user exists; fire-and-forget.
+        const u = getSavedUser();
+        const lines = (data.roster as SimRosterLine[]) ?? [];
+        if (u) {
+          void fetch("/api/daily/complete", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              name: u.username,
+              pin: u.pin,
+              date: playedDate,
+              wins: r.wins,
+              losses: r.losses,
+              margin: r.netRating,
+              perfect: r.perfect,
+              box: r.teamBox,
+              roster: lines.map((l) => ({
+                team: l.team,
+                season: l.best_season,
+                name: l.player_name,
+                pts: l.pts,
+                reb: l.reb,
+                ast: l.ast,
+                gq: l.gq,
+              })),
+            }),
+          }).catch(() => {});
+        }
       }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
@@ -482,6 +530,16 @@ export default function Home() {
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
       {showHowTo && <HowToPlay onClose={() => setShowHowTo(false)} />}
+      {showDailySignIn && (
+        <DailySignIn
+          onCancel={() => setShowDailySignIn(false)}
+          onSignedIn={() => {
+            setShowDailySignIn(false);
+            startGame("classic", "daily", pendingDaily.current?.date);
+            pendingDaily.current = null;
+          }}
+        />
+      )}
       <div className="md-sunbeam" />
 
       <header className="relative z-10 flex items-center justify-between py-4 sm:py-5">
@@ -553,7 +611,7 @@ export default function Home() {
             <button
               className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5"
               style={{ background: "var(--md-yellow)" }}
-              onClick={() => startGame("classic", "daily")}
+              onClick={() => playDaily()}
             >
               <div className="flex items-center justify-between">
                 <div className="font-display text-xl font-bold">
@@ -573,7 +631,7 @@ export default function Home() {
           {today && (
             <DailyArchive
               today={today}
-              onPlay={(date) => startGame("classic", "daily", date)}
+              onPlay={(date) => playDaily(date)}
             />
           )}
 
