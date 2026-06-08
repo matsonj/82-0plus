@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   TournamentRunResponse,
   TournamentMode,
@@ -9,8 +9,14 @@ import type {
 } from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
 import { buildTournamentShareImage } from "@/lib/shareImage";
+import { presentShare } from "@/lib/shareActions";
+import { getSavedUser } from "@/lib/tournamentSession";
 import { SITE_URL } from "@/lib/site";
 import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
+
+// Fallback so a daily card never falls back to rendering the roster (a spoiler)
+// even if an older stored team lacks team_box_json.
+const EMPTY_BOX = { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgPct: 0, ftPct: 0, tov: 0, fg3m: 0 };
 
 // Reg-season W-L from the team rating (the five's net), via the shared tier
 // projection (single source of truth for wins = 41 + 2.7·net, clamped to 82).
@@ -260,8 +266,38 @@ export function TournamentResults({
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  // A SERVER-SIGNED token for the sharer's stored daily result (unforgeable).
+  const [dailyShareToken, setDailyShareToken] = useState<string | null>(null);
 
-  const shareLink = data.teamId ? `${SITE_URL}/t/${data.teamId}` : SITE_URL;
+  useEffect(() => {
+    if (!isDaily || !dailyDate) return;
+    const u = getSavedUser();
+    if (!u) return;
+    let active = true;
+    fetch("/api/daily/share", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: u.username, pin: u.pin, date: dailyDate }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d?.share) setDailyShareToken(d.share as string);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isDaily, dailyDate]);
+
+  // Daily shares drive recipients into the (login-gated) day's challenge with a
+  // head-to-head compare — NOT the public bracket. The signed token carries the
+  // sharer's record; others use /t/<id>.
+  const shareLink =
+    isDaily && dailyDate
+      ? `${SITE_URL}/d/${dailyDate}${dailyShareToken ? `?s=${encodeURIComponent(dailyShareToken)}` : ""}`
+      : data.teamId
+        ? `${SITE_URL}/t/${data.teamId}`
+        : SITE_URL;
 
   const share = async () => {
     if (!myTeam) return;
@@ -281,16 +317,23 @@ export function TournamentResults({
         playoffLosses: playoff.totalL,
         tier: isDaily ? undefined : tierForSeedNet(myTeam.seedNet)?.label,
         modeLabel: tournamentModeLabel(mode, dailyDate),
-        roster: myTeam.roster ?? [],
-        sixthMan: myTeam.sixthMan,
-        hideRoster: isDaily, // Daily share card redacts player names (no spoilers).
+        // Daily cards reveal NOTHING about the picks: pass the team's 9 stats +
+        // the actual playoff margin instead of the roster. (box falls back to the
+        // reg-season teamBox from the run/lookup response.)
+        roster: isDaily ? [] : myTeam.roster ?? [],
+        sixthMan: isDaily ? undefined : myTeam.sixthMan,
+        box: isDaily ? (data.teamBox ?? EMPTY_BOX) : undefined,
+        actualMargin: isDaily ? data.realizedMargin : undefined,
       });
-      try {
-        await navigator.clipboard.writeText(shareLink); // link on the clipboard too
-      } catch {
-        /* clipboard blocked */
-      }
-      if (blob) {
+      // Mobile → native share sheet (image + text incl. link); desktop → overlay.
+      const text = `82-0+ Tournament · ${you.name} — ${reachedLabel(you.reachedRound, isChampion)}\n${shareLink}`;
+      const handled = await presentShare({
+        blob,
+        filename: "82-0-tournament.png",
+        text,
+        link: shareLink,
+      });
+      if (!handled && blob) {
         setShareUrl((prev) => {
           if (prev) URL.revokeObjectURL(prev);
           return URL.createObjectURL(blob);
@@ -340,7 +383,7 @@ export function TournamentResults({
               <strong>Right-click to copy and share.</strong> The link is already
               on your clipboard.
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
               <a
                 className="md-btn md-btn--sm md-btn--secondary"
                 href={shareUrl}

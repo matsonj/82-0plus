@@ -55,7 +55,7 @@ export async function buildShareImage(
   ctx.font = f(42);
   ctx.fillStyle = result.netRating >= 0 ? teal : coral;
   ctx.fillText(
-    `${result.netRating >= 0 ? "+" : ""}${result.netRating} net`,
+    `${result.netRating >= 0 ? "+" : ""}${result.netRating} ${isDaily ? "proj. margin" : "net"}`,
     W / 2,
     470,
   );
@@ -140,7 +140,10 @@ export async function buildTournamentShareImage(args: {
   modeLabel?: string; // which tournament — "DAILY 06-05-26" / "CLASSIC" / "RANKED"
   roster: BracketPlayer[];
   sixthMan?: BracketPlayer;
-  hideRoster?: boolean; // Daily: show team+era slots but redact player NAMES (no spoilers)
+  // Daily cards reveal nothing about the picks: pass the team's 9 category stats +
+  // the ACTUAL playoff scoring margin instead of the roster.
+  box?: { pts: number; reb: number; ast: number; stl: number; blk: number; fgPct: number; ftPct: number; tov: number; fg3m: number };
+  actualMargin?: number;
 }): Promise<Blob | null> {
   const W = 1080;
   const H = 1080;
@@ -205,70 +208,100 @@ export async function buildTournamentShareImage(args: {
   ctx.fillText(`${args.regWins}–${args.regLosses}`, colL, 446);
   ctx.fillText(`${args.playoffWins}–${args.playoffLosses}`, colR, 446);
 
-  // Roster — five starters, captain flagged with a ★ CAPTAIN badge.
-  let y = 560;
-  ctx.font = f(26, "normal");
-  ctx.fillStyle = muted;
-  ctx.textAlign = "left";
-  // Lift the section label well clear of the first row (was a cramped 28px gap).
-  ctx.fillText("STARTERS", 110, y - 48);
-  ctx.font = f(34, "normal");
-  for (const p of args.roster) {
-    ctx.fillStyle = orange;
-    ctx.fillText(`${p.team} '${String(p.season).slice(2)}`, 110, y);
-    if (args.hideRoster) {
-      // Daily: the team/era slot is public, but the PLAYER stays hidden.
-      ctx.fillStyle = muted;
-      ctx.fillText("· hidden", 290, y);
-      y += 60;
-      continue;
-    }
-    ctx.fillStyle = ink;
-    const nm = p.name.length > 24 ? p.name.slice(0, 23) + "…" : p.name;
-    ctx.fillText(nm, 290, y);
-    if (p.captain) {
-      // A small [C] pill (yellow fill, ink border) after the name — mirrors the
-      // in-app captain chip. Measure the NAME at its own font (34) before drawing
-      // so the pill lands clear of the name, not on top of it.
-      const nameWidth = ctx.measureText(nm).width;
-      const px = 290 + nameWidth + 16;
-      const pw = 30;
-      const ph = 30;
-      const py = y - 26; // pill top relative to the text baseline
-      ctx.fillStyle = yellow;
-      ctx.fillRect(px, py, pw, ph);
-      ctx.strokeStyle = ink;
-      ctx.lineWidth = 3;
-      ctx.strokeRect(px, py, pw, ph);
-      ctx.fillStyle = ink;
-      ctx.font = f(20);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("C", px + pw / 2, py + ph / 2 + 1);
-      ctx.textAlign = "left";
-      ctx.textBaseline = "alphabetic";
-      ctx.font = f(34, "normal");
-    }
-    y += 60;
-  }
+  if (args.box) {
+    // Daily: NEVER reveal the picks. Show the team's nine category stats + the
+    // ACTUAL playoff scoring margin in their place. Even vertical rhythm: a rule
+    // under the records, an aligned header row, then a balanced 3×3 grid.
+    const b = args.box;
 
-  if (args.sixthMan) {
-    y += 8;
+    // Divider between the records and the team stats.
+    ctx.strokeStyle = "#E1D6CB"; // paper-3
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(110, 512);
+    ctx.lineTo(W - 110, 512);
+    ctx.stroke();
+
+    // Header row: section label (left) + actual margin (right), shared baseline.
+    const headY = 560;
+    ctx.textAlign = "left";
     ctx.fillStyle = muted;
-    ctx.font = f(26, "normal");
-    ctx.fillText("SIXTH MAN", 110, y);
-    y += 44;
-    ctx.fillStyle = orange;
-    ctx.font = f(34, "normal");
-    ctx.fillText(
-      `${args.sixthMan.team} '${String(args.sixthMan.season).slice(2)}`,
-      110,
-      y,
-    );
-    if (args.hideRoster) {
+    ctx.font = f(28, "normal");
+    ctx.fillText("TEAM · PER GAME", 110, headY);
+    if (typeof args.actualMargin === "number") {
+      const m = args.actualMargin;
+      ctx.textAlign = "right";
+      ctx.fillStyle = m >= 0 ? teal : "#FF7169";
+      ctx.font = f(28);
+      ctx.fillText(`${m >= 0 ? "+" : ""}${m.toFixed(1)} margin (actual)`, W - 110, headY);
+    }
+
+    const cells: [string, string][] = [
+      ["PTS", `${b.pts}`], ["REB", `${b.reb}`], ["AST", `${b.ast}`],
+      ["STL", `${b.stl}`], ["BLK", `${b.blk}`], ["3PM", `${b.fg3m}`],
+      ["FG%", `${b.fgPct}`], ["FT%", `${b.ftPct}`], ["TOV", `${b.tov}`],
+    ];
+    ctx.textAlign = "center";
+    const cols = 3;
+    const colW = (W - 220) / cols;
+    const top = 648; // value baseline of the first row
+    const rowH = 132;
+    for (let i = 0; i < cells.length; i++) {
+      const [lbl, val] = cells[i];
+      const cx = 110 + colW * (i % cols) + colW / 2;
+      const ry = top + Math.floor(i / cols) * rowH;
+      ctx.fillStyle = ink;
+      ctx.font = f(60);
+      ctx.fillText(val, cx, ry);
       ctx.fillStyle = muted;
-      ctx.fillText("· hidden", 290, y);
-    } else {
+      ctx.font = f(26, "normal");
+      ctx.fillText(lbl, cx, ry + 40);
+    }
+  } else {
+    // Roster — five starters, captain flagged with a [C] pill, then the sixth man.
+    let y = 560;
+    ctx.font = f(26, "normal");
+    ctx.fillStyle = muted;
+    ctx.textAlign = "left";
+    ctx.fillText("STARTERS", 110, y - 48);
+    ctx.font = f(34, "normal");
+    for (const p of args.roster) {
+      ctx.fillStyle = orange;
+      ctx.fillText(`${p.team} '${String(p.season).slice(2)}`, 110, y);
+      ctx.fillStyle = ink;
+      const nm = p.name.length > 24 ? p.name.slice(0, 23) + "…" : p.name;
+      ctx.fillText(nm, 290, y);
+      if (p.captain) {
+        const nameWidth = ctx.measureText(nm).width;
+        const px = 290 + nameWidth + 16;
+        const pw = 30;
+        const ph = 30;
+        const py = y - 26;
+        ctx.fillStyle = yellow;
+        ctx.fillRect(px, py, pw, ph);
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(px, py, pw, ph);
+        ctx.fillStyle = ink;
+        ctx.font = f(20);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("C", px + pw / 2, py + ph / 2 + 1);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+        ctx.font = f(34, "normal");
+      }
+      y += 60;
+    }
+    if (args.sixthMan) {
+      y += 8;
+      ctx.fillStyle = muted;
+      ctx.font = f(26, "normal");
+      ctx.fillText("SIXTH MAN", 110, y);
+      y += 44;
+      ctx.fillStyle = orange;
+      ctx.font = f(34, "normal");
+      ctx.fillText(`${args.sixthMan.team} '${String(args.sixthMan.season).slice(2)}`, 110, y);
       ctx.fillStyle = ink;
       ctx.fillText(args.sixthMan.name, 290, y);
     }

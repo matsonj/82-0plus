@@ -515,6 +515,7 @@ export interface InsertTeamArgs {
   reachedRound: number;
   championName: string;
   bracketJson: unknown;
+  teamBoxJson?: unknown; // the five's reg-season 9-stat box (daily share card)
 }
 
 /**
@@ -527,8 +528,8 @@ export async function insertTeam(args: InsertTeamArgs): Promise<void> {
     `INSERT INTO nba_tournament.main.teams
        (team_id, user_id, team_name, mode, daily_date, roster_json, sixth_json, roster_display,
         captain_slot, seed_net,
-        record_w, record_l, realized_margin, reached_round, champion_name, bracket_json)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+        record_w, record_l, realized_margin, reached_round, champion_name, bracket_json, team_box_json)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
     [
       args.teamId,
       args.userId,
@@ -546,6 +547,7 @@ export async function insertTeam(args: InsertTeamArgs): Promise<void> {
       args.reachedRound,
       args.championName,
       JSON.stringify(args.bracketJson),
+      args.teamBoxJson == null ? null : JSON.stringify(args.teamBoxJson),
     ],
   );
 }
@@ -607,9 +609,9 @@ export async function getUserTeams(
 /** A team's stored bracket (for the public viewer + lookup detail). */
 export async function getTeamBracket(
   teamId: string,
-): Promise<{ bracketJson: unknown } | null> {
-  const rows = await queryRW<{ bracket_json: unknown }>(
-    `SELECT bracket_json
+): Promise<{ bracketJson: unknown; teamBox: unknown; realizedMargin: number } | null> {
+  const rows = await queryRW<{ bracket_json: unknown; team_box_json: unknown; realized_margin: number }>(
+    `SELECT bracket_json, team_box_json, realized_margin
        FROM nba_tournament.main.teams
       WHERE team_id = $1
       LIMIT 1`,
@@ -617,5 +619,9 @@ export async function getTeamBracket(
   );
   if (!rows[0]) return null;
   // The pg endpoint returns JSON columns as strings — parse defensively.
-  return { bracketJson: parseJson(rows[0].bracket_json) };
+  return {
+    bracketJson: parseJson(rows[0].bracket_json),
+    teamBox: rows[0].team_box_json == null ? null : parseJson(rows[0].team_box_json),
+    realizedMargin: rows[0].realized_margin ?? 0,
+  };
 }

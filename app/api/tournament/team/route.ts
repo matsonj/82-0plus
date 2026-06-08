@@ -59,7 +59,13 @@ export async function GET(req: NextRequest) {
     const out = DEBUG ? bracket : stripBreakdown(bracket);
     return jsonWithSessionHint(
       sessionHint,
-      { bracket: out, you, teamId: id } satisfies TournamentRunResponse,
+      {
+        bracket: out,
+        you,
+        teamId: id,
+        teamBox: (row.teamBox as TournamentRunResponse["teamBox"]) ?? undefined,
+        realizedMargin: row.realizedMargin,
+      } satisfies TournamentRunResponse,
     );
   } catch (err) {
     console.error("[/api/tournament/team]", err);

@@ -15,12 +15,14 @@ import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { DailyArchive } from "@/components/DailyArchive";
+import { DailySignIn } from "@/components/DailySignIn";
+import { getSavedUser } from "@/lib/tournamentSession";
 import { TournamentEntry } from "@/components/TournamentEntry";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
 import { encodeShare } from "@/lib/shareCode";
-import { SITE_URL } from "@/lib/site";
-import { pacificDate } from "@/lib/dailyDate";
+import { SITE_URL, MOTHERDUCK_URL } from "@/lib/site";
+import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play" | "tournament";
@@ -77,8 +79,16 @@ export default function Home() {
   const rollActive = useRef(false); // synchronous in-flight flag for the auto-start effect
   const lineupRef = useRef(lineup); // latest lineup for rollRound (avoids stale closure)
   lineupRef.current = lineup;
-  const dailyResultRef = useRef(dailyResult); // latest daily lock for startGame guard
-  dailyResultRef.current = dailyResult;
+  // Daily play requires a (name, PIN) login; the pending date waits for sign-in.
+  const [showDailySignIn, setShowDailySignIn] = useState(false);
+  const pendingDaily = useRef<{ date?: string } | null>(null);
+  // The replay gate fails CLOSED: while we verify completion we show "checking",
+  // and on any lookup failure we surface a retry instead of drafting.
+  const [dailyChecking, setDailyChecking] = useState(false);
+  const [dailyGateError, setDailyGateError] = useState<string | null>(null);
+  const attemptedDaily = useRef<string | undefined>(undefined);
+  // Server-signed token for the current daily result's share link (unforgeable).
+  const [dailyShareToken, setDailyShareToken] = useState<string | null>(null);
 
   const draftedCount = lineup.filter(Boolean).length;
   const draftDone = draftedCount === KINDS.length;
@@ -127,22 +137,15 @@ export default function Home() {
   );
 
   const startGame = useCallback(async (m: GameMode, type: GameType, dateOverride?: string) => {
-    // Daily is one attempt per date, ever. Today's lock lives in dailyResultRef;
-    // an archived date is checked against its own localStorage key.
-    if (type === "daily") {
-      if (!dateOverride && dailyResultRef.current) return;
-      if (dateOverride) {
-        try {
-          if (localStorage.getItem(`md820-daily-${dateOverride}`)) return;
-        } catch {
-          /* localStorage unavailable */
-        }
-      }
-    }
+    // NOTE: the daily one-per-day gate lives in playDaily() and is SERVER-
+    // authoritative (it checks /api/daily/result and fails closed). startGame must
+    // not re-gate on the local cache, or a stale localStorage entry could silently
+    // block valid play after the server already confirmed no result.
     setMode(type === "daily" ? "hoopiq" : m); // daily hides stats like Ranked
     setGameType(type);
     setResult(null);
     setResultRoster([]);
+    setDailyShareToken(null);
     setCurrentReceipt("");
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
@@ -182,6 +185,62 @@ export default function Home() {
       setBooting(false);
     }
   }, []);
+
+  // Entry point for the Daily (today or an archived date): require login, then
+  // check the player's ACCOUNT for an existing completion (cross-device / cleared
+  // localStorage) before drafting — a finished day routes to its result/compare so
+  // it can't be replayed for a fresher share link. daily_results stays the source
+  // of truth; the localStorage lock is just a fast same-device cache.
+  const playDaily = useCallback(
+    async (dateOverride?: string) => {
+      const u = getSavedUser();
+      if (!u) {
+        pendingDaily.current = { date: dateOverride };
+        setShowDailySignIn(true);
+        return;
+      }
+      const date = dateOverride ?? pacificDate();
+      attemptedDaily.current = dateOverride;
+      setDailyGateError(null);
+      setDailyChecking(true);
+      try {
+        const res = await fetch("/api/daily/result", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: u.username, pin: u.pin, date }),
+        });
+        if (!res.ok) throw new Error(`lookup ${res.status}`);
+        const { result } = await res.json();
+        setDailyChecking(false);
+        if (result) {
+          // Already completed this date → show the result/compare, don't re-draft.
+          window.location.assign(`/d/${date}`);
+          return;
+        }
+        // Server CONFIRMED no stored result → safe to draft.
+        startGame("classic", "daily", dateOverride);
+      } catch {
+        // Fail closed: never draft on a lookup failure (that's the replay hole).
+        setDailyChecking(false);
+        setDailyGateError(
+          "Couldn't verify your daily status — check your connection and try again.",
+        );
+      }
+    },
+    [startGame],
+  );
+
+  // Deep link: /?d=YYYY-MM-DD (from a shared daily link) starts that day's
+  // challenge once, gating on login like any other daily.
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || typeof window === "undefined") return;
+    const d = new URLSearchParams(window.location.search).get("d");
+    if (d && isPlayableDailyDate(d)) {
+      deepLinkHandled.current = true;
+      playDaily(d);
+    }
+  }, [playDaily]);
 
   const backToMenu = () => {
     setPhase("menu");
@@ -421,6 +480,31 @@ export default function Home() {
         }
         // Only the home banner tracks TODAY's result.
         if (playedDate === today) setDailyResult(rec);
+        // Record the completion against the player's account (cross-device lock +
+        // the head-to-head share compare). The server RECOMPUTES the result from
+        // these picks (it never trusts client stats), so we just send the picks +
+        // date. Daily play is login-gated, so a saved user exists; fire-and-forget.
+        const u = getSavedUser();
+        if (u) {
+          try {
+            const cr = await fetch("/api/daily/complete", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                name: u.username,
+                pin: u.pin,
+                date: playedDate,
+                picks,
+              }),
+            });
+            if (cr.ok) {
+              const cj = await cr.json();
+              if (cj?.share) setDailyShareToken(cj.share as string);
+            }
+          } catch {
+            /* recording is best-effort; the result still shows locally */
+          }
+        }
       }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
@@ -440,32 +524,33 @@ export default function Home() {
       : mode === "hoopiq"
         ? "Ranked"
         : "Classic";
-  // Encode the finished season into a shareable link that renders a rich
-  // preview (dynamic OG image) when pasted into Slack/Twitter/etc.
-  const shareUrl = result
-    ? `${SITE_URL}/s?r=${encodeURIComponent(
-        encodeShare({
+  // Classic/Ranked: encode the finished season into a static-preview link.
+  const shareCodeStr =
+    result && gameType !== "daily"
+      ? encodeShare({
           w: result.wins,
           l: result.losses,
           n: result.netRating,
           p: result.perfect,
           m: modeLabel,
-          // Daily is a shared puzzle — the link/OG preview must not reveal which
-          // players were used, so the roster is dropped for daily shares.
-          r:
-            gameType === "daily"
-              ? []
-              : resultRoster.map((r) => ({
-                  t: r.team,
-                  s: r.best_season,
-                  name: r.player_name,
-                  pts: r.pts,
-                  reb: r.reb,
-                  ast: r.ast,
-                })),
-        }),
-      )}`
-    : SITE_URL;
+          r: resultRoster.map((r) => ({
+            t: r.team,
+            s: r.best_season,
+            name: r.player_name,
+            pts: r.pts,
+            reb: r.reb,
+            ast: r.ast,
+          })),
+        })
+      : "";
+  // Daily links deep-link to that day's challenge (auth-gated, head-to-head
+  // compare) and carry a SERVER-SIGNED token so the sharer's record can't be
+  // forged; other modes use the static result preview.
+  const shareUrl = !result
+    ? SITE_URL
+    : gameType === "daily"
+      ? `${SITE_URL}/d/${dailyDate}${dailyShareToken ? `?s=${encodeURIComponent(dailyShareToken)}` : ""}`
+      : `${SITE_URL}/s?r=${encodeURIComponent(shareCodeStr)}`;
   const shareText = result
     ? [
         `82-0+ 🏀 ${result.wins}-${result.losses} (${result.netRating >= 0 ? "+" : ""}${result.netRating} net) · ${modeLabel}`,
@@ -482,6 +567,17 @@ export default function Home() {
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
       {showHowTo && <HowToPlay onClose={() => setShowHowTo(false)} />}
+      {showDailySignIn && (
+        <DailySignIn
+          onCancel={() => setShowDailySignIn(false)}
+          onSignedIn={() => {
+            setShowDailySignIn(false);
+            const d = pendingDaily.current?.date;
+            pendingDaily.current = null;
+            void playDaily(d); // re-check completion now that we're signed in
+          }}
+        />
+      )}
       <div className="md-sunbeam" />
 
       <header className="relative z-10 flex items-center justify-between py-4 sm:py-5">
@@ -551,9 +647,10 @@ export default function Home() {
             </div>
           ) : (
             <button
-              className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5"
+              className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5 disabled:opacity-70"
               style={{ background: "var(--md-yellow)" }}
-              onClick={() => startGame("classic", "daily")}
+              disabled={dailyChecking}
+              onClick={() => playDaily()}
             >
               <div className="flex items-center justify-between">
                 <div className="font-display text-xl font-bold">
@@ -573,8 +670,28 @@ export default function Home() {
           {today && (
             <DailyArchive
               today={today}
-              onPlay={(date) => startGame("classic", "daily", date)}
+              onPlay={(date) => playDaily(date)}
             />
+          )}
+
+          {/* Daily replay gate: verifying / fail-closed retry. */}
+          {dailyChecking && (
+            <p className="mt-3 font-display text-[12px] text-[var(--md-ink-muted)]">
+              Checking your daily status…
+            </p>
+          )}
+          {dailyGateError && (
+            <div className="mt-3 flex w-full max-w-md flex-col items-center gap-2 border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-3">
+              <p className="font-display text-[13px] text-[var(--md-coral)]">
+                {dailyGateError}
+              </p>
+              <button
+                className="md-btn md-btn--sm md-btn--secondary"
+                onClick={() => playDaily(attemptedDaily.current)}
+              >
+                ↻ Retry
+              </button>
+            </div>
           )}
 
           <div className="mt-6 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
@@ -664,6 +781,7 @@ export default function Home() {
             roster={resultRoster}
             result={result}
             shareText={shareText}
+            shareLink={shareUrl}
             modeLabel={modeLabel}
             mode={mode}
             isDaily={gameType === "daily"}
@@ -804,7 +922,16 @@ export default function Home() {
 
       <footer className="relative z-10 mt-auto pt-12 text-center">
         <p className="font-display text-xs text-[var(--md-ink-muted)]">
-          Powered by MotherDuck · <code>nba_box_scores_v2</code>
+          Powered by{" "}
+          <a
+            href={MOTHERDUCK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-[var(--md-ink)]"
+          >
+            MotherDuck
+          </a>{" "}
+          · <code>nba_box_scores_v2</code>
         </p>
         <p className="mt-2 text-[11px] text-[var(--md-ink-muted)]">
           An independent project, not affiliated with or endorsed by the NBA.
