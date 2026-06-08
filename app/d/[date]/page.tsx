@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { decodeShare } from "@/lib/shareCode";
+import { encodeShare } from "@/lib/shareCode";
+import { verifyDailyShare } from "@/lib/dailyShareToken";
 import { DailyShareLanding, type Sharer } from "@/components/DailyShareLanding";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ date: string }>;
-type Search = Promise<{ r?: string }>;
+type Search = Promise<{ s?: string }>;
 
 function prettyDate(date: string): string {
   const [y, m, d] = date.split("-").map(Number);
@@ -17,16 +18,12 @@ function prettyDate(date: string): string {
   });
 }
 
-function sharerFrom(r?: string): Sharer | null {
-  const data = r ? decodeShare(r) : null;
-  if (!data) return null;
-  return {
-    name: data.u || "A player",
-    wins: data.w,
-    losses: data.l,
-    margin: data.n,
-    perfect: data.p,
-  };
+// The sharer's record comes ONLY from a server-signed token — an unsigned/edited
+// link yields no sharer (so the head-to-head numbers can't be forged).
+function sharerFrom(s?: string): Sharer | null {
+  const v = s ? verifyDailyShare(s) : null;
+  if (!v) return null;
+  return { name: v.u || "A player", wins: v.w, losses: v.l, margin: v.n, perfect: v.p };
 }
 
 export async function generateMetadata({
@@ -37,16 +34,24 @@ export async function generateMetadata({
   searchParams: Search;
 }): Promise<Metadata> {
   const { date } = await params;
-  const { r } = await searchParams;
-  const sharer = sharerFrom(r);
+  const { s } = await searchParams;
+  const sharer = sharerFrom(s);
   const day = prettyDate(date);
   const title = sharer
     ? `82-0+ Daily ${day} — ${sharer.name} went ${sharer.wins}–${sharer.losses}. Can you beat it?`
     : `82-0+ Daily Challenge · ${day}`;
   const description =
     "Same five team/era rolls for everyone. Draft the best five and chase 82-0.";
-  // The OG image is the redacted result card (record + margin, no roster).
-  const ogImage = r ? `/api/og?r=${encodeURIComponent(r)}` : "/api/og";
+  // OG = redacted card (record + margin, no roster), built from the VERIFIED
+  // sharer only — never from raw query input.
+  const ogImage = sharer
+    ? `/api/og?r=${encodeURIComponent(
+        encodeShare({
+          w: sharer.wins, l: sharer.losses, n: sharer.margin, p: sharer.perfect,
+          m: `Daily ${date}`, r: [], u: sharer.name,
+        }),
+      )}`
+    : "/api/og";
 
   return {
     title,
@@ -70,6 +75,6 @@ export default async function DailySharePage({
   searchParams: Search;
 }) {
   const { date } = await params;
-  const { r } = await searchParams;
-  return <DailyShareLanding date={date} sharer={sharerFrom(r)} />;
+  const { s } = await searchParams;
+  return <DailyShareLanding date={date} sharer={sharerFrom(s)} />;
 }

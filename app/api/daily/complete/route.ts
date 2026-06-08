@@ -6,6 +6,7 @@ import { getOfferedIds, hydrateRoster } from "@/lib/queries";
 import { simulateRoster } from "@/lib/scoring";
 import { parseLineupPicks, lineupEligible } from "@/lib/lineup";
 import { authenticate, recordDailyResult } from "@/lib/dailyResults";
+import { signDailyShare } from "@/lib/dailyShareToken";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,7 +88,12 @@ export async function POST(req: NextRequest) {
         pts: l.pts, reb: l.reb, ast: l.ast, gq: l.gq,
       })),
     });
-    return jsonWithSessionHint(sessionHint, { result: stored });
+    // A signed share token (server-minted from the canonical record) so the share
+    // link's head-to-head numbers can't be forged.
+    const share = signDailyShare({
+      d: date, u: auth.name, w: stored.wins, l: stored.losses, n: stored.margin, p: stored.perfect,
+    });
+    return jsonWithSessionHint(sessionHint, { result: stored, share });
   } catch (err) {
     console.error("[/api/daily/complete]", err);
     return jsonWithSessionHint(sessionHint, { error: "Couldn't save that result." }, { status: 500 });

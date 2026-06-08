@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   TournamentRunResponse,
   TournamentMode,
@@ -10,7 +10,6 @@ import type {
 import { BracketView } from "@/components/BracketView";
 import { buildTournamentShareImage } from "@/lib/shareImage";
 import { presentShare } from "@/lib/shareActions";
-import { encodeShare } from "@/lib/shareCode";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { SITE_URL } from "@/lib/site";
 import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
@@ -267,26 +266,38 @@ export function TournamentResults({
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  // A SERVER-SIGNED token for the sharer's stored daily result (unforgeable).
+  const [dailyShareToken, setDailyShareToken] = useState<string | null>(null);
 
-  // Daily shares must drive recipients into the (login-gated) day's challenge with
-  // a head-to-head compare — NOT the public bracket. So a daily team links to
-  // /d/<date> carrying the sharer's redacted reg-season result; others use /t/<id>.
-  const shareLink = (() => {
-    if (isDaily && dailyDate && myTeam) {
-      const w = regWinsFromSeedNet(myTeam.seedNet);
-      const code = encodeShare({
-        w,
-        l: 82 - w,
-        n: myTeam.seedNet,
-        p: false,
-        m: `Daily ${dailyDate}`,
-        r: [],
-        u: getSavedUser()?.username,
-      });
-      return `${SITE_URL}/d/${dailyDate}?r=${encodeURIComponent(code)}`;
-    }
-    return data.teamId ? `${SITE_URL}/t/${data.teamId}` : SITE_URL;
-  })();
+  useEffect(() => {
+    if (!isDaily || !dailyDate) return;
+    const u = getSavedUser();
+    if (!u) return;
+    let active = true;
+    fetch("/api/daily/share", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: u.username, pin: u.pin, date: dailyDate }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d?.share) setDailyShareToken(d.share as string);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isDaily, dailyDate]);
+
+  // Daily shares drive recipients into the (login-gated) day's challenge with a
+  // head-to-head compare — NOT the public bracket. The signed token carries the
+  // sharer's record; others use /t/<id>.
+  const shareLink =
+    isDaily && dailyDate
+      ? `${SITE_URL}/d/${dailyDate}${dailyShareToken ? `?s=${encodeURIComponent(dailyShareToken)}` : ""}`
+      : data.teamId
+        ? `${SITE_URL}/t/${data.teamId}`
+        : SITE_URL;
 
   const share = async () => {
     if (!myTeam) return;

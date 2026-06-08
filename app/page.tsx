@@ -79,8 +79,6 @@ export default function Home() {
   const rollActive = useRef(false); // synchronous in-flight flag for the auto-start effect
   const lineupRef = useRef(lineup); // latest lineup for rollRound (avoids stale closure)
   lineupRef.current = lineup;
-  const dailyResultRef = useRef(dailyResult); // latest daily lock for startGame guard
-  dailyResultRef.current = dailyResult;
   // Daily play requires a (name, PIN) login; the pending date waits for sign-in.
   const [showDailySignIn, setShowDailySignIn] = useState(false);
   const pendingDaily = useRef<{ date?: string } | null>(null);
@@ -89,6 +87,8 @@ export default function Home() {
   const [dailyChecking, setDailyChecking] = useState(false);
   const [dailyGateError, setDailyGateError] = useState<string | null>(null);
   const attemptedDaily = useRef<string | undefined>(undefined);
+  // Server-signed token for the current daily result's share link (unforgeable).
+  const [dailyShareToken, setDailyShareToken] = useState<string | null>(null);
 
   const draftedCount = lineup.filter(Boolean).length;
   const draftDone = draftedCount === KINDS.length;
@@ -137,22 +137,15 @@ export default function Home() {
   );
 
   const startGame = useCallback(async (m: GameMode, type: GameType, dateOverride?: string) => {
-    // Daily is one attempt per date, ever. Today's lock lives in dailyResultRef;
-    // an archived date is checked against its own localStorage key.
-    if (type === "daily") {
-      if (!dateOverride && dailyResultRef.current) return;
-      if (dateOverride) {
-        try {
-          if (localStorage.getItem(`md820-daily-${dateOverride}`)) return;
-        } catch {
-          /* localStorage unavailable */
-        }
-      }
-    }
+    // NOTE: the daily one-per-day gate lives in playDaily() and is SERVER-
+    // authoritative (it checks /api/daily/result and fails closed). startGame must
+    // not re-gate on the local cache, or a stale localStorage entry could silently
+    // block valid play after the server already confirmed no result.
     setMode(type === "daily" ? "hoopiq" : m); // daily hides stats like Ranked
     setGameType(type);
     setResult(null);
     setResultRoster([]);
+    setDailyShareToken(null);
     setCurrentReceipt("");
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
@@ -493,16 +486,24 @@ export default function Home() {
         // date. Daily play is login-gated, so a saved user exists; fire-and-forget.
         const u = getSavedUser();
         if (u) {
-          void fetch("/api/daily/complete", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              name: u.username,
-              pin: u.pin,
-              date: playedDate,
-              picks,
-            }),
-          }).catch(() => {});
+          try {
+            const cr = await fetch("/api/daily/complete", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                name: u.username,
+                pin: u.pin,
+                date: playedDate,
+                picks,
+              }),
+            });
+            if (cr.ok) {
+              const cj = await cr.json();
+              if (cj?.share) setDailyShareToken(cj.share as string);
+            }
+          } catch {
+            /* recording is best-effort; the result still shows locally */
+          }
         }
       }
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -523,39 +524,33 @@ export default function Home() {
       : mode === "hoopiq"
         ? "Ranked"
         : "Classic";
-  // Encode the finished season into a shareable link that renders a rich
-  // preview (dynamic OG image) when pasted into Slack/Twitter/etc.
-  const shareCodeStr = result
-    ? encodeShare({
-        w: result.wins,
-        l: result.losses,
-        n: result.netRating,
-        p: result.perfect,
-        m: modeLabel,
-        // Daily is a shared puzzle — the link/OG preview must not reveal which
-        // players were used, so the roster is dropped for daily shares.
-        r:
-          gameType === "daily"
-            ? []
-            : resultRoster.map((r) => ({
-                t: r.team,
-                s: r.best_season,
-                name: r.player_name,
-                pts: r.pts,
-                reb: r.reb,
-                ast: r.ast,
-              })),
-        // Carry the sharer's name on daily links so the recipient sees a compare.
-        u: gameType === "daily" ? getSavedUser()?.username : undefined,
-      })
-    : "";
+  // Classic/Ranked: encode the finished season into a static-preview link.
+  const shareCodeStr =
+    result && gameType !== "daily"
+      ? encodeShare({
+          w: result.wins,
+          l: result.losses,
+          n: result.netRating,
+          p: result.perfect,
+          m: modeLabel,
+          r: resultRoster.map((r) => ({
+            t: r.team,
+            s: r.best_season,
+            name: r.player_name,
+            pts: r.pts,
+            reb: r.reb,
+            ast: r.ast,
+          })),
+        })
+      : "";
   // Daily links deep-link to that day's challenge (auth-gated, head-to-head
-  // compare); other modes use the static result preview.
-  const shareUrl = result
-    ? gameType === "daily"
-      ? `${SITE_URL}/d/${dailyDate}?r=${encodeURIComponent(shareCodeStr)}`
-      : `${SITE_URL}/s?r=${encodeURIComponent(shareCodeStr)}`
-    : SITE_URL;
+  // compare) and carry a SERVER-SIGNED token so the sharer's record can't be
+  // forged; other modes use the static result preview.
+  const shareUrl = !result
+    ? SITE_URL
+    : gameType === "daily"
+      ? `${SITE_URL}/d/${dailyDate}${dailyShareToken ? `?s=${encodeURIComponent(dailyShareToken)}` : ""}`
+      : `${SITE_URL}/s?r=${encodeURIComponent(shareCodeStr)}`;
   const shareText = result
     ? [
         `82-0+ 🏀 ${result.wins}-${result.losses} (${result.netRating >= 0 ? "+" : ""}${result.netRating} net) · ${modeLabel}`,
