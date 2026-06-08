@@ -80,12 +80,14 @@ interface DailyRow {
   losses: number;
   margin: number;
   perfect: boolean;
-  box_json: string | null;
-  roster_json: string | null;
+  box_json: unknown;
+  roster_json: unknown;
 }
 
-function parse<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
+function parse<T>(raw: unknown, fallback: T): T {
+  if (raw == null) return fallback;
+  // The pg endpoint may hand back a JSON column as a string OR already parsed.
+  if (typeof raw !== "string") return raw as T;
   try {
     return JSON.parse(raw) as T;
   } catch {
