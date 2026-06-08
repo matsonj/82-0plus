@@ -22,7 +22,7 @@ import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
 import { encodeShare } from "@/lib/shareCode";
 import { SITE_URL } from "@/lib/site";
-import { pacificDate } from "@/lib/dailyDate";
+import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play" | "tournament";
@@ -200,6 +200,18 @@ export default function Home() {
     },
     [startGame],
   );
+
+  // Deep link: /?d=YYYY-MM-DD (from a shared daily link) starts that day's
+  // challenge once, gating on login like any other daily.
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || typeof window === "undefined") return;
+    const d = new URLSearchParams(window.location.search).get("d");
+    if (d && isPlayableDailyDate(d)) {
+      deepLinkHandled.current = true;
+      playDaily(d);
+    }
+  }, [playDaily]);
 
   const backToMenu = () => {
     setPhase("menu");
@@ -490,29 +502,36 @@ export default function Home() {
         : "Classic";
   // Encode the finished season into a shareable link that renders a rich
   // preview (dynamic OG image) when pasted into Slack/Twitter/etc.
+  const shareCodeStr = result
+    ? encodeShare({
+        w: result.wins,
+        l: result.losses,
+        n: result.netRating,
+        p: result.perfect,
+        m: modeLabel,
+        // Daily is a shared puzzle — the link/OG preview must not reveal which
+        // players were used, so the roster is dropped for daily shares.
+        r:
+          gameType === "daily"
+            ? []
+            : resultRoster.map((r) => ({
+                t: r.team,
+                s: r.best_season,
+                name: r.player_name,
+                pts: r.pts,
+                reb: r.reb,
+                ast: r.ast,
+              })),
+        // Carry the sharer's name on daily links so the recipient sees a compare.
+        u: gameType === "daily" ? getSavedUser()?.username : undefined,
+      })
+    : "";
+  // Daily links deep-link to that day's challenge (auth-gated, head-to-head
+  // compare); other modes use the static result preview.
   const shareUrl = result
-    ? `${SITE_URL}/s?r=${encodeURIComponent(
-        encodeShare({
-          w: result.wins,
-          l: result.losses,
-          n: result.netRating,
-          p: result.perfect,
-          m: modeLabel,
-          // Daily is a shared puzzle — the link/OG preview must not reveal which
-          // players were used, so the roster is dropped for daily shares.
-          r:
-            gameType === "daily"
-              ? []
-              : resultRoster.map((r) => ({
-                  t: r.team,
-                  s: r.best_season,
-                  name: r.player_name,
-                  pts: r.pts,
-                  reb: r.reb,
-                  ast: r.ast,
-                })),
-        }),
-      )}`
+    ? gameType === "daily"
+      ? `${SITE_URL}/d/${dailyDate}?r=${encodeURIComponent(shareCodeStr)}`
+      : `${SITE_URL}/s?r=${encodeURIComponent(shareCodeStr)}`
     : SITE_URL;
   const shareText = result
     ? [
@@ -722,6 +741,7 @@ export default function Home() {
             roster={resultRoster}
             result={result}
             shareText={shareText}
+            shareLink={shareUrl}
             modeLabel={modeLabel}
             mode={mode}
             isDaily={gameType === "daily"}

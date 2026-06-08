@@ -9,6 +9,7 @@ import type {
 } from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
 import { buildTournamentShareImage } from "@/lib/shareImage";
+import { presentShare } from "@/lib/shareActions";
 import { SITE_URL } from "@/lib/site";
 import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
 
@@ -293,12 +294,15 @@ export function TournamentResults({
         box: isDaily ? (data.teamBox ?? EMPTY_BOX) : undefined,
         actualMargin: isDaily ? data.realizedMargin : undefined,
       });
-      try {
-        await navigator.clipboard.writeText(shareLink); // link on the clipboard too
-      } catch {
-        /* clipboard blocked */
-      }
-      if (blob) {
+      // Mobile → native share sheet (image + text incl. link); desktop → overlay.
+      const text = `82-0+ Tournament · ${you.name} — ${reachedLabel(you.reachedRound, isChampion)}\n${shareLink}`;
+      const handled = await presentShare({
+        blob,
+        filename: "82-0-tournament.png",
+        text,
+        link: shareLink,
+      });
+      if (!handled && blob) {
         setShareUrl((prev) => {
           if (prev) URL.revokeObjectURL(prev);
           return URL.createObjectURL(blob);

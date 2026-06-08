@@ -6,6 +6,7 @@ import { buildShareImage } from "@/lib/shareImage";
 import { TierBadge } from "@/components/TierBadge";
 import { PlayerCardCarousel, type CardPlayer } from "@/components/PlayerCard";
 import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
+import { presentShare } from "@/lib/shareActions";
 import { isEligible } from "@/lib/tier";
 
 // One line of the net-rating breakdown: a label (+ optional detail) and the
@@ -42,6 +43,7 @@ export function ResultsPanel({
   roster,
   result,
   shareText,
+  shareLink,
   modeLabel,
   mode,
   isDaily = false,
@@ -51,6 +53,7 @@ export function ResultsPanel({
   roster: SimRosterLine[];
   result: SimResult;
   shareText: string;
+  shareLink: string;
   modeLabel: string;
   mode: GameMode;
   isDaily?: boolean;
@@ -85,34 +88,14 @@ export function ResultsPanel({
     setStatus("working");
     try {
       const blob = await buildShareImage(result, roster, modeLabel, isDaily);
-      const file = blob
-        ? new File([blob], "82-0-season.png", { type: "image/png" })
-        : null;
-
-      // Mobile only: the native share sheet. Desktop browsers (incl. macOS
-      // Safari/Chrome) now support Web Share too, but there it pops a clunky
-      // sheet (Notes, etc.) — so gate on a touch-primary device and let desktop
-      // fall through to the right-click overlay below.
-      const nav = navigator as Navigator & {
-        canShare?: (d: ShareData) => boolean;
-      };
-      const touchPrimary =
-        typeof window !== "undefined" &&
-        window.matchMedia?.("(pointer: coarse)").matches;
-      if (touchPrimary && file && nav.canShare?.({ files: [file] }) && nav.share) {
-        await nav.share({ files: [file], text: shareText, title: "82-0+" });
-        setStatus("idle");
-        return;
-      }
-
-      // Desktop: pop up the image so the user can right-click to copy/save it.
-      // (Copy the link to the clipboard quietly too.)
-      try {
-        await navigator.clipboard.writeText(shareText);
-      } catch {
-        /* clipboard blocked */
-      }
-      if (blob) {
+      // Mobile → native share sheet (image + text incl. link); desktop → overlay.
+      const handled = await presentShare({
+        blob,
+        filename: "82-0-season.png",
+        text: shareText,
+        link: shareLink,
+      });
+      if (!handled && blob) {
         setShareUrl((prev) => {
           if (prev) URL.revokeObjectURL(prev);
           return URL.createObjectURL(blob);

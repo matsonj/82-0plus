@@ -9,7 +9,8 @@ export interface SharePayload {
   n: number; // net rating (one decimal preserved)
   p: boolean; // perfect season
   m: string; // mode label (e.g. "Classic", "Daily 2026-06-03")
-  r: SharePlayer[]; // roster lines, in board order
+  r: SharePlayer[]; // roster lines, in board order (empty for daily — no spoilers)
+  u?: string; // sharer's account name (daily links — powers the head-to-head compare)
 }
 
 export interface SharePlayer {
@@ -29,6 +30,7 @@ type Packed = [
   0 | 1, // perfect
   string, // label
   Array<[string, number, string, number, number, number]>,
+  string?, // sharer name (optional, daily links)
 ];
 
 function toBase64Url(bytes: string): string {
@@ -55,6 +57,7 @@ export function encodeShare(payload: SharePayload): string {
     payload.p ? 1 : 0,
     payload.m,
     payload.r.map((p) => [p.t, p.s, p.name, p.pts, p.reb, p.ast]),
+    payload.u ?? "",
   ];
   return toBase64Url(JSON.stringify(packed));
 }
@@ -63,7 +66,7 @@ export function decodeShare(code: string): SharePayload | null {
   try {
     const packed = JSON.parse(fromBase64Url(code)) as Packed;
     if (!Array.isArray(packed) || packed.length < 6) return null;
-    const [w, l, n10, p, m, r] = packed;
+    const [w, l, n10, p, m, r, u] = packed;
     if (
       typeof w !== "number" ||
       typeof l !== "number" ||
@@ -81,7 +84,10 @@ export function decodeShare(code: string): SharePayload | null {
       reb: Number(row[4]),
       ast: Number(row[5]),
     }));
-    return { w, l, n: n10 / 10, p: p === 1, m, r: roster };
+    return {
+      w, l, n: n10 / 10, p: p === 1, m, r: roster,
+      u: typeof u === "string" && u ? u : undefined,
+    };
   } catch {
     return null;
   }
