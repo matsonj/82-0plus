@@ -1,18 +1,20 @@
 import "server-only";
 import { Pool, types } from "pg";
 
-// Dedicated READ-ONLY pool for the public tournament read paths
-// (/api/tournament/{bracket,team,lookup}). It uses its OWN low-privilege token,
-// `MOTHERDUCK_TOURNAMENT_RO_TOKEN`, scoped to the tournament data (via a MotherDuck
-// share) — NOT the app-wide `MOTHERDUCK_TOKEN` that also serves the anonymous
-// NBA-data endpoints, and NOT the RW token.
+// READ-ONLY pool for the public tournament read paths
+// (/api/tournament/{bracket,team,lookup}). It is its OWN pg pool on a read-only
+// token — NOT the RW pool — and it never runs DDL. The token resolves to a
+// DEDICATED `MOTHERDUCK_TOURNAMENT_RO_TOKEN` if set, otherwise the app-wide
+// `MOTHERDUCK_TOKEN`. Either way, the owner attaches a read-only copy/share of
+// `nba_tournament` to whichever token's instance this resolves to.
 //
-// Why a separate token: the lookup path reads the auth table
-// (`users.pin_hash`/`pin_salt`). If that read ran on the general read token, a
-// leak of that token — or any future arbitrary-read bug on the NBA-data path —
-// would become an offline brute-force vector against the 4–6 digit PINs. Keeping a
-// purpose-scoped RO token means: a leak of any OTHER token can't reach the auth
-// table, and a leak of THIS token can't write.
+// On the dedicated-token tradeoff: the lookup path reads the auth table
+// (`users.pin_hash`/`pin_salt`). Sharing one token with the anonymous NBA-data
+// endpoints means a leak of that token (or an arbitrary-read bug on that wide
+// public surface) becomes an offline brute-force vector against the 4–6 digit
+// PINs. Setting `MOTHERDUCK_TOURNAMENT_RO_TOKEN` to a purpose-scoped token shrinks
+// that blast radius. It's optional — the fallback to `MOTHERDUCK_TOKEN` keeps ops
+// simple for low-stakes deployments, and tightening later is an env-only change.
 //
 // Mirrors lib/tournamentDb.ts (a single cached pool, fully-qualified names against
 // the default `md:` workspace) but the token is read-only.
@@ -37,20 +39,22 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-/** Resolve the read-only tournament token. Production REQUIRES the dedicated
- *  `MOTHERDUCK_TOURNAMENT_RO_TOKEN` so the public read path is never backed by a
- *  write-capable or broadly-scoped credential. Outside production we fall back to
- *  the RW token (whose account owns `nba_tournament` directly) so local dev needn't
- *  provision a separate token + share. */
+/** Resolve the read-only tournament token: a dedicated
+ *  `MOTHERDUCK_TOURNAMENT_RO_TOKEN` if provided (tightest blast radius), else the
+ *  app-wide read token `MOTHERDUCK_TOKEN`. The owner attaches a read-only copy of
+ *  `nba_tournament` to whichever token's instance this resolves to. (In local dev,
+ *  if only the RW token is set, fall back to it so the app runs without extra
+ *  setup — the RW account owns `nba_tournament` directly.) */
 function resolveToken(): string {
-  const ro = process.env.MOTHERDUCK_TOURNAMENT_RO_TOKEN;
-  if (ro) return ro;
+  const token =
+    process.env.MOTHERDUCK_TOURNAMENT_RO_TOKEN || process.env.MOTHERDUCK_TOKEN;
+  if (token) return token;
   if (process.env.NODE_ENV !== "production" && process.env.MOTHERDUCK_RW_TOKEN) {
     return process.env.MOTHERDUCK_RW_TOKEN;
   }
   throw new Error(
-    "MOTHERDUCK_TOURNAMENT_RO_TOKEN is not set. Add it to .env.local (see .env.example) " +
-      "— a read-only token scoped to the tournament share for the public read paths.",
+    "No read token for tournament reads. Set MOTHERDUCK_TOKEN (or a dedicated " +
+      "MOTHERDUCK_TOURNAMENT_RO_TOKEN) — see .env.example.",
   );
 }
 
