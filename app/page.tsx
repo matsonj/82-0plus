@@ -25,7 +25,7 @@ import { SITE_URL, MOTHERDUCK_URL } from "@/lib/site";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import {
   setPendingDaily,
-  getPendingDaily,
+  getOwnedPendingDaily,
   clearPendingDaily,
   listPendingDailyDates,
 } from "@/lib/dailyPending";
@@ -229,10 +229,12 @@ export default function Home() {
   // reach the server; "none" = nothing was pending.
   const flushPendingDaily = useCallback(
     async (date: string): Promise<"saved" | "rejected" | "pending" | "none"> => {
-      const pending = getPendingDaily(date);
-      if (!pending) return "none";
       const u = getSavedUser();
       if (!u) return "pending"; // can't retry without credentials
+      // Only ever flush a lock that THIS account created (see lib/dailyPending) —
+      // never replay one player's picks under another's credentials.
+      const pending = getOwnedPendingDaily(date, u);
+      if (!pending) return "none";
       const saved = await saveDailyCompletion({
         name: u.username,
         pin: u.pin,
@@ -287,12 +289,13 @@ export default function Home() {
           window.location.assign(`/d/${date}`);
           return;
         }
-        // No server record. If this device has an unconfirmed completion for the
+        // No server record. If THIS account has an unconfirmed completion for the
         // day, try to FLUSH it first (the lock kept the picks) — that persists the
         // result AND stops the day being re-drafted for a better score. Only if the
         // save still can't reach the server do we hold a locked state; the Retry
-        // button re-runs this and re-attempts the save.
-        if (getPendingDaily(date)) {
+        // button re-runs this and re-attempts the save. (A lock owned by a different
+        // account on this browser is ignored here, so it can still draft its own.)
+        if (getOwnedPendingDaily(date, u)) {
           const outcome = await flushPendingDaily(date);
           setDailyChecking(false);
           if (outcome === "saved") {
@@ -390,9 +393,11 @@ export default function Home() {
         if (key?.startsWith("md820-daily-")) localStorage.removeItem(key);
       }
       // Restore a same-device pending lock for TODAY (a completion whose server
-      // save never confirmed) so a refresh can't reopen the day. Distinct key
-      // prefix from the purge above — see lib/dailyPending.
-      const pendingToday = getPendingDaily(d);
+      // save never confirmed) so a refresh can't reopen the day — but only the
+      // signed-in account's own lock. Distinct key prefix from the purge above —
+      // see lib/dailyPending.
+      const u = getSavedUser();
+      const pendingToday = u ? getOwnedPendingDaily(d, u) : null;
       if (pendingToday) setDailyResult(pendingToday);
       if (!localStorage.getItem("md820-seen-howto")) {
         setShowHowTo(true);
@@ -592,15 +597,20 @@ export default function Home() {
         // the head-to-head share compare). The server RECOMPUTES the result from
         // these picks (it never trusts client stats), so we just send the picks +
         // date. Daily play is login-gated, so a saved user exists.
-        if (getSavedUser()) {
+        const u = getSavedUser();
+        if (u) {
           // Drop a same-device lock BEFORE the network call so a failed/slow save
           // can't be replayed for a better score on a refresh. It carries the PICKS
-          // so the save can be RETRIED later (gate retry / next load), not just
-          // detected. flushPendingDaily does the actual POST (with retries) and
-          // clears the lock once the server confirms the record (then daily_results
-          // owns the gate) or rejects the picks; on a hard failure the lock stays so
-          // the day is fail-closed and the save is retried later.
-          setPendingDaily(playedDate, { ...rec, picks });
+          // (so the save can be RETRIED later, not just detected) and its OWNER (so
+          // it only ever flushes for this account). flushPendingDaily does the
+          // actual POST (with retries) and clears the lock once the server confirms
+          // the record (then daily_results owns the gate) or rejects the picks; on a
+          // hard failure the lock stays so the day is fail-closed and retried later.
+          setPendingDaily(playedDate, {
+            ...rec,
+            picks,
+            owner: { name: u.username, pin: u.pin },
+          });
           await flushPendingDaily(playedDate);
         }
       }

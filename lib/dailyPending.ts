@@ -1,6 +1,7 @@
 "use client";
 
-import type { SimPick } from "@/lib/types";
+import type { SimPick } from "./types";
+import { normalizeName } from "./tournamentValidation";
 
 // Same-device "pending completion" lock for the Daily challenge.
 //
@@ -25,6 +26,22 @@ export interface PendingDaily {
   // merely detected. Without them the lock could never resolve, stranding the
   // result in a permanent local lock. Cleared with the lock once the server has it.
   picks: SimPick[];
+  // The (name, PIN) account that created this lock. Daily completion is per
+  // account, so the lock must only ever flush/block for THAT user — otherwise a
+  // second player sharing this browser could replay player A's picks as their own
+  // result, or be wrongly blocked by A's stale lock.
+  owner: { name: string; pin: string };
+}
+
+/** True when `p` was created by the currently signed-in `(name, PIN)` account. */
+export function pendingOwnedBy(
+  p: PendingDaily,
+  user: { username: string; pin: string },
+): boolean {
+  return (
+    normalizeName(p.owner.name) === normalizeName(user.username) &&
+    p.owner.pin === user.pin
+  );
 }
 
 const PREFIX = "md820-pending-daily-";
@@ -47,6 +64,16 @@ export function getPendingDaily(date: string): PendingDaily | null {
   } catch {
     return null;
   }
+}
+
+/** The pending lock for `date` only if it belongs to `user` — else null. Callers
+ *  flush/block on this so a lock never acts on behalf of a different account. */
+export function getOwnedPendingDaily(
+  date: string,
+  user: { username: string; pin: string },
+): PendingDaily | null {
+  const p = getPendingDaily(date);
+  return p && pendingOwnedBy(p, user) ? p : null;
 }
 
 export function clearPendingDaily(date: string): void {
