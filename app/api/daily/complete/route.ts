@@ -4,8 +4,8 @@ import { isPlayableDailyDate } from "@/lib/dailyDate";
 import { computeDailyBoard } from "@/lib/daily";
 import { getOfferedIds, hydrateRoster } from "@/lib/queries";
 import { simulateRoster } from "@/lib/scoring";
+import { parseLineupPicks, lineupEligible } from "@/lib/lineup";
 import { authenticate, recordDailyResult } from "@/lib/dailyResults";
-import type { SimPick } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,14 +29,12 @@ export async function POST(req: NextRequest) {
       return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
     }
 
-    // Parse the five reg-season picks.
-    const rawPicks = Array.isArray(body?.picks) ? body.picks : [];
-    const picks: SimPick[] = rawPicks.map((p: Record<string, unknown>, i: number) => ({
-      entity_id: String(p?.entity_id ?? ""),
-      team: String(p?.team ?? ""),
-      decade: Number(p?.decade),
-      slot: Number.isInteger(p?.slot) ? (p.slot as number) : i,
-    }));
+    // Validate the lineup SHAPE exactly like /api/simulate: five picks, one per
+    // slot (all slots, in range, no dupes), distinct players, well-formed.
+    const picks = parseLineupPicks(body?.picks);
+    if (!picks) {
+      return jsonWithSessionHint(sessionHint, { error: "invalid roster" }, { status: 400 });
+    }
 
     // The picks must match THAT date's deterministic board, set-based (each board
     // team/era used once) — the daily analog of a roll receipt.
@@ -65,6 +63,11 @@ export async function POST(req: NextRequest) {
       hydrated = await hydrateRoster(picks, queryOptions);
     } catch {
       return jsonWithSessionHint(sessionHint, { error: "unknown pick" }, { status: 400 });
+    }
+    // Each player must actually be eligible for the slot they claim (a Big can't
+    // sit in the Guard slot) — simulateRoster doesn't know slot legality.
+    if (!lineupEligible(hydrated.players, picks)) {
+      return jsonWithSessionHint(sessionHint, { error: "illegal lineup" }, { status: 400 });
     }
     const result = simulateRoster(hydrated.scoring);
     const tb = result.teamBox;
