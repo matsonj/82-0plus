@@ -153,7 +153,7 @@ export function ResultsPanel({
             <strong>Right-click to copy and share.</strong> The link is already on
             your clipboard.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
             <a
               className="md-btn md-btn--sm md-btn--secondary"
               href={shareUrl}

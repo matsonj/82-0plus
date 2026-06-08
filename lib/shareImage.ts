@@ -210,19 +210,32 @@ export async function buildTournamentShareImage(args: {
 
   if (args.box) {
     // Daily: NEVER reveal the picks. Show the team's nine category stats + the
-    // ACTUAL playoff scoring margin in their place.
+    // ACTUAL playoff scoring margin in their place. Even vertical rhythm: a rule
+    // under the records, an aligned header row, then a balanced 3×3 grid.
     const b = args.box;
+
+    // Divider between the records and the team stats.
+    ctx.strokeStyle = "#E1D6CB"; // paper-3
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(110, 512);
+    ctx.lineTo(W - 110, 512);
+    ctx.stroke();
+
+    // Header row: section label (left) + actual margin (right), shared baseline.
+    const headY = 560;
     ctx.textAlign = "left";
     ctx.fillStyle = muted;
-    ctx.font = f(26, "normal");
-    ctx.fillText("TEAM · PER GAME", 110, 520);
+    ctx.font = f(28, "normal");
+    ctx.fillText("TEAM · PER GAME", 110, headY);
     if (typeof args.actualMargin === "number") {
-      ctx.textAlign = "right";
-      ctx.fillStyle = args.actualMargin >= 0 ? teal : "#FF7169";
-      ctx.font = f(30);
       const m = args.actualMargin;
-      ctx.fillText(`${m >= 0 ? "+" : ""}${m.toFixed(1)} margin (actual)`, W - 110, 520);
+      ctx.textAlign = "right";
+      ctx.fillStyle = m >= 0 ? teal : "#FF7169";
+      ctx.font = f(28);
+      ctx.fillText(`${m >= 0 ? "+" : ""}${m.toFixed(1)} margin (actual)`, W - 110, headY);
     }
+
     const cells: [string, string][] = [
       ["PTS", `${b.pts}`], ["REB", `${b.reb}`], ["AST", `${b.ast}`],
       ["STL", `${b.stl}`], ["BLK", `${b.blk}`], ["3PM", `${b.fg3m}`],
@@ -231,17 +244,18 @@ export async function buildTournamentShareImage(args: {
     ctx.textAlign = "center";
     const cols = 3;
     const colW = (W - 220) / cols;
-    const top = 600;
+    const top = 648; // value baseline of the first row
+    const rowH = 132;
     for (let i = 0; i < cells.length; i++) {
       const [lbl, val] = cells[i];
       const cx = 110 + colW * (i % cols) + colW / 2;
-      const ry = top + Math.floor(i / cols) * 132;
+      const ry = top + Math.floor(i / cols) * rowH;
       ctx.fillStyle = ink;
       ctx.font = f(60);
       ctx.fillText(val, cx, ry);
       ctx.fillStyle = muted;
       ctx.font = f(26, "normal");
-      ctx.fillText(lbl, cx, ry + 38);
+      ctx.fillText(lbl, cx, ry + 40);
     }
   } else {
     // Roster — five starters, captain flagged with a [C] pill, then the sixth man.

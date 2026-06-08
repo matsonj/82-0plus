@@ -10,6 +10,8 @@ import type {
 import { BracketView } from "@/components/BracketView";
 import { buildTournamentShareImage } from "@/lib/shareImage";
 import { presentShare } from "@/lib/shareActions";
+import { encodeShare } from "@/lib/shareCode";
+import { getSavedUser } from "@/lib/tournamentSession";
 import { SITE_URL } from "@/lib/site";
 import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
 
@@ -266,7 +268,25 @@ export function TournamentResults({
   const [sharing, setSharing] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const shareLink = data.teamId ? `${SITE_URL}/t/${data.teamId}` : SITE_URL;
+  // Daily shares must drive recipients into the (login-gated) day's challenge with
+  // a head-to-head compare — NOT the public bracket. So a daily team links to
+  // /d/<date> carrying the sharer's redacted reg-season result; others use /t/<id>.
+  const shareLink = (() => {
+    if (isDaily && dailyDate && myTeam) {
+      const w = regWinsFromSeedNet(myTeam.seedNet);
+      const code = encodeShare({
+        w,
+        l: 82 - w,
+        n: myTeam.seedNet,
+        p: false,
+        m: `Daily ${dailyDate}`,
+        r: [],
+        u: getSavedUser()?.username,
+      });
+      return `${SITE_URL}/d/${dailyDate}?r=${encodeURIComponent(code)}`;
+    }
+    return data.teamId ? `${SITE_URL}/t/${data.teamId}` : SITE_URL;
+  })();
 
   const share = async () => {
     if (!myTeam) return;
@@ -352,7 +372,7 @@ export function TournamentResults({
               <strong>Right-click to copy and share.</strong> The link is already
               on your clipboard.
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
               <a
                 className="md-btn md-btn--sm md-btn--secondary"
                 href={shareUrl}
