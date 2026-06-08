@@ -188,15 +188,38 @@ export default function Home() {
     }
   }, []);
 
-  // Entry point for the Daily (today or an archived date): gate on login, then play.
+  // Entry point for the Daily (today or an archived date): require login, then
+  // check the player's ACCOUNT for an existing completion (cross-device / cleared
+  // localStorage) before drafting — a finished day routes to its result/compare so
+  // it can't be replayed for a fresher share link. daily_results stays the source
+  // of truth; the localStorage lock is just a fast same-device cache.
   const playDaily = useCallback(
-    (dateOverride?: string) => {
-      if (getSavedUser()) {
-        startGame("classic", "daily", dateOverride);
+    async (dateOverride?: string) => {
+      const u = getSavedUser();
+      if (!u) {
+        pendingDaily.current = { date: dateOverride };
+        setShowDailySignIn(true);
         return;
       }
-      pendingDaily.current = { date: dateOverride };
-      setShowDailySignIn(true);
+      const date = dateOverride ?? pacificDate();
+      try {
+        const res = await fetch("/api/daily/result", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: u.username, pin: u.pin, date }),
+        });
+        if (res.ok) {
+          const { result } = await res.json();
+          if (result) {
+            // Already completed this date → show the result/compare, don't re-draft.
+            window.location.assign(`/d/${date}`);
+            return;
+          }
+        }
+      } catch {
+        /* network — fall through and let them play (server still de-dupes) */
+      }
+      startGame("classic", "daily", dateOverride);
     },
     [startGame],
   );
@@ -452,10 +475,10 @@ export default function Home() {
         // Only the home banner tracks TODAY's result.
         if (playedDate === today) setDailyResult(rec);
         // Record the completion against the player's account (cross-device lock +
-        // the head-to-head share compare). Daily play is login-gated, so a saved
-        // user exists; fire-and-forget.
+        // the head-to-head share compare). The server RECOMPUTES the result from
+        // these picks (it never trusts client stats), so we just send the picks +
+        // date. Daily play is login-gated, so a saved user exists; fire-and-forget.
         const u = getSavedUser();
-        const lines = (data.roster as SimRosterLine[]) ?? [];
         if (u) {
           void fetch("/api/daily/complete", {
             method: "POST",
@@ -464,20 +487,7 @@ export default function Home() {
               name: u.username,
               pin: u.pin,
               date: playedDate,
-              wins: r.wins,
-              losses: r.losses,
-              margin: r.netRating,
-              perfect: r.perfect,
-              box: r.teamBox,
-              roster: lines.map((l) => ({
-                team: l.team,
-                season: l.best_season,
-                name: l.player_name,
-                pts: l.pts,
-                reb: l.reb,
-                ast: l.ast,
-                gq: l.gq,
-              })),
+              picks,
             }),
           }).catch(() => {});
         }
@@ -554,8 +564,9 @@ export default function Home() {
           onCancel={() => setShowDailySignIn(false)}
           onSignedIn={() => {
             setShowDailySignIn(false);
-            startGame("classic", "daily", pendingDaily.current?.date);
+            const d = pendingDaily.current?.date;
             pendingDaily.current = null;
+            void playDaily(d); // re-check completion now that we're signed in
           }}
         />
       )}
