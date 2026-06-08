@@ -23,10 +23,47 @@ import { Countdown } from "@/components/Countdown";
 import { encodeShare } from "@/lib/shareCode";
 import { SITE_URL, MOTHERDUCK_URL } from "@/lib/site";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
+import {
+  setPendingDaily,
+  getOwnedPendingDaily,
+  clearPendingDaily,
+  listOwnedPendingDailies,
+} from "@/lib/dailyPending";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play" | "tournament";
 type GameType = "free" | "daily";
+
+// POST a daily completion, retrying transient (network / 5xx) failures. ok=true
+// only when the server CONFIRMS the record (2xx). A 4xx is a definitive rejection
+// (e.g. illegal picks) that won't improve on retry — ok=false + rejected=true, so
+// the caller can drop the pending lock since no valid record can ever exist for
+// these picks. A bare ok=false (network exhausted) leaves the day locked.
+async function saveDailyCompletion(body: {
+  name: string;
+  pin: string;
+  date: string;
+  picks: unknown;
+}): Promise<{ ok: boolean; share?: string; rejected?: boolean }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const cr = await fetch("/api/daily/complete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (cr.ok) {
+        const cj = await cr.json().catch(() => null);
+        return { ok: true, share: typeof cj?.share === "string" ? cj.share : undefined };
+      }
+      if (cr.status >= 400 && cr.status < 500) return { ok: false, rejected: true };
+    } catch {
+      /* network / timeout — retry */
+    }
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+  }
+  return { ok: false };
+}
 
 // Each time a decade is used its odds drop 90% (weight × 0.1 per use) so the
 // draft spreads across eras instead of clustering in the same time period.
@@ -186,11 +223,44 @@ export default function Home() {
     }
   }, []);
 
+  // Retry persisting a completion whose save never confirmed (the lock kept its
+  // picks). "saved" = the server now has it; "rejected" = picks invalid, so no
+  // record can ever exist and the lock is dropped; "pending" = still couldn't
+  // reach the server; "none" = nothing was pending.
+  const flushPendingDaily = useCallback(
+    async (date: string): Promise<"saved" | "rejected" | "pending" | "none"> => {
+      const u = getSavedUser();
+      if (!u) return "pending"; // can't retry without credentials
+      // Only ever flush a lock that THIS account created (see lib/dailyPending) —
+      // never replay one player's picks under another's credentials.
+      const pending = getOwnedPendingDaily(date, u);
+      if (!pending) return "none";
+      const saved = await saveDailyCompletion({
+        name: u.username,
+        pin: u.pin,
+        date,
+        picks: pending.picks,
+      });
+      if (saved.ok) {
+        clearPendingDaily(date, u);
+        if (saved.share) setDailyShareToken(saved.share);
+        return "saved";
+      }
+      if (saved.rejected) {
+        clearPendingDaily(date, u);
+        return "rejected";
+      }
+      return "pending";
+    },
+    [],
+  );
+
   // Entry point for the Daily (today or an archived date): require login, then
   // check the player's ACCOUNT for an existing completion (cross-device / cleared
   // localStorage) before drafting — a finished day routes to its result/compare so
-  // it can't be replayed for a fresher share link. daily_results stays the source
-  // of truth; the localStorage lock is just a fast same-device cache.
+  // it can't be replayed for a fresher share link. daily_results is the source of
+  // truth; a same-device pending lock (lib/dailyPending) covers the window where a
+  // completion save hasn't yet confirmed, so a failed save can't reopen the day.
   const playDaily = useCallback(
     async (dateOverride?: string) => {
       const u = getSavedUser();
@@ -211,13 +281,38 @@ export default function Home() {
         });
         if (!res.ok) throw new Error(`lookup ${res.status}`);
         const { result } = await res.json();
-        setDailyChecking(false);
         if (result) {
           // Already completed this date → show the result/compare, don't re-draft.
+          // The server owns the gate now, so drop any stale same-device lock.
+          clearPendingDaily(date, u);
+          setDailyChecking(false);
           window.location.assign(`/d/${date}`);
           return;
         }
-        // Server CONFIRMED no stored result → safe to draft.
+        // No server record. If THIS account has an unconfirmed completion for the
+        // day, try to FLUSH it first (the lock kept the picks) — that persists the
+        // result AND stops the day being re-drafted for a better score. Only if the
+        // save still can't reach the server do we hold a locked state; the Retry
+        // button re-runs this and re-attempts the save. (A lock owned by a different
+        // account on this browser is ignored here, so it can still draft its own.)
+        if (getOwnedPendingDaily(date, u)) {
+          const outcome = await flushPendingDaily(date);
+          setDailyChecking(false);
+          if (outcome === "saved") {
+            window.location.assign(`/d/${date}`);
+            return;
+          }
+          if (outcome === "pending") {
+            setDailyGateError(
+              "Your result for this day hasn't saved yet — check your connection and try again.",
+            );
+            return;
+          }
+          // "rejected"/"none": lock cleared, no valid record can exist → fall through.
+        } else {
+          setDailyChecking(false);
+        }
+        // Server CONFIRMED no stored result (and nothing pending) → safe to draft.
         startGame("classic", "daily", dateOverride);
       } catch {
         // Fail closed: never draft on a lookup failure (that's the replay hole).
@@ -227,7 +322,7 @@ export default function Home() {
         );
       }
     },
-    [startGame],
+    [startGame, flushPendingDaily],
   );
 
   // Deep link: /?d=YYYY-MM-DD (from a shared daily link) starts that day's
@@ -241,6 +336,15 @@ export default function Home() {
       playDaily(d);
     }
   }, [playDaily]);
+
+  // Self-heal: on load, retry any of the signed-in account's completions whose
+  // save never reached the server (e.g. the tab closed mid-save) so a pending lock
+  // can never strand a result. Other accounts' locks are left for their owners.
+  useEffect(() => {
+    const u = getSavedUser();
+    if (!u) return;
+    for (const p of listOwnedPendingDailies(u)) void flushPendingDaily(p.date);
+  }, [flushPendingDaily]);
 
   const backToMenu = () => {
     setPhase("menu");
@@ -276,13 +380,28 @@ export default function Home() {
     currentTeam, currentDecade, decades, rollRound,
   ]);
 
-  // First-visit how-to + today's daily lock (one challenge per Pacific day).
+  // First-visit how-to. The daily one-per-day gate is now server-authoritative
+  // (playDaily → /api/daily/result), so we no longer read or trust any local
+  // daily cache here.
   useEffect(() => {
     const d = pacificDate();
     setToday(d);
     try {
-      const stored = localStorage.getItem(`md820-daily-${d}`);
-      if (stored) setDailyResult(JSON.parse(stored));
+      // One-time invalidation of the legacy `md820-daily-*` cache. Pre-PR#23 these
+      // keys tracked completion client-side; daily_results on the account is now
+      // the source of truth. Left in place they'd hide the Play button for days a
+      // user only ever played locally, blocking a server-side replay.
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("md820-daily-")) localStorage.removeItem(key);
+      }
+      // Restore a same-device pending lock for TODAY (a completion whose server
+      // save never confirmed) so a refresh can't reopen the day — but only the
+      // signed-in account's own lock. Distinct key prefix from the purge above —
+      // see lib/dailyPending.
+      const u = getSavedUser();
+      const pendingToday = u ? getOwnedPendingDaily(d, u) : null;
+      if (pendingToday) setDailyResult(pendingToday);
       if (!localStorage.getItem("md820-seen-howto")) {
         setShowHowTo(true);
         localStorage.setItem("md820-seen-howto", "1");
@@ -471,39 +590,32 @@ export default function Home() {
       setResultRoster((data.roster as SimRosterLine[]) ?? []);
       if (gameType === "daily") {
         const rec = { wins: r.wins, losses: r.losses, perfect: r.perfect };
-        // Lock the DATE that was played (today, or an archived day on replay).
+        // The DATE that was played (today, or an archived day on replay). The
+        // completion is recorded against the account below — daily_results is the
+        // source of truth — so we no longer cache it in localStorage.
         const playedDate = dailyDate || today;
-        try {
-          localStorage.setItem(`md820-daily-${playedDate}`, JSON.stringify(rec));
-        } catch {
-          /* localStorage unavailable */
-        }
-        // Only the home banner tracks TODAY's result.
+        // Only the home banner tracks TODAY's result (this session only).
         if (playedDate === today) setDailyResult(rec);
         // Record the completion against the player's account (cross-device lock +
         // the head-to-head share compare). The server RECOMPUTES the result from
         // these picks (it never trusts client stats), so we just send the picks +
-        // date. Daily play is login-gated, so a saved user exists; fire-and-forget.
+        // date. Daily play is login-gated, so a saved user exists.
         const u = getSavedUser();
         if (u) {
-          try {
-            const cr = await fetch("/api/daily/complete", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                name: u.username,
-                pin: u.pin,
-                date: playedDate,
-                picks,
-              }),
-            });
-            if (cr.ok) {
-              const cj = await cr.json();
-              if (cj?.share) setDailyShareToken(cj.share as string);
-            }
-          } catch {
-            /* recording is best-effort; the result still shows locally */
-          }
+          // Drop a same-device lock BEFORE the network call so a failed/slow save
+          // can't be replayed for a better score on a refresh. It carries the PICKS
+          // (so the save can be RETRIED later, not just detected) and its OWNER (so
+          // it only ever flushes for this account). flushPendingDaily does the
+          // actual POST (with retries) and clears the lock once the server confirms
+          // the record (then daily_results owns the gate) or rejects the picks; on a
+          // hard failure the lock stays so the day is fail-closed and retried later.
+          setPendingDaily({
+            date: playedDate,
+            ...rec,
+            picks,
+            owner: { name: u.username, pin: u.pin },
+          });
+          await flushPendingDaily(playedDate);
         }
       }
       window.scrollTo({ top: 0, behavior: "smooth" });

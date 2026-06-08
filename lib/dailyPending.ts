@@ -1,0 +1,138 @@
+"use client";
+
+import type { SimPick } from "./types";
+import { normalizeName } from "./tournamentValidation";
+
+// Same-device "pending completion" lock for the Daily challenge.
+//
+// daily_results on the account is the real replay gate, but the completion POST
+// (/api/daily/complete) is best-effort — if it times out or the server is down,
+// the account has NO record and nothing stops a refresh from re-drafting the same
+// day for a better score/share. So the moment a completion is made we drop a local
+// lock carrying the picks, and only clear it once the server CONFIRMS the record
+// (or definitively rejects the picks). The replay gate honors this lock to fail
+// closed, and retries the save from it.
+//
+// Locks are namespaced PER ACCOUNT *and* per date: daily completion is per
+// (name, PIN), so two players sharing one browser must each keep their own lock —
+// keying by date alone let player B's completion clobber player A's unflushed lock
+// for the same day, reopening A's replay/data-loss hole. The account segment is a
+// hash of the (normalized name, PIN) so the PIN isn't splattered across key names;
+// it's only a namespace, not a security boundary — pendingOwnedBy() re-checks the
+// full identity on read.
+//
+// Deliberately a DIFFERENT key prefix from the legacy `md820-daily-*` results
+// cache — that cache is purged on home mount and ignored by the archive, and this
+// lock must survive both. It is short-lived: cleared as soon as the server owns
+// the gate, so it can never become the stale per-device block its cousin once was.
+
+export interface PendingDaily {
+  date: string; // the daily date this completion is for (kept so listing needn't parse keys)
+  wins: number;
+  losses: number;
+  perfect: boolean;
+  // The drafted picks, kept so a failed /api/daily/complete can be RETRIED — not
+  // merely detected. Without them the lock could never resolve, stranding the
+  // result in a permanent local lock. Cleared with the lock once the server has it.
+  picks: SimPick[];
+  // The (name, PIN) account that created this lock. The lock only ever
+  // flushes/blocks for THAT user — otherwise a second player sharing this browser
+  // could replay A's picks as their own result, or be wrongly blocked by A's lock.
+  owner: { name: string; pin: string };
+}
+
+export interface Account {
+  username: string;
+  pin: string;
+}
+
+/** True when `p` was created by the given `(name, PIN)` account. */
+export function pendingOwnedBy(p: PendingDaily, user: Account): boolean {
+  return (
+    normalizeName(p.owner.name) === normalizeName(user.username) &&
+    p.owner.pin === user.pin
+  );
+}
+
+const PREFIX = "md820-pending-daily-";
+
+// cyrb53: a small, fast, well-distributed non-crypto hash. Used only to namespace
+// a lock by its owning account without writing the PIN into the key name. Not a
+// security primitive — a collision (astronomically unlikely across the handful of
+// accounts one browser ever holds) is caught by the pendingOwnedBy re-check on
+// read, so the worst case is "lock not found", never a cross-account leak.
+export function accountTag(name: string, pin: string): string {
+  const str = `${normalizeName(name)}:${pin}`;
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  const n = 4294967296 * (2097151 & h2) + (h1 >>> 0);
+  return n.toString(16).padStart(14, "0");
+}
+
+const keyFor = (owner: { name: string; pin: string }, date: string) =>
+  `${PREFIX}${accountTag(owner.name, owner.pin)}-${date}`;
+
+export function setPendingDaily(rec: PendingDaily): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(keyFor(rec.owner, rec.date), JSON.stringify(rec));
+  } catch {
+    /* localStorage unavailable */
+  }
+}
+
+/** The signed-in account's pending lock for `date`, or null. The owner re-check
+ *  guards against a (vanishingly rare) account-tag collision. */
+export function getOwnedPendingDaily(date: string, user: Account): PendingDaily | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(
+      keyFor({ name: user.username, pin: user.pin }, date),
+    );
+    if (!raw) return null;
+    const p = JSON.parse(raw) as PendingDaily;
+    return pendingOwnedBy(p, user) ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingDaily(date: string, user: Account): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(keyFor({ name: user.username, pin: user.pin }, date));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Every unflushed lock belonging to `user` — drives the retry-on-load self-heal.
+ *  Other accounts' locks on this browser are left untouched for their owners. */
+export function listOwnedPendingDailies(user: Account): PendingDaily[] {
+  if (typeof window === "undefined") return [];
+  const out: PendingDaily[] = [];
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (!k?.startsWith(PREFIX)) continue;
+      const raw = window.localStorage.getItem(k);
+      if (!raw) continue;
+      try {
+        const p = JSON.parse(raw) as PendingDaily;
+        if (pendingOwnedBy(p, user)) out.push(p);
+      } catch {
+        /* skip a malformed entry */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return out;
+}
