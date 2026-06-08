@@ -84,6 +84,11 @@ export default function Home() {
   // Daily play requires a (name, PIN) login; the pending date waits for sign-in.
   const [showDailySignIn, setShowDailySignIn] = useState(false);
   const pendingDaily = useRef<{ date?: string } | null>(null);
+  // The replay gate fails CLOSED: while we verify completion we show "checking",
+  // and on any lookup failure we surface a retry instead of drafting.
+  const [dailyChecking, setDailyChecking] = useState(false);
+  const [dailyGateError, setDailyGateError] = useState<string | null>(null);
+  const attemptedDaily = useRef<string | undefined>(undefined);
 
   const draftedCount = lineup.filter(Boolean).length;
   const draftDone = draftedCount === KINDS.length;
@@ -202,24 +207,32 @@ export default function Home() {
         return;
       }
       const date = dateOverride ?? pacificDate();
+      attemptedDaily.current = dateOverride;
+      setDailyGateError(null);
+      setDailyChecking(true);
       try {
         const res = await fetch("/api/daily/result", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ name: u.username, pin: u.pin, date }),
         });
-        if (res.ok) {
-          const { result } = await res.json();
-          if (result) {
-            // Already completed this date → show the result/compare, don't re-draft.
-            window.location.assign(`/d/${date}`);
-            return;
-          }
+        if (!res.ok) throw new Error(`lookup ${res.status}`);
+        const { result } = await res.json();
+        setDailyChecking(false);
+        if (result) {
+          // Already completed this date → show the result/compare, don't re-draft.
+          window.location.assign(`/d/${date}`);
+          return;
         }
+        // Server CONFIRMED no stored result → safe to draft.
+        startGame("classic", "daily", dateOverride);
       } catch {
-        /* network — fall through and let them play (server still de-dupes) */
+        // Fail closed: never draft on a lookup failure (that's the replay hole).
+        setDailyChecking(false);
+        setDailyGateError(
+          "Couldn't verify your daily status — check your connection and try again.",
+        );
       }
-      startGame("classic", "daily", dateOverride);
     },
     [startGame],
   );
@@ -639,8 +652,9 @@ export default function Home() {
             </div>
           ) : (
             <button
-              className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5"
+              className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5 disabled:opacity-70"
               style={{ background: "var(--md-yellow)" }}
+              disabled={dailyChecking}
               onClick={() => playDaily()}
             >
               <div className="flex items-center justify-between">
@@ -663,6 +677,26 @@ export default function Home() {
               today={today}
               onPlay={(date) => playDaily(date)}
             />
+          )}
+
+          {/* Daily replay gate: verifying / fail-closed retry. */}
+          {dailyChecking && (
+            <p className="mt-3 font-display text-[12px] text-[var(--md-ink-muted)]">
+              Checking your daily status…
+            </p>
+          )}
+          {dailyGateError && (
+            <div className="mt-3 flex w-full max-w-md flex-col items-center gap-2 border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-3">
+              <p className="font-display text-[13px] text-[var(--md-coral)]">
+                {dailyGateError}
+              </p>
+              <button
+                className="md-btn md-btn--sm md-btn--secondary"
+                onClick={() => playDaily(attemptedDaily.current)}
+              >
+                ↻ Retry
+              </button>
+            </div>
           )}
 
           <div className="mt-6 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
