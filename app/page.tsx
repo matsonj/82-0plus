@@ -276,13 +276,20 @@ export default function Home() {
     currentTeam, currentDecade, decades, rollRound,
   ]);
 
-  // First-visit how-to + today's daily lock (one challenge per Pacific day).
+  // First-visit how-to. The daily one-per-day gate is now server-authoritative
+  // (playDaily → /api/daily/result), so we no longer read or trust any local
+  // daily cache here.
   useEffect(() => {
-    const d = pacificDate();
-    setToday(d);
+    setToday(pacificDate());
     try {
-      const stored = localStorage.getItem(`md820-daily-${d}`);
-      if (stored) setDailyResult(JSON.parse(stored));
+      // One-time invalidation of the legacy `md820-daily-*` cache. Pre-PR#23 these
+      // keys tracked completion client-side; daily_results on the account is now
+      // the source of truth. Left in place they'd hide the Play button for days a
+      // user only ever played locally, blocking a server-side replay.
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("md820-daily-")) localStorage.removeItem(key);
+      }
       if (!localStorage.getItem("md820-seen-howto")) {
         setShowHowTo(true);
         localStorage.setItem("md820-seen-howto", "1");
@@ -471,14 +478,11 @@ export default function Home() {
       setResultRoster((data.roster as SimRosterLine[]) ?? []);
       if (gameType === "daily") {
         const rec = { wins: r.wins, losses: r.losses, perfect: r.perfect };
-        // Lock the DATE that was played (today, or an archived day on replay).
+        // The DATE that was played (today, or an archived day on replay). The
+        // completion is recorded against the account below — daily_results is the
+        // source of truth — so we no longer cache it in localStorage.
         const playedDate = dailyDate || today;
-        try {
-          localStorage.setItem(`md820-daily-${playedDate}`, JSON.stringify(rec));
-        } catch {
-          /* localStorage unavailable */
-        }
-        // Only the home banner tracks TODAY's result.
+        // Only the home banner tracks TODAY's result (this session only).
         if (playedDate === today) setDailyResult(rec);
         // Record the completion against the player's account (cross-device lock +
         // the head-to-head share compare). The server RECOMPUTES the result from
