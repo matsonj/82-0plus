@@ -27,7 +27,7 @@ import {
   setPendingDaily,
   getOwnedPendingDaily,
   clearPendingDaily,
-  listPendingDailyDates,
+  listOwnedPendingDailies,
 } from "@/lib/dailyPending";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
@@ -242,12 +242,12 @@ export default function Home() {
         picks: pending.picks,
       });
       if (saved.ok) {
-        clearPendingDaily(date);
+        clearPendingDaily(date, u);
         if (saved.share) setDailyShareToken(saved.share);
         return "saved";
       }
       if (saved.rejected) {
-        clearPendingDaily(date);
+        clearPendingDaily(date, u);
         return "rejected";
       }
       return "pending";
@@ -284,7 +284,7 @@ export default function Home() {
         if (result) {
           // Already completed this date → show the result/compare, don't re-draft.
           // The server owns the gate now, so drop any stale same-device lock.
-          clearPendingDaily(date);
+          clearPendingDaily(date, u);
           setDailyChecking(false);
           window.location.assign(`/d/${date}`);
           return;
@@ -337,10 +337,13 @@ export default function Home() {
     }
   }, [playDaily]);
 
-  // Self-heal: on load, retry any completion whose save never reached the server
-  // (e.g. the tab closed mid-save) so a pending lock can never strand a result.
+  // Self-heal: on load, retry any of the signed-in account's completions whose
+  // save never reached the server (e.g. the tab closed mid-save) so a pending lock
+  // can never strand a result. Other accounts' locks are left for their owners.
   useEffect(() => {
-    for (const date of listPendingDailyDates()) void flushPendingDaily(date);
+    const u = getSavedUser();
+    if (!u) return;
+    for (const p of listOwnedPendingDailies(u)) void flushPendingDaily(p.date);
   }, [flushPendingDaily]);
 
   const backToMenu = () => {
@@ -606,7 +609,8 @@ export default function Home() {
           // actual POST (with retries) and clears the lock once the server confirms
           // the record (then daily_results owns the gate) or rejects the picks; on a
           // hard failure the lock stays so the day is fail-closed and retried later.
-          setPendingDaily(playedDate, {
+          setPendingDaily({
+            date: playedDate,
             ...rec,
             picks,
             owner: { name: u.username, pin: u.pin },

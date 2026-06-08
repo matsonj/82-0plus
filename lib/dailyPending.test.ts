@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { pendingOwnedBy, type PendingDaily } from "./dailyPending";
+import { pendingOwnedBy, accountTag, type PendingDaily } from "./dailyPending";
 
 const lock = (name: string, pin: string): PendingDaily => ({
+  date: "2026-06-07",
   wins: 70,
   losses: 12,
   perfect: false,
@@ -32,5 +33,28 @@ describe("pendingOwnedBy", () => {
     expect(
       pendingOwnedBy(lock("PHIL JACKSON", "1234"), { username: "PHIL JACKSON", pin: "9999" }),
     ).toBe(false);
+  });
+});
+
+describe("accountTag (per-account lock namespace)", () => {
+  it("is stable for the same account", () => {
+    expect(accountTag("PHIL JACKSON", "1234")).toBe(accountTag("PHIL JACKSON", "1234"));
+  });
+
+  it("is case- and spacing-insensitive on the name (normalizeName)", () => {
+    expect(accountTag("phil  jackson", "1234")).toBe(accountTag("PHIL JACKSON", "1234"));
+  });
+
+  it("differs for a different name — so B can't clobber A's lock for the same day", () => {
+    expect(accountTag("STEVE KERR", "1234")).not.toBe(accountTag("PHIL JACKSON", "1234"));
+  });
+
+  it("differs for the same name with a different PIN", () => {
+    expect(accountTag("PHIL JACKSON", "1234")).not.toBe(accountTag("PHIL JACKSON", "9999"));
+  });
+
+  it("does not collide across a name/pin boundary shift", () => {
+    // "AB" + "1" vs "A" + "B1" must not map to the same tag.
+    expect(accountTag("AB", "1")).not.toBe(accountTag("A", "B1"));
   });
 });
