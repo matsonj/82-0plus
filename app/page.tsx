@@ -21,7 +21,7 @@ import { TournamentEntry } from "@/components/TournamentEntry";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
 import { encodeShare } from "@/lib/shareCode";
-import { SITE_URL } from "@/lib/site";
+import { SITE_URL, MOTHERDUCK_URL } from "@/lib/site";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
@@ -927,7 +927,16 @@ export default function Home() {
 
       <footer className="relative z-10 mt-auto pt-12 text-center">
         <p className="font-display text-xs text-[var(--md-ink-muted)]">
-          Powered by MotherDuck · <code>nba_box_scores_v2</code>
+          Powered by{" "}
+          <a
+            href={MOTHERDUCK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-[var(--md-ink)]"
+          >
+            MotherDuck
+          </a>{" "}
+          · <code>nba_box_scores_v2</code>
         </p>
         <p className="mt-2 text-[11px] text-[var(--md-ink-muted)]">
           An independent project, not affiliated with or endorsed by the NBA.

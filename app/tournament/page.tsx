@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { TournamentLookup } from "@/components/TournamentLookup";
+import { MOTHERDUCK_URL } from "@/lib/site";
 
 // Lookup-only landing. You ENTER the tournament from a finished Classic/Ranked
 // game (the "Enter Tournament" button on the results), which carries your drafted
@@ -55,7 +56,16 @@ export default function TournamentPage() {
 
       <footer className="relative z-10 mt-auto pt-12 text-center">
         <p className="font-display text-xs text-[var(--md-ink-muted)]">
-          Powered by MotherDuck · <code>nba_box_scores_v2</code>
+          Powered by{" "}
+          <a
+            href={MOTHERDUCK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-[var(--md-ink)]"
+          >
+            MotherDuck
+          </a>{" "}
+          · <code>nba_box_scores_v2</code>
         </p>
         <p className="mt-2 text-[11px] text-[var(--md-ink-muted)]">
           An independent project, not affiliated with or endorsed by the NBA.

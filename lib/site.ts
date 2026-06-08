@@ -2,3 +2,6 @@
 // to the production domain (and localhost in dev is fine for relative links).
 export const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://82-0plus.vercel.app";
+
+// MotherDuck homepage, UTM-tagged so referrals from this app are attributable.
+export const MOTHERDUCK_URL = "https://motherduck.com/?utm_source=82-0plus";
