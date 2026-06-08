@@ -32,10 +32,10 @@ export async function POST(req: NextRequest) {
     // Identity is the (name, PIN) pair — find the account whose PIN verifies
     // among any accounts sharing this name. timingSafeEqual throws on mismatched
     // lengths, so length-guard first. Same generic 404 on any miss (no enum).
-    // Public, no-PIN-gated table access goes through the read pool (no DDL).
-    const roOptions = { sessionHint: sessionHint.value };
+    // Public, no-PIN-gated table access goes through the dedicated read-only
+    // tournament pool (no DDL, low-privilege token — see lib/tournamentReadDb).
     const matchingUserIds: string[] = [];
-    for (const u of await getUsersByNameRO(nameNorm, roOptions)) {
+    for (const u of await getUsersByNameRO(nameNorm)) {
       const candidate = scryptSync(pin, u.pin_salt, 32);
       const stored = Buffer.from(u.pin_hash, "hex");
       if (candidate.length === stored.length && timingSafeEqual(candidate, stored)) {
@@ -47,9 +47,7 @@ export async function POST(req: NextRequest) {
     }
 
     const teams = (
-      await Promise.all(
-        matchingUserIds.map((uid) => getUserTeamsRO(uid, roOptions)),
-      )
+      await Promise.all(matchingUserIds.map((uid) => getUserTeamsRO(uid)))
     )
       .flat()
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));

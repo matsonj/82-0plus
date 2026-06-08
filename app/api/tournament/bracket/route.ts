@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const row = await getBracketByIdRO(id, { sessionHint: sessionHint.value });
+    const row = await getBracketByIdRO(id);
     if (!row) {
       return jsonWithSessionHint(
         sessionHint,

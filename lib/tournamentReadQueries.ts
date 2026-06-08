@@ -1,5 +1,5 @@
 import "server-only";
-import { query, type QueryOptions } from "./motherduck";
+import { queryTournamentRO } from "./tournamentReadDb";
 import type {
   BracketPlayer,
   TournamentMode,
@@ -8,11 +8,12 @@ import type {
 import type { UserAuthRow } from "./tournamentQueries";
 
 // READ-ONLY tournament queries for the PUBLIC, no-PIN paths
-// (/api/tournament/{bracket,team,lookup}). These run on the read-scaling token
-// (lib/motherduck → query), NOT the high-privilege RW pool, and they never run
-// schema DDL. The tournament tables are exposed to the read token via a MotherDuck
-// share attached as `nba_tournament` (override with TOURNAMENT_RO_DB if attached
-// under a different alias). An auto-updating share lags writes by ~1 min, which is
+// (/api/tournament/{bracket,team,lookup}). These run on the DEDICATED low-privilege
+// tournament RO token/pool (lib/tournamentReadDb) — NOT the high-privilege RW pool
+// and NOT the app-wide read token that serves anonymous NBA data — and they never
+// run schema DDL. The tournament tables are exposed to that RO token via a
+// MotherDuck share attached as `nba_tournament` (override with TOURNAMENT_RO_DB if
+// attached under a different alias). An auto-updating share lags writes by ~1 min,
 // acceptable for share-link / returning-player reads.
 //
 // These are deliberate read-pool TWINS of the queryRW versions in
@@ -27,15 +28,13 @@ function parseJson<T>(value: unknown): T {
 /** Accounts sharing a normalized name (for PIN verification in lookup). */
 export async function getUsersByNameRO(
   nameNorm: string,
-  options: QueryOptions = {},
 ): Promise<UserAuthRow[]> {
-  return query<UserAuthRow>(
+  return queryTournamentRO<UserAuthRow>(
     `SELECT user_id, pin_hash, pin_salt
        FROM ${RO_DB}.users
       WHERE name_norm = $1
       ORDER BY created_at ASC`,
     [nameNorm],
-    options,
   );
 }
 
@@ -57,16 +56,14 @@ interface TeamSummaryRow {
 /** All memorialized teams for a user, newest first (lookup detail list). */
 export async function getUserTeamsRO(
   userId: string,
-  options: QueryOptions = {},
 ): Promise<TournamentTeamSummary[]> {
-  const rows = await query<TeamSummaryRow>(
+  const rows = await queryTournamentRO<TeamSummaryRow>(
     `SELECT team_id, team_name, mode, record_w, record_l, realized_margin, reached_round,
             champion_name, seed_net, daily_date, created_at, roster_display
        FROM ${RO_DB}.teams
       WHERE user_id = $1
       ORDER BY created_at DESC`,
     [userId],
-    options,
   );
   return rows.map((r) => {
     const rd =
@@ -97,9 +94,8 @@ export async function getUserTeamsRO(
 /** A team's stored bracket + box (public team viewer). */
 export async function getTeamBracketRO(
   teamId: string,
-  options: QueryOptions = {},
 ): Promise<{ bracketJson: unknown; teamBox: unknown; realizedMargin: number } | null> {
-  const rows = await query<{
+  const rows = await queryTournamentRO<{
     bracket_json: unknown;
     team_box_json: unknown;
     realized_margin: number;
@@ -109,7 +105,6 @@ export async function getTeamBracketRO(
       WHERE team_id = $1
       LIMIT 1`,
     [teamId],
-    options,
   );
   if (!rows[0]) return null;
   return {
@@ -122,15 +117,13 @@ export async function getTeamBracketRO(
 /** Just the bracket + champion for the lightweight public bracket viewer. */
 export async function getBracketByIdRO(
   teamId: string,
-  options: QueryOptions = {},
 ): Promise<{ bracketJson: unknown; championName: string } | null> {
-  const rows = await query<{ bracket_json: unknown; champion_name: string }>(
+  const rows = await queryTournamentRO<{ bracket_json: unknown; champion_name: string }>(
     `SELECT bracket_json, champion_name
        FROM ${RO_DB}.teams
       WHERE team_id = $1
       LIMIT 1`,
     [teamId],
-    options,
   );
   if (!rows[0]) return null;
   return {

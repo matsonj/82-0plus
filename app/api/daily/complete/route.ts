@@ -7,6 +7,7 @@ import { simulateRoster } from "@/lib/scoring";
 import { parseLineupPicks, lineupEligible } from "@/lib/lineup";
 import { authenticate, recordDailyResult } from "@/lib/dailyResults";
 import { signDailyShare } from "@/lib/dailyShareToken";
+import { assertTournamentSecret } from "@/lib/secret";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +25,11 @@ export async function POST(req: NextRequest) {
     if (!isPlayableDailyDate(date)) {
       return jsonWithSessionHint(sessionHint, { error: "that daily isn't playable" }, { status: 400 });
     }
+
+    // Fail closed BEFORE any write: if signing is misconfigured we must not persist
+    // the canonical one-per-day row only to 500 without a share token. authenticate()
+    // can create an account (a write), so assert ahead of it.
+    assertTournamentSecret();
 
     const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
     if (!auth.ok) {

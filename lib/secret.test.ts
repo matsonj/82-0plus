@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getTournamentSecret } from "./secret";
+import { assertTournamentSecret, getTournamentSecret } from "./secret";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -27,5 +27,18 @@ describe("getTournamentSecret — no DB-token fallback", () => {
     vi.stubEnv("MOTHERDUCK_RW_TOKEN", "rw-token-value");
     vi.stubEnv("MOTHERDUCK_TOKEN", "read-token-value");
     expect(() => getTournamentSecret()).toThrow();
+  });
+});
+
+describe("assertTournamentSecret — fail before a write when misconfigured", () => {
+  it("throws in production when the secret is unset (so callers fail before mutating)", () => {
+    vi.stubEnv("TOURNAMENT_SECRET", "");
+    vi.stubEnv("NODE_ENV", "production");
+    expect(() => assertTournamentSecret()).toThrow(/required in production/i);
+  });
+
+  it("is a no-op when configured", () => {
+    vi.stubEnv("TOURNAMENT_SECRET", "configured");
+    expect(() => assertTournamentSecret()).not.toThrow();
   });
 });

@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const row = await getTeamBracketRO(id, { sessionHint: sessionHint.value });
+    const row = await getTeamBracketRO(id);
     if (!row) {
       return jsonWithSessionHint(
         sessionHint,
