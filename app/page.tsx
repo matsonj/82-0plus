@@ -391,9 +391,23 @@ export default function Home() {
   // reaches an already-open desktop tab — the archive/today card keep showing
   // "Play" until you click in and the server reveals it. Re-pull whenever the tab
   // becomes visible again, which covers tab switches and iOS bfcache restores.
+  // Also re-derive the Pacific date on the same beat: a tab left open across
+  // midnight would otherwise keep `today` (and the date-less in-memory result)
+  // pointing at yesterday, so the CTA/archive could show yesterday's completion
+  // while playDaily() starts today's board. On rollover we drop the stale result
+  // and re-key today; the refreshed `dailyDone` then drives the new day's state.
+  const todayRef = useRef("");
+  useEffect(() => {
+    todayRef.current = today;
+  }, [today]);
   useEffect(() => {
     const sync = () => {
       if (document.visibilityState !== "visible") return;
+      const d = pacificDate();
+      if (todayRef.current && todayRef.current !== d) {
+        setToday(d);
+        setDailyResult(null); // yesterday's in-memory result no longer applies
+      }
       if (!getSavedUser()) return;
       void refreshDailyResults();
     };
