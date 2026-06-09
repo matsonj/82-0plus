@@ -45,4 +45,27 @@ describe("dailyShareToken — date-bound share receipts", () => {
     expect(verifyDailyShare("")).toBeNull();
     expect(verifyDailyShare("no-dot")).toBeNull();
   });
+
+  it("round-trips an optional tournament run", () => {
+    const withTourn: DailyShare = {
+      ...SHARE,
+      t: { w: 12, l: 3, n: -2.5, r: 3 },
+    };
+    const v = verifyDailyShare(signDailyShare(withTourn), "2026-06-01");
+    expect(v?.t).toBeDefined();
+    expect(v?.t?.w).toBe(12);
+    expect(v?.t?.l).toBe(3);
+    expect(v?.t?.n).toBeCloseTo(-2.5, 5);
+    expect(v?.t?.r).toBe(3);
+  });
+
+  it("omits the tournament run when not provided (no `t`)", () => {
+    const v = verifyDailyShare(signDailyShare(SHARE));
+    expect(v?.t).toBeUndefined();
+  });
+
+  it("still verifies a tournament-bearing token bound to the wrong date as null", () => {
+    const tok = signDailyShare({ ...SHARE, t: { w: 1, l: 0, n: 1.1, r: 0 } });
+    expect(verifyDailyShare(tok, "2026-06-09")).toBeNull();
+  });
 });

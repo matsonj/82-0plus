@@ -25,7 +25,17 @@ function prettyDate(date: string): string {
 function sharerFrom(s: string | undefined, routeDate: string): Sharer | null {
   const v = s ? verifyDailyShare(s, routeDate) : null;
   if (!v) return null;
-  return { name: v.u || "A player", wins: v.w, losses: v.l, margin: v.n, perfect: v.p };
+  return {
+    name: v.u || "A player",
+    wins: v.w,
+    losses: v.l,
+    margin: v.n,
+    perfect: v.p,
+    // The sharer's tournament run, when the signed token carries one.
+    tournament: v.t
+      ? { recordW: v.t.w, recordL: v.t.l, realizedMargin: v.t.n, reachedRound: v.t.r }
+      : null,
+  };
 }
 
 export async function generateMetadata({

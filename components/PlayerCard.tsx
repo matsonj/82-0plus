@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PlayerSeasonRow } from "@/lib/queries";
 import type { Role } from "@/lib/positions";
@@ -223,9 +223,21 @@ function FullCard({
                 <tbody>
                   {seasons.map((s) => {
                     const away = s.team !== player.team;
+                    // Off-team seasons get a light grey wash + muted text so the
+                    // drafted franchise's "relevant" seasons read at a glance. The
+                    // sticky YR header must share the row's bg to stay opaque on scroll.
+                    const rowBg = away ? "var(--md-paper-2)" : undefined;
                     return (
-                      <tr key={s.season} className={`border-t border-[var(--md-paper-3)] ${away ? "text-[var(--md-ink-muted)]" : ""}`}>
-                        <th scope="row" className="sticky left-0 z-10 px-2 py-1 text-left font-bold" style={{ background: "var(--md-white)" }}>
+                      <tr
+                        key={s.season}
+                        className={`border-t border-[var(--md-paper-3)] ${away ? "text-[var(--md-ink-muted)]" : ""}`}
+                        style={rowBg ? { background: rowBg } : undefined}
+                      >
+                        <th
+                          scope="row"
+                          className="sticky left-0 z-10 px-2 py-1 text-left font-bold"
+                          style={{ background: rowBg ?? "var(--md-white)" }}
+                        >
                           &rsquo;{String(s.season).slice(2)}
                         </th>
                         <td className="px-2 py-1 text-right text-[var(--md-ink-muted)]">{s.gp}</td>
@@ -284,7 +296,6 @@ export function PlayerCardCarousel({
   canDraft?: (index: number) => boolean;
 }) {
   const [cur, setCur] = useState(index);
-  const touchX = useRef<number | null>(null);
 
   const clamp = useCallback(
     (i: number) => Math.max(0, Math.min(players.length - 1, i)),
@@ -323,26 +334,24 @@ export function PlayerCardCarousel({
   // (e.g. transformed draft cards) and reliably sits above page chrome/footer.
   if (typeof document === "undefined") return null;
 
+  // Navigation is tap-only (arrows + tapping a neighbour card). We deliberately
+  // do NOT bind horizontal swipe: on mobile that gesture belongs to the per-season
+  // stats table's own left/right scroll, and a card-level swipe would hijack it.
   return createPortal(
     <div
       className="fixed inset-0 z-50 overflow-hidden"
       style={{ background: "rgba(56,56,56,0.6)" }}
       onClick={onClose}
-      onTouchStart={(e) => (touchX.current = e.touches[0]?.clientX ?? null)}
-      onTouchEnd={(e) => {
-        if (touchX.current === null) return;
-        const dx = (e.changedTouches[0]?.clientX ?? touchX.current) - touchX.current;
-        if (dx > 45) move(-1);
-        else if (dx < -45) move(1);
-        touchX.current = null;
-      }}
     >
       {windowed.map(({ player, idx, slot }) => {
         const isCenter = slot === 0;
         const off = Math.abs(slot);
         const style: React.CSSProperties = {
           transform: `translate(-50%, -50%) translateX(${slot * 56}%) scale(${isCenter ? 1 : 0.82})`,
-          opacity: isCenter ? 1 : off === 1 ? 0.45 : 0,
+          // Neighbours are solid (not see-through) but blurred, so they read as
+          // real cards waiting in the deck rather than transparent ghosts. Cards
+          // beyond the ±1 window stay hidden (0) as they slide off-stage.
+          opacity: isCenter ? 1 : off === 1 ? 1 : 0,
           filter: isCenter ? "none" : "blur(3px)",
           zIndex: 30 - off * 10,
           pointerEvents: off <= 1 ? "auto" : "none",

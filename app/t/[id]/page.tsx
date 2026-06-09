@@ -17,6 +17,7 @@ export default function PublicBracketPage({
   const { id } = use(params);
   const [status, setStatus] = useState<Status>("loading");
   const [bracket, setBracket] = useState<BracketResult | null>(null);
+  const [daily, setDaily] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -29,6 +30,7 @@ export default function PublicBracketPage({
       .then((d) => {
         if (active) {
           setBracket((d.bracket as BracketResult) ?? null);
+          setDaily(!!d.daily);
           setStatus("ok");
         }
       })
@@ -86,7 +88,7 @@ export default function PublicBracketPage({
                 Champion
               </div>
             </div>
-            <BracketView bracket={bracket} />
+            <BracketView bracket={bracket} daily={daily} />
           </div>
         )}
       </section>

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { authenticate, getDailyResult } from "@/lib/dailyResults";
+import { getUserTeams } from "@/lib/tournamentQueries";
 import { signDailyShare } from "@/lib/dailyShareToken";
 import { assertTournamentSecret } from "@/lib/secret";
 
@@ -30,8 +31,18 @@ export async function POST(req: NextRequest) {
     if (!result) {
       return jsonWithSessionHint(sessionHint, { error: "no result for that date" }, { status: 404 });
     }
+    // If the sharer ALSO entered this daily into the tournament, bake their bracket
+    // run into the token so the share link is a true head-to-head (both the
+    // reg-season record and the tournament run). Newest matching team wins. The
+    // numbers come from the stored row — never the client — so they can't be forged.
+    const tourn = (await getUserTeams(auth.userId)).find(
+      (t) => t.mode === "daily" && t.dailyDate === date,
+    );
     const share = signDailyShare({
       d: date, u: auth.name, w: result.wins, l: result.losses, n: result.margin, p: result.perfect,
+      t: tourn
+        ? { w: tourn.recordW, l: tourn.recordL, n: tourn.realizedMargin, r: tourn.reachedRound }
+        : undefined,
     });
     return jsonWithSessionHint(sessionHint, { share });
   } catch (err) {
