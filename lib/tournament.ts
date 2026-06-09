@@ -374,6 +374,32 @@ export function recoveryCarry(
   return endFatigue * (1 - recovery);
 }
 
+/**
+ * Recovery carry for a PLAY-IN survivor entering round 1 (size 20 only).
+ *
+ * The play-in is a SINGLE game (best-of-1) the night before the bracket, so by
+ * product rule the survivor gets NO recovery from it — it must carry play-in
+ * fatigue straight into round 1. The normal `recoveryCarry` table can't express
+ * this: it keys off series length, clamps 1→4 (a "sweep"), and a sweep recovers
+ * 100% → carry 0. So we model the play-in carry EXPLICITLY here instead of
+ * abusing the best-of-7 SERIES_RECOVERY_PCT table.
+ *
+ * The carry is the fatigue cost of HAVING PLAYED the play-in game, with 0%
+ * recovery. `fatigue()` measures fatigue going INTO game N (game 1 → 0), so the
+ * cost of completing one game is `fatigue(team, 2)` — one game's accrued slope:
+ * FATIGUE_PER_GAME × ageFactor × SIXTH_MAN mult. No recovery is applied (the
+ * play-in is "yesterday"), so the full amount carries. Deterministic; older
+ * teams carry more via ageFactor. Bye teams / normal R1 entrants never call this.
+ */
+export function recoveryCarryFromPlayIn(
+  team: TournamentTeam,
+  cfg: TournamentConfig = TOURNAMENT_CONFIG,
+): number {
+  // One game's worth of fatigue (fatigue going into game 2), carried in full —
+  // i.e. effectively ~0% recovery from the play-in game.
+  return fatigue(team, 2, cfg);
+}
+
 // ---------------------------------------------------------------------------
 // Bracket construction + series play.
 // ---------------------------------------------------------------------------
@@ -580,10 +606,12 @@ const VALID_SIZES: ReadonlySet<number> = new Set([4, 8, 12, 16, 20]);
 /**
  * Top-level entry: `size` teams (default 16) → a fully resolved BracketResult.
  *
- * 1. Region-affinity split: score each team by its players' real conferences
- *    (West +1 / East −1, captain doubled), top half → West / bottom half → East
- *    (ties to seedNet). Within each conference sort by seedNet desc → seeds 1..N
- *    (N = size/2). The 16-team partition is IDENTICAL to before.
+ * 1. STRENGTH-FIRST seeding: sort ALL teams by seedNet desc (id tie-break), then
+ *    assign conferences by region affinity (West +1 / East −1, captain doubled).
+ *    Walking strongest-first, each team goes to its affinity-preferred conference
+ *    while that side has open slots (size/2), else the other. Affinity decides
+ *    only WHICH conference; it can never seed a weaker team above a stronger one.
+ *    Seeds within each conference follow seedNet desc → seeds 1..N (N = size/2).
  * 2. Fixed tree per size (NO reseed). Every main-bracket round is best-of-7:
  *      4  → [ConfFinals: 2, Final: 1]
  *      8  → [Semis: 4, ConfFinals: 2, Final: 1]
@@ -612,21 +640,36 @@ export function simulateBracket(
   }
   const half = size / 2; // conference size N
 
-  // ---- 1. Region-affinity split into conferences, then seed within each. ----
-  // Sort by region score (West-leaning first); ties broken by seedNet (higher →
-  // West), so the West ends up slightly stronger. Top half → West, bottom → East.
-  // (Identical to the original for size 16; `half` just generalizes the slice.)
-  const byRegion = [...teams].sort(
-    (a, b) =>
-      regionScore(b) - regionScore(a) ||
-      b.seedNet - a.seedNet ||
-      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-  );
-  const westRaw = byRegion.slice(0, half);
-  const eastRaw = byRegion.slice(half, size);
-
   const byStrength = (a: TournamentTeam, b: TournamentTeam) =>
     b.seedNet - a.seedNet || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+  // ---- 1. STRENGTH-FIRST seeding, then conference assignment by affinity. ----
+  // Strength (seedNet) is the PRIMARY key: we sort ALL teams high-to-low by
+  // seedNet (id tie-break) FIRST. Affinity (regionScore + captain influence)
+  // ONLY decides WHICH conference a team lands in — it can never reorder a weaker
+  // team ahead of a stronger one for seeding.
+  //
+  // Assignment walks teams strongest-first and places each into its affinity-
+  // preferred conference (West if regionScore > 0, East if < 0; a 0/neutral lean
+  // prefers West so the West stays slightly stronger, matching the old intent)
+  // while that conference still has open slots; otherwise it spills into the
+  // other. Because we walk in descending-strength order and each conference fills
+  // in that same order, seeds WITHIN a conference always follow seedNet order —
+  // a stronger team is never seeded below a weaker one in the same conference.
+  const byStrengthAll = [...teams].sort(byStrength);
+  const westRaw: TournamentTeam[] = [];
+  const eastRaw: TournamentTeam[] = [];
+  for (const t of byStrengthAll) {
+    // Affinity lean: >0 West, <0 East, 0 → West (neutral nod to the West).
+    const prefersWest = regionScore(t) >= 0;
+    if (prefersWest) {
+      if (westRaw.length < half) westRaw.push(t);
+      else eastRaw.push(t);
+    } else {
+      if (eastRaw.length < half) eastRaw.push(t);
+      else westRaw.push(t);
+    }
+  }
 
   const seedConf = (raw: TournamentTeam[], conference: Conference) => {
     const sorted = [...raw].sort(byStrength);
@@ -685,6 +728,11 @@ export function simulateBracket(
   // Some teams' carry must reflect a best-of-1 (play-in), so record each team's
   // previous series length directly: gamesPlayed (4..7) or 1 (play-in), 0 if none.
   const lastGamesPlayed = new Map<string, number>();
+  // Play-in survivors (size 20 only) carry play-in fatigue into round 1 via the
+  // EXPLICIT `recoveryCarryFromPlayIn` path — NOT the best-of-7 recovery table,
+  // which would otherwise treat their 1-game play-in as a sweep and grant a full
+  // (carry-0) reset. Membership here routes a team to that explicit path once.
+  const playInSurvivors = new Set<string>();
 
   // A "slot" carries the surviving team plus whatever its bracket entry was.
   type Slot = { team: TournamentTeam };
@@ -706,9 +754,15 @@ export function simulateBracket(
       // single play-in game (recorded directly in lastGamesPlayed). A team coming
       // off a BYE has no prior series → 0 → no carry.
       const gamesPlayedPrev = (id: string) => lastGamesPlayed.get(id) ?? 0;
+      // Play-in survivors enter R1 via the explicit play-in carry (no recovery);
+      // everyone else uses the standard series-length recovery table.
+      const carryFor = (t: TournamentTeam) =>
+        playInSurvivors.has(t.id)
+          ? recoveryCarryFromPlayIn(t, cfg)
+          : recoveryCarry(t, gamesPlayedPrev(t.id), cfg);
       const carry: Record<string, number> = {
-        [hi.id]: recoveryCarry(hi, gamesPlayedPrev(hi.id), cfg),
-        [lo.id]: recoveryCarry(lo, gamesPlayedPrev(lo.id), cfg),
+        [hi.id]: carryFor(hi),
+        [lo.id]: carryFor(lo),
       };
       const statics = computeStatics(hi, lo, carry);
       const { result, gamesOverMin } = playSeries(
@@ -751,9 +805,11 @@ export function simulateBracket(
       const carry: Record<string, number> = { [hi.id]: 0, [lo.id]: 0 };
       const statics = computeStatics(hi, lo, carry);
       const { result } = playSeries(hi, lo, 1, statics, seedKey, 0, confOffset + idx, cfg);
-      // Record the play-in as each entrant's previous series (length 1) so its
-      // winner carries play-in fatigue into round 1 with the standard rule —
-      // i.e. NO extra recovery is granted before the bracket.
+      // Record the play-in as each entrant's previous series (length 1). The
+      // surviving 7/8 seeds are marked as play-in survivors below so round 1 uses
+      // the EXPLICIT `recoveryCarryFromPlayIn` path (no recovery from the play-in
+      // game), NOT the best-of-7 recovery table — which, keyed on series length,
+      // would clamp this 1-game series to a 4-game sweep and grant a 100% reset.
       lastGamesPlayed.set(hi.id, 1);
       lastGamesPlayed.set(lo.id, 1);
       lastGamesOver.set(hi.id, 1 - CLINCH[7]);
@@ -792,6 +848,10 @@ export function simulateBracket(
       const bt = bracketById.get(id);
       if (bt) bt.lostPlayIn = true;
     }
+    // The two survivors (the resolved 7 & 8 seeds) carry play-in fatigue into
+    // round 1 with NO recovery — route them through `recoveryCarryFromPlayIn`.
+    playInSurvivors.add(sevenWinId);
+    playInSurvivors.add(eightWinId);
     // Resolved 7 & 8 seeds replace slots 6 & 7; seeds 9/10 are gone.
     const out = seeded.slice(0, 6);
     out.push({ team: byId.get(sevenWinId)! });

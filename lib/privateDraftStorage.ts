@@ -20,20 +20,35 @@ const DB_NAME = "md820-private-draft";
 const STORE = "drafts";
 const DB_VERSION = 1;
 
-// One persisted local pick — identifiers + the lineup slot it occupies. Mirrors
-// SimPick but kept local (no receipts: private boards are server-validated by
-// (team, decade) set-match, not signed rolls).
+// One persisted local pick — identifiers + BOTH the board reveal it came from
+// and the lineup slot it now occupies. Mirrors SimPick but kept local (no
+// receipts: private boards are server-validated by (team, decade) set-match, not
+// signed rolls).
+//
+// Two distinct indices, because the private draft separates them (matching the
+// Daily/free-play flow):
+//   • `reveal` — which board reveal slot (0..4) this player was drafted from. The
+//     board slots are a REVEAL ORDER of (team, decade) rolls, NOT forced lineup
+//     positions. `team`/`decade` here always equal `board.slots[reveal]`.
+//   • `slot`   — the LINEUP position (0..4 = [G,FLEX,W,FLEX,B]) the user placed
+//     him at. This is what the server validates with canPlay(KINDS[slot]) and
+//     what the submitted roster carries; it can differ from `reveal`.
 export interface DraftPick {
   entity_id: string;
   team: string;
   decade: number;
+  // The board reveal slot this pick came from (0..4). team/decade === board.slots[reveal].
+  reveal: number;
+  // The chosen lineup position (0..4 = [G,FLEX,W,FLEX,B]); validated by canPlay.
   slot: number;
 }
 
 // The draft progress blob for one entry. `step` is a coarse marker the resuming
 // component uses to land on the right screen.
 export interface PrivateDraftData {
-  // The five starters placed so far (0..5), in slot order [G,FLEX,W,FLEX,B].
+  // The picks made so far (0..5). Each carries its board `reveal` index and its
+  // chosen lineup `slot`, so a resume restores the exact lineup ARRANGEMENT, not
+  // just reveal order. Order within the array is not significant.
   picks: DraftPick[];
   // Chosen captain slot (0..4) or null if not yet picked.
   captainSlot: number | null;

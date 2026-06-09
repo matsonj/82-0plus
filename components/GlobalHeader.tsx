@@ -82,7 +82,7 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
   const pending = notif?.pending ?? [];
   const completed = notif?.completedUnviewed ?? [];
   const count = pending.length + completed.length;
-  const hasBadge = !!notif?.any;
+  const any = !!notif?.any;
 
   return (
     <header className="relative z-20 flex items-center justify-between py-4 sm:py-5">
@@ -118,21 +118,16 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
             style={{ cursor: "pointer" }}
           >
             <span aria-hidden>🔔</span>
-            {hasBadge && (
+            {any && (
               <span
-                className="absolute -right-2 -top-2 flex items-center justify-center border-2 border-[var(--md-ink)]"
+                aria-hidden
+                className="absolute -right-1 -top-1 border-2 border-[var(--md-ink)]"
                 style={{
                   background: "var(--md-coral)",
-                  color: "var(--md-white)",
-                  minWidth: 18,
-                  height: 18,
-                  fontSize: 10,
-                  lineHeight: 1,
-                  padding: "0 3px",
+                  width: 10,
+                  height: 10,
                 }}
-              >
-                {count > 0 ? count : ""}
-              </span>
+              />
             )}
           </button>
 

@@ -626,6 +626,60 @@ describe("simulateBracket: variable sizes", () => {
     }
   });
 
+  it("within a conference, a stronger team is NEVER seeded below a weaker one (strength-first)", () => {
+    // Strength (seedNet) is the primary seeding key; affinity only picks the
+    // conference. So in EVERY conference, walking seeds 1..N must give a
+    // monotonically non-increasing seedNet — even when affinity leans would, in
+    // the old region-primary sort, have floated a weaker team up.
+    for (const size of [4, 8, 12, 16, 20] as const) {
+      const r = simulateBracket(descField(size), `mono-${size}`, norms(), C, size);
+      for (const conf of ["East", "West"] as const) {
+        const seeded = r.teams
+          .filter((t) => t.conference === conf)
+          .sort((a, b) => a.seed - b.seed);
+        for (let i = 1; i < seeded.length; i++) {
+          expect(seeded[i - 1].seedNet).toBeGreaterThanOrEqual(seeded[i].seedNet);
+        }
+      }
+    }
+  });
+
+  it("affinity decides the conference but never reorders strength within it", () => {
+    // A WEAKER West-leaning team must NOT be seeded ahead of a STRONGER team that
+    // shares its conference. Build a 4-team field: a very strong East-leaning team
+    // and a weak West-leaning team that, under the old region-primary sort, would
+    // have been placed in the West ahead of stronger neutral teams. Verify that
+    // wherever two teams share a conference, the stronger one has the better seed.
+    const westRos = (cap: number) => ({
+      roster: [
+        { name: "a", team: "LAL", season: 1996, ...(cap === 0 ? { captain: true } : {}) },
+        { name: "b", team: "GSW", season: 1996, ...(cap === 1 ? { captain: true } : {}) },
+        { name: "c", team: "DEN", season: 1996 },
+        { name: "d", team: "PHX", season: 1996 },
+        { name: "e", team: "DAL", season: 1996 },
+      ],
+      sixthManInfo: { name: "s", team: "POR", season: 1996 },
+    });
+    const teams = [
+      team({ id: "Z0", seedNet: 100, ...westRos(0) }), // strong + West
+      team({ id: "Z1", seedNet: 1, ...westRos(0) }),   // WEAK + West
+      team({ id: "Z2", seedNet: 50, ...westRos(0) }),  // mid + West
+      team({ id: "Z3", seedNet: 40, ...westRos(0) }),  // mid + West
+    ];
+    const r = simulateBracket(teams, "affinity-order", norms(), C, 4);
+    const netById = new Map(teams.map((t) => [t.id, t.seedNet]));
+    for (const conf of ["East", "West"] as const) {
+      const seeded = r.teams
+        .filter((t) => t.conference === conf)
+        .sort((a, b) => a.seed - b.seed);
+      for (let i = 1; i < seeded.length; i++) {
+        expect(netById.get(seeded[i - 1].id)!).toBeGreaterThanOrEqual(
+          netById.get(seeded[i].id)!,
+        );
+      }
+    }
+  });
+
   it("each conference holds size/2 teams seeded 1..N", () => {
     for (const size of [4, 8, 12, 16, 20] as const) {
       const r = simulateBracket(descField(size), `seed-${size}`, norms(), C, size);
@@ -788,25 +842,26 @@ describe("simulateBracket: 20-team play-in", () => {
     }
   });
 
-  it("grants NO recovery between the play-in and round 1 (carry reflects the play-in game)", () => {
-    // A play-in winner that enters round 1 has a "previous series" of length 1
-    // (the play-in game). Per the recovery rule, a 1-game prior series clamps to a
-    // 4-game (sweep) recovery → carry 0, i.e. NOT a free full reset beyond what the
-    // rule gives. Crucially, the engine treats the play-in AS the previous series
-    // (it does not skip carry bookkeeping). Assert seeds 7/8 have a defined,
-    // rule-derived carry in round 1 rather than being silently reset.
+  it("grants NO recovery between the play-in and round 1 (survivors carry play-in fatigue)", () => {
+    // A play-in survivor enters round 1 having played the play-in game the night
+    // before, so by product rule it gets NO recovery — it must carry play-in
+    // fatigue straight into R1. This is modeled EXPLICITLY via
+    // recoveryCarryFromPlayIn (one game's accrued fatigue, carried in full), NOT
+    // by passing a "1-game series" through the best-of-7 recovery table — which
+    // would clamp to a 4-game sweep and grant a 100% reset → carry 0.
     const r1 = r.rounds[0];
     // Identify each conference's round-1 seed-7 and seed-8 (the play-in survivors).
     const survivors = r.teams.filter((t) => (t.seed === 7 || t.seed === 8));
+    expect(survivors.length).toBe(4); // 2 per conference
     for (const t of survivors) {
       const series = r1.find((s) => s.hiId === t.id || s.loId === t.id)!;
       const carry = series.games[0].breakdown![t.id].recoveryCarry;
-      // A single game accrues 0 fatigue (game 1), so the rolled-over carry is 0 —
-      // but the team WAS processed through the carry machinery (it has a recorded
-      // prior series of length 1). The observable contract: carry is exactly 0,
-      // identical to what a sweep would yield — never a negative or NaN, and the
-      // play-in fatigue (0 for a single game) is what flows in, with no bonus rest.
-      expect(carry).toBe(0);
+      // Nonzero residual fatigue: exactly one game's worth, with no recovery.
+      // descField teams are league-average age, so this is the one-game slope
+      // fatigue(_, 2) = FATIGUE_PER_GAME × ageFactor(1) × SIXTH_MAN mult = 0.3.
+      expect(carry).toBeGreaterThan(0);
+      expect(Number.isFinite(carry)).toBe(true);
+      expect(carry).toBeCloseTo(fatigue(team({ ageAtPeak: C.LEAGUE_AVG_EXP }), 2), 10);
     }
   });
 });

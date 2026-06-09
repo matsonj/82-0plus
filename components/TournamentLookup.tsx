@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type {
   TournamentLookupResponse,
   TournamentTeamSummary,
@@ -11,8 +12,10 @@ import type {
 } from "@/lib/types";
 import {
   validateName,
+  validateTournamentName,
   validatePin,
   NAME_MAX_LEN,
+  TOURNAMENT_NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
 import { TournamentResults } from "@/components/TournamentResults";
 import { TierBadge } from "@/components/TierBadge";
@@ -276,12 +279,22 @@ export function TournamentLookup({
   onBack?: () => void;
   initialTab?: Tab;
 }) {
+  const router = useRouter();
   const [view, setView] = useState<View>("form");
   const [tab, setTab] = useState<Tab>(initialTab ?? "daily");
   // Private-tab state.
   const [privateRows, setPrivateRows] = useState<MyPrivateRow[] | null>(null);
   const [privateLoading, setPrivateLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+
+  // "Join by tournament name + PIN" form state (the private landing). Distinct
+  // from the account login below it: this collects the TOURNAMENT's identity
+  // (joinName/joinPin) plus the player's ACCOUNT identity (the `name`/`pin`
+  // login state, prefilled from the saved session) needed to reserve a slot.
+  const [joinName, setJoinName] = useState("");
+  const [joinPin, setJoinPin] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
 
   // True until we've checked for a saved session on mount. While true (and a
   // saved user exists) we show a loader, not the login form, so a logged-in
@@ -401,6 +414,59 @@ export function TournamentLookup({
       setPrivateLoading(false);
     }
   }, []);
+
+  // Join a private tournament by its NAME + PIN. Two-step: (1) verify the
+  // tournament's name+PIN via /lookup to resolve a tournamentId (a generic 404
+  // covers both "no such name" and "wrong PIN"); (2) reserve a slot for the
+  // signed-in account via /register (idempotent — returns the existing entry if
+  // already in). On success, remember the account and navigate to the lobby at
+  // /p/<id>, where the draft flow continues.
+  const submitJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const tNameCheck = validateTournamentName(joinName);
+    const tPinOk = validatePin(joinPin);
+    const aNameCheck = validateName(name);
+    const aPinOk = validatePin(pin);
+    if (!tNameCheck.ok || !tPinOk || !aNameCheck.ok || !aPinOk || joining) {
+      return;
+    }
+    setJoining(true);
+    setJoinError(null);
+    try {
+      const lookupRes = await fetch("/api/private-tournament/lookup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: joinName, pin: joinPin }),
+      });
+      if (!lookupRes.ok) {
+        // Single generic message — never leak whether the name exists.
+        setJoinError("No tournament with that name + PIN.");
+        return;
+      }
+      const { tournamentId } = (await lookupRes.json()) as {
+        tournamentId: string;
+      };
+
+      const regRes = await fetch("/api/private-tournament/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, pin, tournamentId }),
+      });
+      if (!regRes.ok) {
+        const data = await regRes.json().catch(() => ({}));
+        setJoinError(data?.error ?? "Couldn't join that tournament.");
+        return;
+      }
+
+      // Reserved (or already in) — remember the account and head to the lobby.
+      saveUser({ username: name, pin });
+      router.push(`/p/${tournamentId}`);
+    } catch {
+      setJoinError("Couldn't join right now. Try again.");
+    } finally {
+      setJoining(false);
+    }
+  };
 
   // Load the private feed the first time the Private tab is opened on the list.
   useEffect(() => {
@@ -644,6 +710,112 @@ export function TournamentLookup({
                 + Create private tournament
               </button>
             </div>
+
+            {/* Join by tournament name + PIN. Verifies the tournament's own
+                name+PIN, then reserves a slot for the signed-in account and
+                drops the player into the lobby/draft. */}
+            <form
+              onSubmit={submitJoin}
+              className="md-card flex flex-col gap-3 p-5"
+            >
+              <div>
+                <div className="font-display text-sm font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  Join a private tournament
+                </div>
+                <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
+                  Enter the tournament&rsquo;s name + PIN to grab a slot and
+                  start building your team.
+                </p>
+              </div>
+
+              <label className="flex flex-col gap-1">
+                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  Tournament name
+                </span>
+                <input
+                  className="md-input md-input--name"
+                  value={joinName}
+                  maxLength={TOURNAMENT_NAME_MAX_LEN}
+                  autoCapitalize="characters"
+                  onChange={(e) =>
+                    setJoinName(
+                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
+                    )
+                  }
+                  placeholder="FRIDAY NIGHT HOOPS CUP"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  Tournament PIN
+                </span>
+                <input
+                  className="md-input"
+                  value={joinPin}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  onChange={(e) => setJoinPin(e.target.value.replace(/\D/g, ""))}
+                  placeholder="4–6 digits"
+                />
+              </label>
+
+              <div className="border-t-2 border-dashed border-[var(--md-ink)] pt-3">
+                <span className="font-display text-[11px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  Your account (to enter as)
+                </span>
+              </div>
+              <label className="flex flex-col gap-1">
+                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  Your name
+                </span>
+                <input
+                  className="md-input md-input--name"
+                  value={name}
+                  maxLength={NAME_MAX_LEN}
+                  autoCapitalize="characters"
+                  onChange={(e) =>
+                    setName(
+                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
+                    )
+                  }
+                  placeholder="PHILJACKSON"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  Your PIN
+                </span>
+                <input
+                  className="md-input"
+                  value={pin}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                  placeholder="4–6 digits"
+                />
+              </label>
+
+              {joinError && (
+                <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
+                  {joinError}
+                </div>
+              )}
+              <button
+                type="submit"
+                className="md-btn md-btn--teal"
+                disabled={
+                  !validateTournamentName(joinName).ok ||
+                  !validatePin(joinPin) ||
+                  !nameCheck.ok ||
+                  !pinOk ||
+                  joining
+                }
+              >
+                {joining ? "Joining…" : "Join & start building"}
+              </button>
+            </form>
 
             <form onSubmit={submit} className="md-card flex flex-col gap-3 p-5">
               <div className="font-display text-sm font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">

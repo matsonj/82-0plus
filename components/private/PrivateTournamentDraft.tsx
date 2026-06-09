@@ -32,11 +32,16 @@ const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 
 type Step = "draft" | "interstitial" | "finalize" | "done";
 
-// A placed starter: which board slot (team/decade) it came from + the player.
+// A placed starter. `team`/`decade` are the board REVEAL (team, decade) the player
+// was drafted from; `reveal` is that reveal's board-slot index (0..4). The lineup
+// POSITION a Placed occupies is its index in the `placed` array — NOT `reveal`.
+// This mirrors the Daily/free-play flow: board slots are a reveal order, and each
+// pick can land in any eligible lineup slot (and rearrange afterwards).
 interface Placed {
   player: PublicPlayer;
   team: string;
   decade: number;
+  reveal: number;
 }
 
 // Map a board's mode to PlayerList stat visibility (Ranked hides stats).
@@ -65,14 +70,20 @@ export function PrivateTournamentDraft({
   const gameMode = listMode(mode);
   const draftKey = makeDraftKey({ tournamentId, entryId, name, pin });
 
-  // The five starters, one per board slot (index 0..4 maps to board.slots[i]).
-  // Each starter is locked once chosen (rearranging swaps the *lineup* mapping,
-  // not the board slot they were drafted from).
+  // The five starters indexed by LINEUP slot (0..4 = [G,FLEX,W,FLEX,B]). Each
+  // entry remembers (via `reveal`) which board reveal it was drafted from, so the
+  // five always set-match the board while the user freely arranges positions.
   const [placed, setPlaced] = useState<(Placed | null)[]>([
     null, null, null, null, null,
   ]);
-  // The current board slot being drafted (0..4), advancing as picks land.
-  const [activeSlot, setActiveSlot] = useState(0);
+  // Which board reveal (team, decade) is currently being drafted (0..4). Reveals
+  // advance in board order; a reveal is "decided" once a Placed carries its index.
+  const [activeReveal, setActiveReveal] = useState(0);
+  // A just-picked player from the active reveal, awaiting placement into an
+  // eligible lineup slot (Daily-style). null when nothing is mid-placement.
+  const [pending, setPending] = useState<PublicPlayer | null>(null);
+  // The lineup slot currently selected for a rearrange move/swap, or null.
+  const [selected, setSelected] = useState<number | null>(null);
 
   const [step, setStep] = useState<Step>("draft");
   const [captainSlot, setCaptainSlot] = useState<number | null>(null);
@@ -132,17 +143,31 @@ export function PrivateTournamentDraft({
         rosters.get(`${team}|${decade}`)?.find((p) => p.entity_id === id) ??
         stubPlayer(id);
 
+      // Restore each pick into the LINEUP slot it occupied, tagging it with the
+      // board reveal it came from. `slot` is the lineup position; `reveal` is the
+      // board reveal index — both persisted. Tolerate a legacy save (pre-reveal
+      // field) by deriving `reveal` from the (team, decade) board match.
       const next: (Placed | null)[] = [null, null, null, null, null];
+      const decided = new Set<number>(); // board reveals already drafted
       for (const p of saved.picks) {
-        const slotIdx = board.slots.findIndex(
-          (b) => b.team === p.team && b.decade === p.decade,
-        );
-        if (slotIdx >= 0) {
-          next[slotIdx] = {
+        const reveal =
+          typeof p.reveal === "number"
+            ? p.reveal
+            : board.slots.findIndex(
+                (b) => b.team === p.team && b.decade === p.decade,
+              );
+        const lineupSlot =
+          typeof p.slot === "number" && p.slot >= 0 && p.slot < KINDS.length
+            ? p.slot
+            : reveal;
+        if (reveal >= 0 && lineupSlot >= 0 && next[lineupSlot] === null) {
+          next[lineupSlot] = {
             player: findPlayer(p.entity_id, p.team, p.decade),
             team: p.team,
             decade: p.decade,
+            reveal,
           };
+          decided.add(reveal);
         }
       }
       setPlaced(next);
@@ -157,10 +182,13 @@ export function PrivateTournamentDraft({
           ),
           team: saved.sixthPick.team,
           decade: saved.sixthPick.decade,
+          reveal: KINDS.length, // bench reveal — not one of the five starters
         });
       }
-      const firstEmpty = next.findIndex((p) => p === null);
-      setActiveSlot(firstEmpty >= 0 ? firstEmpty : KINDS.length - 1);
+      // Resume on the first board reveal not yet decided (or the last if all are).
+      let firstUndecided = board.slots.findIndex((_, i) => !decided.has(i));
+      if (firstUndecided < 0) firstUndecided = KINDS.length - 1;
+      setActiveReveal(firstUndecided);
       setStep(saved.step);
       hydrated.current = true;
     })();
@@ -173,9 +201,20 @@ export function PrivateTournamentDraft({
   // ---- Persist progress on every change (after the initial load). ----
   useEffect(() => {
     if (!hydrated.current) return;
+    // Persist each pick with BOTH its chosen lineup `slot` (its index in `placed`)
+    // and the board `reveal` it came from — so a resume restores the exact lineup
+    // arrangement, not just reveal order.
     const picks: DraftPick[] = placed
       .map((p, i): DraftPick | null =>
-        p ? { entity_id: p.player.entity_id, team: p.team, decade: p.decade, slot: i } : null,
+        p
+          ? {
+              entity_id: p.player.entity_id,
+              team: p.team,
+              decade: p.decade,
+              reveal: p.reveal,
+              slot: i,
+            }
+          : null,
       )
       .filter((p): p is DraftPick => p !== null);
     const data: PrivateDraftData = {
@@ -197,14 +236,16 @@ export function PrivateTournamentDraft({
     ...(sixth ? [sixth.player.entity_id] : []),
   ];
 
+  // A player from the active reveal is draftable if he's unused AND fits at least
+  // one currently OPEN lineup slot — exactly the Daily draftable() rule. The board
+  // reveal no longer forces a lineup position; placement (below) picks the slot.
   const draftable = useCallback(
     (p: PublicPlayer) => {
-      // Only allow players eligible for the active board slot's lineup position.
-      if (!canFill(p.positions, KINDS[activeSlot])) return false;
-      return !usedIds.includes(p.entity_id);
+      if (usedIds.includes(p.entity_id)) return false;
+      return KINDS.some((kind, i) => placed[i] === null && canFill(p.positions, kind));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeSlot, placed, sixth],
+    [placed, sixth],
   );
 
   const benchDraftable = useCallback(
@@ -213,19 +254,103 @@ export function PrivateTournamentDraft({
     [placed, sixth],
   );
 
-  const pickStarter = (player: PublicPlayer) => {
-    const slot = board.slots[activeSlot];
-    const next = placed.map((p, i) =>
-      i === activeSlot ? { player, team: slot.team, decade: slot.decade } : p,
+  // Place `player` (from the active reveal) into lineup slot `i`, tagging it with
+  // the board reveal it came from. Clears any mid-placement / selection state and
+  // advances to the next undecided board reveal.
+  const placeAt = (player: PublicPlayer, i: number) => {
+    const reveal = board.slots[activeReveal];
+    if (!reveal) return;
+    const next = placed.map((p, idx) =>
+      idx === i
+        ? { player, team: reveal.team, decade: reveal.decade, reveal: activeReveal }
+        : p,
     );
     setPlaced(next);
-    // Advance to the first still-empty slot (or stay on the last if all filled).
-    const firstEmpty = next.findIndex((p) => p === null);
-    setActiveSlot(firstEmpty >= 0 ? firstEmpty : KINDS.length - 1);
+    setPending(null);
+    setSelected(null);
+    // Advance to the first board reveal not yet decided (else stay on the last).
+    const decided = new Set(
+      next.filter(Boolean).map((p) => (p as Placed).reveal),
+    );
+    let nextReveal = board.slots.findIndex((_, idx) => !decided.has(idx));
+    if (nextReveal < 0) nextReveal = KINDS.length - 1;
+    setActiveReveal(nextReveal);
+  };
+
+  // Pick from the active reveal: auto-place if exactly one open lineup slot fits,
+  // else stash as `pending` so the user taps a glowing slot (Daily behavior).
+  const pickStarter = (player: PublicPlayer) => {
+    const eligible = KINDS.map((kind, i) => ({ kind, i }))
+      .filter(({ i }) => placed[i] === null)
+      .filter(({ kind }) => canFill(player.positions, kind))
+      .map(({ i }) => i);
+    if (eligible.length === 0) return;
+    if (eligible.length === 1) placeAt(player, eligible[0]);
+    else setPending(player);
+  };
+
+  // Rearrange-only-after-lock: tapping lineup slots moves/swaps ALREADY-PLACED
+  // players between legal positions (preserving each player's board `reveal`).
+  // There is no path to re-open a decided reveal's PlayerList, so a chosen player
+  // can't be swapped out for a different one — only repositioned. Mirrors Daily's
+  // onSlotClick exactly (place pending → select → move/swap).
+  const onSlotClick = (i: number) => {
+    if (pending) {
+      if (placed[i] === null && canFill(pending.positions, KINDS[i]))
+        placeAt(pending, i);
+      return;
+    }
+    if (selected === null) {
+      if (placed[i]) setSelected(i);
+      return;
+    }
+    if (i === selected) {
+      setSelected(null);
+      return;
+    }
+    const sel = placed[selected] as Placed;
+    const target = placed[i];
+    if (target === null) {
+      if (canFill(sel.player.positions, KINDS[i])) {
+        setPlaced((prev) =>
+          prev.map((s, idx) => (idx === i ? sel : idx === selected ? null : s)),
+        );
+        setSelected(null);
+      }
+    } else if (
+      canFill(sel.player.positions, KINDS[i]) &&
+      canFill(target.player.positions, KINDS[selected])
+    ) {
+      setPlaced((prev) =>
+        prev.map((s, idx) => (idx === i ? sel : idx === selected ? target : s)),
+      );
+      setSelected(null);
+    }
   };
 
   const placedCount = placed.filter(Boolean).length;
   const allPlaced = placedCount === KINDS.length;
+
+  // Glowing target slots: where the pending pick may land, or where the selected
+  // player may move/swap. Same derivation as Daily's `targets`.
+  let targets: number[] = [];
+  if (pending) {
+    targets = KINDS.map((kind, i) => ({ kind, i }))
+      .filter(({ i }) => placed[i] === null)
+      .filter(({ kind }) => canFill(pending.positions, kind))
+      .map(({ i }) => i);
+  } else if (selected !== null) {
+    const sel = placed[selected] as Placed;
+    targets = KINDS.map((_, i) => i).filter((i) => {
+      if (i === selected) return false;
+      const t = placed[i];
+      if (t === null) return canFill(sel.player.positions, KINDS[i]);
+      return (
+        canFill(sel.player.positions, KINDS[i]) &&
+        canFill(t.player.positions, KINDS[selected])
+      );
+    });
+  }
 
   // ---- Interstitial: persist the five server-side + get the reg-season record. ----
   const goToInterstitial = useCallback(async () => {
@@ -410,7 +535,12 @@ export function PrivateTournamentDraft({
                 allowRespin={false}
                 draftable={benchDraftable}
                 onPick={(p) =>
-                  setSixth({ player: p, team: bench.team, decade: bench.decade })
+                  setSixth({
+                    player: p,
+                    team: bench.team,
+                    decade: bench.decade,
+                    reveal: KINDS.length, // bench reveal (not one of the five)
+                  })
                 }
                 onNoneEligible={() => {}}
               />
@@ -518,8 +648,8 @@ export function PrivateTournamentDraft({
     );
   }
 
-  // ---- DRAFT: step-by-step starter reveal. ----
-  const slot = board.slots[activeSlot];
+  // ---- DRAFT: step-by-step team/era reveal + free placement (Daily-style). ----
+  const reveal = board.slots[activeReveal];
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -531,28 +661,53 @@ export function PrivateTournamentDraft({
             {placedCount}/{KINDS.length} drafted
           </span>
         </div>
+        {/* The board is a lineup, not a reveal order: placement + rearrange happen
+            here (Daily onSlotClick). Picks lock once chosen — the only freedom is
+            moving/swapping already-placed players between legal slots. */}
         <LineupBoard
           kinds={KINDS}
           entries={lineupEntries}
-          targets={allPlaced ? [] : [activeSlot]}
-          selected={null}
-          onSlotClick={(i) => {
-            // Tap a filled slot to re-pick it (jump the active slot there).
-            if (placed[i]) setActiveSlot(i);
-          }}
+          targets={targets}
+          selected={selected}
+          onSlotClick={onSlotClick}
         />
+        <div className="mt-2 text-center font-display text-[11px] text-[var(--md-ink-muted)]">
+          {pending
+            ? "Tap a glowing slot to place him."
+            : selected !== null
+              ? "Tap a glowing slot to move him (or tap him again to cancel)."
+              : allPlaced
+                ? "Tap a player, then a slot, to rearrange."
+                : "Tip: tap a drafted player then a slot to move him."}
+        </div>
       </div>
 
-      {!allPlaced && slot && (
+      {/* Awaiting placement of a just-picked player into an eligible slot. */}
+      {pending && (
+        <div className="md-card md-card--lift flex flex-col items-center gap-3 p-4">
+          <div className="font-display text-sm">
+            Where does{" "}
+            <span className="font-bold">{pending.player_name}</span> play?
+          </div>
+          <button
+            className="md-btn md-btn--sm md-btn--secondary"
+            onClick={() => setPending(null)}
+          >
+            Cancel pick
+          </button>
+        </div>
+      )}
+
+      {!allPlaced && !pending && reveal && (
         <div className="md-card md-card--lift flex flex-col items-center gap-4 p-4 sm:p-5">
           <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Slot {activeSlot + 1} · {KINDS[activeSlot] === "FLEX" ? "FLEX" : KINDS[activeSlot]}
+            Reveal {activeReveal + 1} of {KINDS.length}
           </div>
-          <SlotMachine team={slot.team} decade={slot.decade} size="lg" />
+          <SlotMachine team={reveal.team} decade={reveal.decade} size="lg" />
           <div className="w-full">
             <PlayerList
-              team={slot.team}
-              decade={slot.decade}
+              team={reveal.team}
+              decade={reveal.decade}
               mode={gameMode}
               allowRespin={false}
               draftable={draftable}
@@ -587,10 +742,9 @@ export function PrivateTournamentDraft({
 }
 
 // A minimal PublicPlayer used when resuming a draft from IndexedDB (we only saved
-// ids/team/decade). PlayerList re-fetches the full roster; the board card just
-// needs name/positions/best_season, which fill in once the user re-confirms — but
-// on resume we don't have them, so this stub keeps the board legible (id-only).
-// In practice resume lands the user back on the draft step where they re-pick.
+// ids/team/decade/slot/reveal). On resume we re-fetch each involved roster to
+// recover the full PublicPlayer; this stub is the fallback for a roster that
+// couldn't be fetched, keeping the board legible (id-only) without a full row.
 function stubPlayer(entity_id: string): PublicPlayer {
   return {
     entity_id,

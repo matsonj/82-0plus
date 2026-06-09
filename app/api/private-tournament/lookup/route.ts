@@ -58,7 +58,11 @@ export async function POST(req: NextRequest) {
       finalizedAt: match.finalizedAt,
       championName: match.championName,
     };
+    // `tournamentId` is surfaced at the top level (in addition to inside the
+    // summary) so the join flow can reserve a slot via /register without digging
+    // into the nested summary. `shareUrl` is kept for the share-card unfurl path.
     return jsonWithSessionHint(sessionHint, {
+      tournamentId: match.tournamentId,
       tournament: summary,
       shareUrl: `/p/${match.tournamentId}`,
     });

@@ -10,14 +10,17 @@ import type {
   PrivateGetResponse,
   PrivateLobbyResponse,
   PrivateCompletedResponse,
+  PrivateYou,
 } from "@/components/private/types";
 
 type Status = "loading" | "ok" | "error" | "retry";
 
 // The PUBLIC share page for a private tournament. UUID route, no PIN to view.
-// Loads GET /api/private-tournament?id=<id> (+ optional saved creds → `you`),
-// then composes the Lobby (open) or Result (completed) by status. A retryable
-// 503 (lazy finalize in progress) shows a Retry button.
+// Loads the shared view via GET /api/private-tournament?id=<id> (CREDENTIAL-FREE
+// — no PIN ever in the URL), then, if a saved account exists, POSTs creds in the
+// BODY to /api/private-tournament for the entrant-specific `you` (entry status,
+// standing, host control) and merges it in. Composes the Lobby (open) or Result
+// (completed) by status. A retryable 503 (lazy finalize in progress) shows Retry.
 export default function PrivateTournamentPage({
   params,
 }: {
@@ -32,13 +35,8 @@ export default function PrivateTournamentPage({
     setStatus("loading");
     setErrorMsg(null);
     try {
-      const saved = getSavedUser();
-      const qs = new URLSearchParams({ id });
-      if (saved) {
-        qs.set("name", saved.username);
-        qs.set("pin", saved.pin);
-      }
-      const res = await fetch(`/api/private-tournament?${qs.toString()}`);
+      // 1) Shared view — credential-free GET. Never put the PIN in the URL.
+      const res = await fetch(`/api/private-tournament?id=${encodeURIComponent(id)}`);
       if (res.status === 503) {
         // Lazy finalization still running — the GET is idempotent; let the user retry.
         const d = await res.json().catch(() => ({}));
@@ -55,6 +53,32 @@ export default function PrivateTournamentPage({
         return;
       }
       const json = (await res.json()) as PrivateGetResponse;
+      // The credential-free GET omits `you`; default it so components see null.
+      json.you = null;
+
+      // 2) Entrant-specific `you` — creds in the POST BODY (never the URL). Only
+      // when a saved account exists; failures are non-fatal (shared view stands).
+      const saved = getSavedUser();
+      if (saved) {
+        try {
+          const meRes = await fetch("/api/private-tournament", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              tournamentId: id,
+              name: saved.username,
+              pin: saved.pin,
+            }),
+          });
+          if (meRes.ok) {
+            const me = (await meRes.json()) as { you?: PrivateYou | null };
+            json.you = me?.you ?? null;
+          }
+        } catch {
+          /* leave the shared view's you as-is (null) */
+        }
+      }
+
       setData(json);
       setStatus("ok");
     } catch {
