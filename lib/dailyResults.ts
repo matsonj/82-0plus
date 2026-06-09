@@ -124,6 +124,43 @@ export async function getDailyResult(
   return rows[0] ? toResult(rows[0]) : null;
 }
 
+/** A lightweight completion row for the menu (no box/roster JSON). */
+export interface DailyResultLite {
+  date: string;
+  wins: number;
+  losses: number;
+  margin: number;
+  perfect: boolean;
+}
+
+/**
+ * All of an account's daily completions on/after `since` (a YYYY-MM-DD floor;
+ * defaults to none). Drives the menu's "already played" state across devices —
+ * the home card for today and the archive list both read from this, so a finished
+ * day shows its result instead of "Play" without an N+1 of per-date lookups.
+ */
+export async function listDailyResults(
+  userId: string,
+  since?: string,
+): Promise<DailyResultLite[]> {
+  await ensureSchema();
+  const rows = await queryRW<{
+    daily_date: string; wins: number; losses: number; margin: number; perfect: boolean;
+  }>(
+    `SELECT daily_date, wins, losses, margin, perfect
+       FROM ${TDB}.daily_results
+      WHERE user_id = $1 ${since ? "AND daily_date >= $2" : ""}`,
+    since ? [userId, since] : [userId],
+  );
+  return rows.map((r) => ({
+    date: r.daily_date,
+    wins: r.wins,
+    losses: r.losses,
+    margin: r.margin,
+    perfect: !!r.perfect,
+  }));
+}
+
 export interface RecordDailyArgs {
   userId: string;
   date: string;

@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     }
 
     const out = DEBUG ? bracket : stripBreakdown(bracket);
-    return jsonWithSessionHint(sessionHint, { bracket: out });
+    return jsonWithSessionHint(sessionHint, { bracket: out, daily: row.daily });
   } catch (err) {
     console.error("[/api/tournament/bracket]", err);
     return jsonWithSessionHint(

@@ -90,6 +90,13 @@ export default function Home() {
   const [dailyResult, setDailyResult] = useState<
     { wins: number; losses: number; perfect: boolean } | null
   >(null);
+  // Server-authoritative completions for the replayable window, keyed by date.
+  // Drives the menu's "already played" state (today's card + the archive list) so
+  // a finished day shows its record instead of "Play" — cross-device, no client
+  // cache. daily_results owns this now; we just mirror it for display.
+  const [dailyDone, setDailyDone] = useState<
+    Record<string, { wins: number; losses: number; margin: number; perfect: boolean }>
+  >({});
   const [showHowTo, setShowHowTo] = useState(false);
   const [decades, setDecades] = useState<number[]>([]);
   const [lineup, setLineup] = useState<(LineupEntry | null)[]>(
@@ -325,6 +332,33 @@ export default function Home() {
     [startGame, flushPendingDaily],
   );
 
+  // Pull the signed-in account's completions for the replayable window and mirror
+  // them into `dailyDone` (the menu's "already played" state). Server is the
+  // source of truth — this is the only thing the menu trusts for completion, so a
+  // finished day can't show "Play" just because a local cache was cleared.
+  const refreshDailyResults = useCallback(async () => {
+    const u = getSavedUser();
+    if (!u) return;
+    try {
+      const res = await fetch("/api/daily/results", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: u.username, pin: u.pin }),
+      });
+      if (!res.ok) return;
+      const { results } = (await res.json()) as {
+        results: { date: string; wins: number; losses: number; margin: number; perfect: boolean }[];
+      };
+      const map: Record<string, { wins: number; losses: number; margin: number; perfect: boolean }> = {};
+      for (const r of results) {
+        map[r.date] = { wins: r.wins, losses: r.losses, margin: r.margin, perfect: r.perfect };
+      }
+      setDailyDone(map);
+    } catch {
+      /* leave prior state; the per-date playDaily check still fails closed */
+    }
+  }, []);
+
   // Deep link: /?d=YYYY-MM-DD (from a shared daily link) starts that day's
   // challenge once, gating on login like any other daily.
   const deepLinkHandled = useRef(false);
@@ -343,8 +377,14 @@ export default function Home() {
   useEffect(() => {
     const u = getSavedUser();
     if (!u) return;
-    for (const p of listOwnedPendingDailies(u)) void flushPendingDaily(p.date);
-  }, [flushPendingDaily]);
+    (async () => {
+      // Flush any stranded saves FIRST so the subsequent results pull reflects them.
+      await Promise.all(
+        listOwnedPendingDailies(u).map((p) => flushPendingDaily(p.date)),
+      );
+      await refreshDailyResults();
+    })();
+  }, [flushPendingDaily, refreshDailyResults]);
 
   const backToMenu = () => {
     setPhase("menu");
@@ -616,6 +656,9 @@ export default function Home() {
             owner: { name: u.username, pin: u.pin },
           });
           await flushPendingDaily(playedDate);
+          // Mirror the just-saved completion into the menu's server-backed map so
+          // the archive/today card reflect it without a reload.
+          void refreshDailyResults();
         }
       }
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -676,6 +719,10 @@ export default function Home() {
       ].join("\n")
     : "";
 
+  // Today's daily completion for the menu card: the just-played/pending result if
+  // there is one, otherwise whatever the server says this account already did.
+  const todayResult = dailyResult ?? (today ? dailyDone[today] : undefined) ?? null;
+
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
       {showHowTo && <HowToPlay onClose={() => setShowHowTo(false)} />}
@@ -686,6 +733,7 @@ export default function Home() {
             setShowDailySignIn(false);
             const d = pendingDaily.current?.date;
             pendingDaily.current = null;
+            void refreshDailyResults(); // populate the menu's completion map
             void playDaily(d); // re-check completion now that we're signed in
           }}
         />
@@ -733,30 +781,32 @@ export default function Home() {
             the season.
           </p>
 
-          {dailyResult ? (
-            <div
-              className="md-card mt-8 w-full max-w-md p-5 text-left"
+          {todayResult ? (
+            <button
+              className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5"
               style={{ background: "var(--md-paper-2)" }}
+              onClick={() => playDaily()}
             >
               <div className="flex items-center justify-between">
                 <div className="font-display text-xl font-bold">
                   Daily Challenge
                 </div>
                 <span className="text-2xl" aria-hidden>
-                  {dailyResult.perfect ? "🏆" : "✓"}
+                  {todayResult.perfect ? "🏆" : "✓"}
                 </span>
               </div>
               <p className="mt-1 text-[13px] text-[var(--md-ink)]">
                 Today&rsquo;s result:{" "}
                 <strong>
-                  {dailyResult.wins}&ndash;{dailyResult.losses}
+                  {todayResult.wins}&ndash;{todayResult.losses}
                 </strong>
-                {dailyResult.perfect ? " — perfect season!" : ""}. One per day.
+                {todayResult.perfect ? " — perfect season!" : ""}. One per day &middot;
+                tap to review.
               </p>
               <p className="mt-1 font-display text-[12px] text-[var(--md-ink-muted)]">
                 Next challenge in <Countdown />
               </p>
-            </div>
+            </button>
           ) : (
             <button
               className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5 disabled:opacity-70"
@@ -782,6 +832,7 @@ export default function Home() {
           {today && (
             <DailyArchive
               today={today}
+              results={dailyDone}
               onPlay={(date) => playDaily(date)}
             />
           )}

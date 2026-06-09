@@ -31,6 +31,14 @@ function tournPhrase(round: number): string {
   );
 }
 
+/** A tournament/bracket run for this daily date. */
+interface TournRun {
+  recordW: number;
+  recordL: number;
+  realizedMargin: number;
+  reachedRound: number;
+}
+
 /** Sharer's redacted result carried in the link. */
 export interface Sharer {
   name: string;
@@ -38,14 +46,8 @@ export interface Sharer {
   losses: number;
   margin: number;
   perfect: boolean;
-}
-
-/** The viewer's tournament run for this daily date, if they submitted one. */
-interface TournRun {
-  recordW: number;
-  recordL: number;
-  realizedMargin: number;
-  reachedRound: number;
+  // The sharer's tournament run, if the link carried one (added at share time).
+  tournament?: TournRun | null;
 }
 
 type State =
@@ -62,9 +64,11 @@ export function DailyShareLanding({
   date: string;
   sharer: Sharer | null;
 }) {
-  const [state, setState] = useState<State>(() =>
-    getSavedUser() ? { kind: "loading" } : { kind: "signin" },
-  );
+  // Start in a deterministic state for SSR: reading getSavedUser() (localStorage)
+  // in the initializer would diverge between server (always null → "signin") and a
+  // logged-in client (→ "loading"), tripping hydration. We always render "loading"
+  // first, then the mount effect resolves to signin / result.
+  const [state, setState] = useState<State>({ kind: "loading" });
   // The signed-in handle (client-only). Lets us tell when the viewer IS the
   // sharer — clicking your own link must show "your result", not you-vs-you.
   const [viewer, setViewer] = useState<string | null>(null);
@@ -106,7 +110,8 @@ export function DailyShareLanding({
   };
 
   useEffect(() => {
-    if (getSavedUser()) check();
+    // check() handles both cases: signed in → loading→result, signed out → signin.
+    check();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
@@ -185,29 +190,19 @@ export function DailyShareLanding({
               />
             </div>
 
-            {state.tournament && (
+            {(state.tournament || (sharer?.tournament && !isSelfLink)) && (
               <div className="grid gap-1 text-left">
                 <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Your tournament run
+                  {sharer?.tournament && state.tournament && !isSelfLink
+                    ? "Tournament · head to head"
+                    : "Tournament run"}
                 </div>
-                <div className="flex items-baseline justify-between gap-2 border-b border-[var(--md-paper-3)] py-1 font-display text-sm">
-                  <span className="font-bold">
-                    {tournPhrase(state.tournament.reachedRound)}
-                  </span>
-                  <span className="font-bold tabular-nums">
-                    {state.tournament.recordW}&ndash;{state.tournament.recordL}{" "}
-                    <span
-                      style={{
-                        color:
-                          state.tournament.realizedMargin >= 0
-                            ? "var(--md-teal)"
-                            : "var(--md-coral)",
-                      }}
-                    >
-                      ({sign(state.tournament.realizedMargin)})
-                    </span>
-                  </span>
-                </div>
+                {sharer?.tournament && !isSelfLink && (
+                  <TournRow label={sharer.name} run={sharer.tournament} />
+                )}
+                {state.tournament && (
+                  <TournRow label="You" run={state.tournament} highlight />
+                )}
               </div>
             )}
 
@@ -321,6 +316,35 @@ async function findTournamentRun(
   } catch {
     return null;
   }
+}
+
+// One tournament/bracket line (reached-round phrase + record + realized margin).
+// Used for both the sharer's run (from the link) and the viewer's own.
+function TournRow({
+  label,
+  run,
+  highlight,
+}: {
+  label: string;
+  run: TournRun;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className="flex items-baseline justify-between gap-2 border-b border-[var(--md-paper-3)] py-1 font-display text-sm"
+      style={highlight ? { fontWeight: 700 } : undefined}
+    >
+      <span className={highlight ? "text-[var(--md-orange-deep)]" : ""}>
+        {label} &middot; {tournPhrase(run.reachedRound)}
+      </span>
+      <span className="font-bold tabular-nums">
+        {run.recordW}&ndash;{run.recordL}{" "}
+        <span style={{ color: run.realizedMargin >= 0 ? "var(--md-teal)" : "var(--md-coral)" }}>
+          ({sign(run.realizedMargin)})
+        </span>
+      </span>
+    </div>
+  );
 }
 
 function Row({

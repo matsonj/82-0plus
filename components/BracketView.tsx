@@ -118,11 +118,22 @@ function GameRow({
   );
 }
 
+// A stable identity for a drafted player, used to spot the same player across
+// multiple teams (everyone draws the same daily board, so overlap is expected).
+const playerKey = (p: BracketPlayer) => `${p.name}|${p.team}|${p.season}`;
+
 // One player row in a roster panel: name + subtle "team 'season", captain chip.
-function PlayerRow({ p }: { p: BracketPlayer }) {
+// `shared` greys + italicises a player YOU also drafted (daily mode), so this
+// team's picks that differ from yours read bold at a glance.
+function PlayerRow({ p, shared }: { p: BracketPlayer; shared?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-2 py-0.5 font-display text-[11px]">
-      <span className="min-w-0 truncate">
+      <span
+        // pr-1 on italic: `truncate` clips overflow, and the slanted final glyph
+        // (e.g. the "d" in Leonard/Reed) overhangs its box — the padding gives it room.
+        className={`min-w-0 truncate ${shared ? "italic pr-1 text-[var(--md-ink-muted)]" : ""}`}
+        title={shared ? "You drafted this player too" : undefined}
+      >
         {p.name}
         {p.captain ? (
           <span className="ml-1 inline-block border border-[var(--md-ink)] bg-[var(--md-yellow)] px-1 text-[8px] font-bold uppercase leading-tight tracking-wide align-middle">
@@ -139,7 +150,15 @@ function PlayerRow({ p }: { p: BracketPlayer }) {
 
 // The expandable roster panel for one team: five starters, a divider, sixth man.
 // Degrades gracefully when the stored bracket predates the roster fields.
-function RosterPanel({ team }: { team: BracketTeam | undefined }) {
+function RosterPanel({
+  team,
+  compareKeys,
+}: {
+  team: BracketTeam | undefined;
+  // The viewer's roster keys to grey out on THIS team (a shared pick). Undefined
+  // for the viewer's own team (or non-daily / public view) → nothing greyed.
+  compareKeys?: Set<string>;
+}) {
   if (!team || team.roster === undefined) {
     return (
       <div className="border-t-2 border-dashed border-[var(--md-ink)] bg-[var(--md-paper)] px-2 py-1.5 font-display text-[10px] italic text-[var(--md-ink-muted)]">
@@ -147,10 +166,11 @@ function RosterPanel({ team }: { team: BracketTeam | undefined }) {
       </div>
     );
   }
+  const isShared = (p: BracketPlayer) => compareKeys?.has(playerKey(p)) ?? false;
   return (
     <div className="border-t-2 border-dashed border-[var(--md-ink)] bg-[var(--md-paper)] px-2 py-1.5">
       {team.roster.map((p, i) => (
-        <PlayerRow key={`${p.team}-${p.name}-${i}`} p={p} />
+        <PlayerRow key={`${p.team}-${p.name}-${i}`} p={p} shared={isShared(p)} />
       ))}
       {team.sixthMan && (
         <>
@@ -158,7 +178,7 @@ function RosterPanel({ team }: { team: BracketTeam | undefined }) {
           <div className="font-display text-[8px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
             Sixth Man
           </div>
-          <PlayerRow p={team.sixthMan} />
+          <PlayerRow p={team.sixthMan} shared={isShared(team.sixthMan)} />
         </>
       )}
     </div>
@@ -233,12 +253,14 @@ function SeriesCard({
   nameOf,
   teamOf,
   youId,
+  youKeys,
   isFinal = false,
 }: {
   series: SeriesResult;
   nameOf: (id: string) => string;
   teamOf: (id: string) => BracketTeam | undefined;
   youId?: string;
+  youKeys?: Set<string>;
   isFinal?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -249,6 +271,8 @@ function SeriesCard({
     youId !== undefined && (series.hiId === youId || series.loId === youId);
   const hiTeam = teamOf(series.hiId);
   const loTeam = teamOf(series.loId);
+  // Grey the viewer's shared picks on OPPONENTS only — never on the viewer's team.
+  const compareFor = (id: string) => (id === youId ? undefined : youKeys);
   const toggleRoster = (side: "hi" | "lo") =>
     setRosterOpen((cur) => (cur === side ? null : side));
 
@@ -268,7 +292,9 @@ function SeriesCard({
           open={rosterOpen === "hi"}
           onToggle={() => toggleRoster("hi")}
         />
-        {rosterOpen === "hi" && <RosterPanel team={hiTeam} />}
+        {rosterOpen === "hi" && (
+          <RosterPanel team={hiTeam} compareKeys={compareFor(series.hiId)} />
+        )}
         <SeriesSide
           team={loTeam}
           name={nameOf(series.loId)}
@@ -278,7 +304,9 @@ function SeriesCard({
           open={rosterOpen === "lo"}
           onToggle={() => toggleRoster("lo")}
         />
-        {rosterOpen === "lo" && <RosterPanel team={loTeam} />}
+        {rosterOpen === "lo" && (
+          <RosterPanel team={loTeam} compareKeys={compareFor(series.loId)} />
+        )}
       </div>
 
       {/* Series format + per-game scores. Click the footer to reveal each game's
@@ -329,12 +357,14 @@ function RoundSection({
   nameOf,
   teamOf,
   youId,
+  youKeys,
 }: {
   label: string;
   series: SeriesResult[];
   nameOf: (id: string) => string;
   teamOf: (id: string) => BracketTeam | undefined;
   youId?: string;
+  youKeys?: Set<string>;
 }) {
   if (series.length === 0) return null;
   return (
@@ -351,6 +381,7 @@ function RoundSection({
                 nameOf={nameOf}
                 teamOf={teamOf}
                 youId={youId}
+                youKeys={youKeys}
               />
             </div>
           );
@@ -363,13 +394,29 @@ function RoundSection({
 export function BracketView({
   bracket,
   youId,
+  daily = false,
 }: {
   bracket: BracketResult;
   youId?: string;
+  // Daily fields share one board, so opponents draft from the same pool. When this
+  // is a daily AND we know which team is "you", an OPPONENT's players that you ALSO
+  // drafted render greyed/italic — so the picks that team made *differently* from
+  // you (the bold ones) stand out. Your own team is never greyed.
+  daily?: boolean;
 }) {
   const byId = new Map(bracket.teams.map((t) => [t.id, t]));
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
   const teamOf = (id: string) => byId.get(id);
+
+  // The viewer's own roster keys — the set we compare opponents against. Only for
+  // daily with a known "you"; otherwise undefined → nothing is greyed anywhere.
+  const youKeys = (() => {
+    if (!daily || !youId) return undefined;
+    const you = byId.get(youId);
+    if (!you) return undefined;
+    const roster = [...(you.roster ?? []), ...(you.sixthMan ? [you.sixthMan] : [])];
+    return new Set(roster.map(playerKey));
+  })();
 
   // rounds: [R1 (8), Semis (4), Conf Finals (2), Final (1)]. We render each
   // round as its own stacked section, top to bottom; the Final is its own
@@ -398,6 +445,7 @@ export function BracketView({
                     nameOf={nameOf}
                     teamOf={teamOf}
                     youId={youId}
+                    youKeys={youKeys}
                     isFinal
                   />
                 ))}
@@ -419,6 +467,7 @@ export function BracketView({
             nameOf={nameOf}
             teamOf={teamOf}
             youId={youId}
+            youKeys={youKeys}
           />
         );
       })}

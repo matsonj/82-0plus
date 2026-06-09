@@ -117,9 +117,11 @@ export async function getTeamBracketRO(
 /** Just the bracket + champion for the lightweight public bracket viewer. */
 export async function getBracketByIdRO(
   teamId: string,
-): Promise<{ bracketJson: unknown; championName: string } | null> {
-  const rows = await queryTournamentRO<{ bracket_json: unknown; champion_name: string }>(
-    `SELECT bracket_json, champion_name
+): Promise<{ bracketJson: unknown; championName: string; daily: boolean } | null> {
+  const rows = await queryTournamentRO<{
+    bracket_json: unknown; champion_name: string; daily_date: string | null;
+  }>(
+    `SELECT bracket_json, champion_name, daily_date
        FROM ${RO_DB}.teams
       WHERE team_id = $1
       LIMIT 1`,
@@ -129,5 +131,7 @@ export async function getBracketByIdRO(
   return {
     bracketJson: parseJson(rows[0].bracket_json),
     championName: rows[0].champion_name,
+    // A daily entry shares the common board, so its bracket marks shared players.
+    daily: rows[0].daily_date != null,
   };
 }

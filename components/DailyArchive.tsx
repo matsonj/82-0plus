@@ -15,14 +15,17 @@ function label(date: string): string {
 }
 
 /** The Daily archive: replay any of the last ~30 daily challenges. Today is shown
- *  by the main CTA, so this lists the prior days. Completion is enforced
- *  server-side (playDaily → /api/daily/result), so every day offers Play — an
- *  already-finished day routes to its result on click instead of re-drafting. */
+ *  by the main CTA, so this lists the prior days. Completion is server-authoritative
+ *  (`results`, keyed by date) — a finished day shows its record (tap to review the
+ *  result/compare), an unplayed day offers Play. The click still routes through
+ *  playDaily, so the server remains the gate even if this map is stale. */
 export function DailyArchive({
   today,
+  results = {},
   onPlay,
 }: {
   today: string;
+  results?: Record<string, { wins: number; losses: number; perfect: boolean }>;
   onPlay: (date: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -49,20 +52,36 @@ export function DailyArchive({
           className="md-scroll mt-3 max-h-[16rem] overflow-auto border-2 border-[var(--md-ink)] bg-[var(--md-white)] text-left"
           style={{ boxShadow: "var(--md-shadow-md)" }}
         >
-          {dates.map((d) => (
-            <div
-              key={d}
-              className="flex items-center justify-between gap-3 border-b border-[var(--md-paper-3)] px-3 py-2"
-            >
-              <span className="font-display text-sm font-bold">{label(d)}</span>
-              <button
-                className="md-btn md-btn--sm md-btn--secondary"
-                onClick={() => onPlay(d)}
+          {dates.map((d) => {
+            const done = results[d];
+            return (
+              <div
+                key={d}
+                className="flex items-center justify-between gap-3 border-b border-[var(--md-paper-3)] px-3 py-2"
               >
-                Play
-              </button>
-            </div>
-          ))}
+                <span className="font-display text-sm font-bold">{label(d)}</span>
+                {done ? (
+                  <button
+                    className="flex items-center gap-2 font-display text-sm"
+                    onClick={() => onPlay(d)}
+                    title="Tap to review your result"
+                  >
+                    <span className="tabular-nums font-bold">
+                      {done.wins}&ndash;{done.losses}
+                    </span>
+                    <span aria-hidden>{done.perfect ? "🏆" : "✓"}</span>
+                  </button>
+                ) : (
+                  <button
+                    className="md-btn md-btn--sm md-btn--secondary"
+                    onClick={() => onPlay(d)}
+                  >
+                    Play
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
