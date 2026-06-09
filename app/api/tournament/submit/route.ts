@@ -328,7 +328,8 @@ export async function POST(req: NextRequest) {
     }
 
     // ---- Seeding strength: the five's net rating with NO tournament buffs ----
-    const seedNet = simulateRoster(hydrated.scoring).netRating;
+    const sim = simulateRoster(hydrated.scoring);
+    const seedNet = sim.seedNet;
 
     // ---- Tournament eligibility: a team must project to at least 40 wins (the
     // D-tier floor). Gating here means an ineligible team is never stored, so it
@@ -382,7 +383,7 @@ export async function POST(req: NextRequest) {
     const you = deriveYou(bracket, myTeam.id);
     const rec = deriveRecord(bracket, myTeam.id);
     // The five's reg-season 9-stat box (no buffs) — for the spoiler-free daily card.
-    const teamBox = simulateRoster(hydrated.scoring).teamBox;
+    const teamBox = sim.teamBox;
 
     await insertTeam({
       teamId,

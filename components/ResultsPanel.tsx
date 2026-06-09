@@ -7,7 +7,7 @@ import { TierBadge } from "@/components/TierBadge";
 import { PlayerCardCarousel, type CardPlayer } from "@/components/PlayerCard";
 import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
 import { presentShare } from "@/lib/shareActions";
-import { isEligible } from "@/lib/tier";
+import { MIN_ELIGIBLE_WINS } from "@/lib/tier";
 
 // One line of the net-rating breakdown: a label (+ optional detail) and the
 // signed net-rating points the factor moved.
@@ -329,14 +329,14 @@ export function ResultsPanel({
           </button>
         </div>
         {onEnterTournament &&
-          (isEligible(netRating) ? (
+          (wins >= MIN_ELIGIBLE_WINS ? (
             <button
               className="md-btn md-btn--lg flex w-full items-center justify-center gap-2"
               style={{ background: "var(--md-orange)" }}
               onClick={onEnterTournament}
             >
               {/* Daily is "Open" — tier-less — so no tier badge there. */}
-              {isDaily ? null : <TierBadge seedNet={netRating} />}
+              {isDaily ? null : <TierBadge wins={wins} />}
               Enter this team in the {isDaily ? "Daily Tournament" : "Tournament"}
             </button>
           ) : (

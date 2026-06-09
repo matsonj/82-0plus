@@ -160,7 +160,7 @@ export function simulateRoster(
   const n = roster.length;
   if (n === 0) {
     return {
-      wins: 0, losses: cfg.GAMES, perfect: false, netRating: 0, baseNet: 0, teamFit: 0, meanGQ: 0,
+      wins: 0, losses: cfg.GAMES, perfect: false, seedNet: 0, netRating: 0, baseNet: 0, teamFit: 0, meanGQ: 0,
       pf: 0, pa: 0,
       usageFactor: 1, assistFactor: 1, nonShooters: 0,
       totalAst: 0, assistedPct: 0,
@@ -328,18 +328,21 @@ export function simulateRoster(
     fg3m: Math.round(ext((p) => p.fg3m) * u),
   };
 
+  const displayNetRating = round1(netRating);
+
   return {
     wins,
     losses: cfg.GAMES - wins,
     perfect: wins === cfg.GAMES,
-    netRating: round1(netRating),
+    seedNet: netRating,
+    netRating: displayNetRating,
     baseNet: round1(baseNet),
     teamFit: round1(teamFit),
     meanGQ: Math.round(meanGQ * 1000) / 1000,
     pf: teamBox.pts,
     // Reconcile the implied scoreline with the DISPLAYED (rounded) net so that
     // pf − pa always equals the net rating shown on the card.
-    pa: Math.round(teamBox.pts - round1(netRating)),
+    pa: Math.round(teamBox.pts - displayNetRating),
     usageFactor: round2(usageFactor),
     assistFactor: round2(assistFactor),
     nonShooters,

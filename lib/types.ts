@@ -52,6 +52,7 @@ export interface SimResult {
   wins: number;
   losses: number;
   perfect: boolean;
+  seedNet: number; // unrounded net rating used for tournament seeding/tier math
   netRating: number; // team point differential per game (after all adjustments)
   baseNet: number; // GQ-derived net rating BEFORE construction adjustments
   teamFit: number; // all construction factors collapsed (= netRating − baseNet − defBuff), after the floor
