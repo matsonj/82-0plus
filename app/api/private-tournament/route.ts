@@ -90,8 +90,13 @@ export async function GET(req: NextRequest) {
           finalRecordL: number | null;
           finalStatus: string | null;
           needsAttention: boolean;
+          isAdmin: boolean;
         }
       | null = null;
+    // Is the authenticated viewer this tournament's host? Surfaced on `you` so the
+    // lobby/result can show the host-only "Delete tournament" control. Absent for
+    // public viewers or any non-host (no creds → no `you` at all).
+    const isAdmin = viewerUserId != null && tournament.adminUserId === viewerUserId;
     if (viewerUserId) {
       const myEntry = await getPrivateEntryRO(id, viewerUserId);
       if (myEntry) {
@@ -105,11 +110,28 @@ export async function GET(req: NextRequest) {
           finalRecordW: myEntry.finalRecordW,
           finalRecordL: myEntry.finalRecordL,
           finalStatus: myEntry.finalStatus,
+          isAdmin,
           needsAttention: needsAttention({
             tournamentStatus: tournament.status,
             entryStatus: myEntry.status,
             viewedFinalAt: myEntry.viewedFinalAt,
           }),
+        };
+      } else if (isAdmin) {
+        // The host may never have drafted a team. Still surface a minimal `you` so
+        // the lobby/result can render the host-only delete control.
+        you = {
+          entryId: "",
+          status: "host",
+          teamId: "",
+          provisionalRecordW: null,
+          provisionalRecordL: null,
+          provisionalStatus: null,
+          finalRecordW: null,
+          finalRecordL: null,
+          finalStatus: null,
+          isAdmin: true,
+          needsAttention: false,
         };
       }
     }

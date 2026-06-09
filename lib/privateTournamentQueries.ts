@@ -554,6 +554,28 @@ export async function markPrivateEntryViewed(entryId: string): Promise<void> {
   );
 }
 
+// ── Admin teardown ─────────────────────────────────────────────────────────────
+
+/**
+ * Permanently delete a tournament and all of its entries (host-only — the route
+ * authorizes admin_user_id before calling this). Entries go FIRST so no row is
+ * ever orphaned to a tournament that's already gone; the tournament row drops
+ * second. Both are TDB-qualified, positional, and re-use the RW pool.
+ */
+export async function deletePrivateTournament(
+  tournamentId: string,
+): Promise<void> {
+  await ensureSchema();
+  await queryRW(
+    `DELETE FROM ${TDB}.private_entries WHERE tournament_id = $1`,
+    [tournamentId],
+  );
+  await queryRW(
+    `DELETE FROM ${TDB}.private_tournaments WHERE tournament_id = $1`,
+    [tournamentId],
+  );
+}
+
 // ── My Teams / notifications (entries joined with their tournament) ───────────
 
 interface EntryForUserDbRow {

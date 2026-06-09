@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { getSavedUser } from "@/lib/tournamentSession";
 
 // One private-tournament summary as returned by /api/private-tournament/notifications.
@@ -26,10 +27,13 @@ interface NotifResponse {
 // feed is cheap and a stale-by-a-minute dot is fine).
 const POLL_MS = 60_000;
 
-// The shared site header. Logo + "My Teams" + a private-tournament indicator.
-// `right` lets a page keep its own right-side capsule (e.g. "Tournament Edition")
-// — it renders just left of the indicator so the bell never doubles up.
+// The shared site header. Logo + an optional contextual right slot + a
+// private-tournament indicator. `right` is for genuinely useful per-page context
+// (e.g. the live Classic/Ranked badge while drafting) — not decorative pills.
 export function GlobalHeader({ right }: { right?: React.ReactNode }) {
+  const pathname = usePathname();
+  // Don't link to "My Teams" from the My Teams page itself.
+  const onMyTeams = pathname === "/tournament";
   const [notif, setNotif] = useState<NotifResponse | null>(null);
   const [open, setOpen] = useState(false);
   // Guards against overlapping polls (visibility + interval can fire together).
@@ -91,29 +95,32 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
         </span>
       </Link>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         {right}
-        <Link
-          href="/tournament"
-          className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-        >
-          My Teams
-        </Link>
+        {!onMyTeams && (
+          <Link
+            href="/tournament"
+            className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+          >
+            My Teams
+          </Link>
+        )}
 
         {/* The indicator always renders; the badge only appears when there's
-            something to attend to (no saved account ⇒ no badge). */}
+            something to attend to (no saved account ⇒ no badge). A quiet
+            bordered icon button — not a filled pill — so the header stays calm. */}
         <div className="relative">
           <button
             type="button"
             aria-label="Private tournament alerts"
             onClick={() => setOpen((o) => !o)}
-            className="md-capsule"
-            style={{ padding: "6px 10px", cursor: "pointer" }}
+            className="relative flex h-8 w-8 items-center justify-center border-2 border-[var(--md-ink)] bg-[var(--md-white)] text-sm transition-transform hover:-translate-y-0.5"
+            style={{ cursor: "pointer" }}
           >
             <span aria-hidden>🔔</span>
             {hasBadge && (
               <span
-                className="md-badge"
+                className="absolute -right-2 -top-2 flex items-center justify-center border-2 border-[var(--md-ink)]"
                 style={{
                   background: "var(--md-coral)",
                   color: "var(--md-white)",
@@ -121,7 +128,7 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
                   height: 18,
                   fontSize: 10,
                   lineHeight: 1,
-                  padding: "0 4px",
+                  padding: "0 3px",
                 }}
               >
                 {count > 0 ? count : ""}

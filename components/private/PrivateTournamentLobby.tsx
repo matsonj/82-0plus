@@ -11,6 +11,7 @@ import { privateModeLabel } from "@/lib/privateTournament";
 import { copyText } from "@/lib/copyText";
 import { SITE_URL } from "@/lib/site";
 import { PrivateTournamentDraft } from "@/components/private/PrivateTournamentDraft";
+import { DeleteTournamentControl } from "@/components/private/DeleteTournamentControl";
 import type {
   PrivateLobbyResponse,
   PrivateRegisterResponse,
@@ -301,6 +302,13 @@ export function PrivateTournamentLobby({
           </div>
         )}
       </div>
+
+      {/* Host-only teardown — quiet, confirm-gated. */}
+      {you?.isAdmin && (
+        <div className="mt-1 flex justify-center">
+          <DeleteTournamentControl tournamentId={data.tournamentId} />
+        </div>
+      )}
     </div>
   );
 }

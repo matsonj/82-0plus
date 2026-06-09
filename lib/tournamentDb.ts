@@ -13,6 +13,9 @@ import { Pool, types } from "pg";
 // Mirror lib/motherduck.ts so reads-after-write return numbers, not strings.
 types.setTypeParser(20, (v) => parseInt(v, 10)); // int8 / bigint (counts)
 types.setTypeParser(1700, (v) => parseFloat(v)); // numeric
+// Timezone-naive DuckDB TIMESTAMP holds UTC wall-clock; parse oid 1114 as UTC
+// (pg's default treats it as local, double-applying the machine offset).
+types.setTypeParser(1114, (v) => new Date(v.replace(" ", "T") + "Z"));
 
 const PG_HOST =
   process.env.MOTHERDUCK_PG_HOST ?? "pg.us-east-1-aws.motherduck.com";

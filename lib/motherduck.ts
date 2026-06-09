@@ -7,6 +7,10 @@ import { Pool, types } from "pg";
 // DuckDB/PG numeric types arrive as strings by default; coerce to JS numbers.
 types.setTypeParser(20, (v) => parseInt(v, 10)); // int8 / bigint (counts)
 types.setTypeParser(1700, (v) => parseFloat(v)); // numeric
+// DuckDB TIMESTAMP is timezone-naive and we store UTC wall-clock. pg's default
+// parses oid 1114 (timestamp w/o tz) as LOCAL time, double-applying the machine
+// offset (a 24h window read back as ~31h in Pacific). Force UTC.
+types.setTypeParser(1114, (v) => new Date(v.replace(" ", "T") + "Z"));
 
 const PG_HOST =
   process.env.MOTHERDUCK_PG_HOST ?? "pg.us-east-1-aws.motherduck.com";

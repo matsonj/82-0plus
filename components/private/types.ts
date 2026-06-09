@@ -18,6 +18,9 @@ export interface PrivateYou {
   finalRecordL: number | null;
   finalStatus: string | null;
   needsAttention: boolean;
+  // True only when the viewer's creds identify them as the tournament's host —
+  // gates the host-only "Delete tournament" control. Absent/false otherwise.
+  isAdmin?: boolean;
 }
 
 // One entrant row in the lobby (open) view — NO roster leaked before completion.

@@ -70,13 +70,7 @@ export default function PrivateTournamentPage({
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
       <div className="md-sunbeam" />
-      <GlobalHeader
-        right={
-          <span className="md-capsule" style={{ background: "var(--md-orange)" }}>
-            Private
-          </span>
-        }
-      />
+      <GlobalHeader />
 
       <section className="relative z-10 mt-4">
         {status === "loading" && (

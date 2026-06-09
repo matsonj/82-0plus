@@ -21,16 +21,9 @@ export default function TournamentPage({
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
       <div className="md-sunbeam" />
 
-      <GlobalHeader
-        right={
-          <span className="md-capsule" style={{ background: "var(--md-orange)" }}>
-            Tournament Edition
-          </span>
-        }
-      />
+      <GlobalHeader />
 
-      <section className="relative z-10 flex flex-col items-center text-center">
-        <div className="md-capsule mb-4">🏀 Check your team</div>
+      <section className="relative z-10 mt-6 flex flex-col items-center text-center sm:mt-8">
         <h1
           className="font-display font-bold tracking-tight"
           style={{ fontSize: "clamp(34px, 9vw, 64px)", lineHeight: 1 }}

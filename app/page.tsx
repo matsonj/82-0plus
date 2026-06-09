@@ -860,6 +860,25 @@ export default function Home() {
             </button>
           )}
 
+          {/* Private tournaments — invite-only brackets you host or join by link. */}
+          <Link
+            href="/tournament?tab=private"
+            className="md-card md-card--lift mt-4 flex w-full max-w-md items-center justify-between gap-3 p-4 text-left transition-transform hover:-translate-y-0.5"
+            style={{ background: "var(--md-sky)" }}
+          >
+            <div>
+              <div className="font-display text-lg font-bold">
+                Private Tournament
+              </div>
+              <p className="mt-0.5 text-[13px] text-[var(--md-ink)]">
+                Host a bracket for your friends, or join one by link.
+              </p>
+            </div>
+            <span className="text-2xl" aria-hidden>
+              🏆
+            </span>
+          </Link>
+
           {/* Replay any of the last ~30 daily challenges. */}
           {today && (
             <DailyArchive
@@ -915,24 +934,6 @@ export default function Home() {
               </p>
             </button>
           </div>
-          {/* Private tournaments — invite-only brackets you host or join by link. */}
-          <Link
-            href="/tournament?tab=private"
-            className="md-card md-card--lift mt-6 flex w-full max-w-md items-center justify-between gap-3 p-4 text-left transition-transform hover:-translate-y-0.5"
-            style={{ background: "var(--md-paper-2)" }}
-          >
-            <div>
-              <div className="font-display text-lg font-bold">
-                Private Tournament
-              </div>
-              <p className="mt-0.5 text-[13px] text-[var(--md-ink-muted)]">
-                Host a bracket for your friends, or join one by link.
-              </p>
-            </div>
-            <span className="text-2xl" aria-hidden>
-              🏆
-            </span>
-          </Link>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
             <button

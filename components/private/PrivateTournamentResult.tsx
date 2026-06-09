@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { BracketView } from "@/components/BracketView";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { privateModeLabel } from "@/lib/privateTournament";
+import { DeleteTournamentControl } from "@/components/private/DeleteTournamentControl";
 import type { PrivateCompletedResponse } from "@/components/private/types";
 
 // Final standing label for one entrant row.
@@ -121,6 +122,13 @@ export function PrivateTournamentResult({
       ) : (
         <div className="md-card p-4 text-center font-display text-sm text-[var(--md-ink-muted)]">
           The bracket isn&rsquo;t available for this tournament.
+        </div>
+      )}
+
+      {/* Host-only teardown — quiet, confirm-gated. */}
+      {you?.isAdmin && (
+        <div className="flex justify-center">
+          <DeleteTournamentControl tournamentId={data.tournamentId} />
         </div>
       )}
     </div>
