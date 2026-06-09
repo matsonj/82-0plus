@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   validateName,
+  validateTournamentName,
   validatePin,
   NAME_MAX_LEN,
+  TOURNAMENT_NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
 import { getSavedUser, saveUser } from "@/lib/tournamentSession";
 import {
@@ -131,7 +133,7 @@ export function PrivateTournamentCreate({
 
   const adminNameCheck = validateName(adminName);
   const adminPinOk = validatePin(adminPin);
-  const nameCheck = validateName(name);
+  const nameCheck = validateTournamentName(name);
   const pinOk = validatePin(pin);
   const manualErr = boardMode === "manual" ? manualReason(slots) : null;
   const canSubmit =
@@ -319,17 +321,17 @@ export function PrivateTournamentCreate({
         <input
           className="md-input md-input--name"
           value={name}
-          maxLength={NAME_MAX_LEN}
+          maxLength={TOURNAMENT_NAME_MAX_LEN}
           autoCapitalize="characters"
           onChange={(e) =>
             setName(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""))
           }
-          placeholder="FRIDAY NIGHT HOOPS"
+          placeholder="FRIDAY NIGHT HOOPS CUP"
         />
         <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
           {name.length > 0 && !nameCheck.ok
             ? nameCheck.reason
-            : "The tournament's name · letters, numbers, spaces · 16 max"}
+            : "The tournament's name · letters, numbers, spaces · 24 max"}
         </span>
       </label>
 

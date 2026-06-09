@@ -596,6 +596,119 @@ export function TournamentLookup({
     );
   }
 
+  // ---- Private landing (logged-out). ----
+  // Reaching the Private tab without a saved session: hosting needs no My Teams
+  // login (PrivateTournamentCreate collects its own creds), so surface Create +
+  // a compact "see my tournaments" login instead of the generic team-lookup form.
+  if (tab === "private") {
+    return (
+      <div className="mx-auto flex w-full max-w-md flex-col gap-4">
+        {/* Tab switcher so they can still jump to the team-lookup tabs. */}
+        <div className="flex flex-wrap gap-1.5">
+          {(["daily", "hoopiq", "classic", "private"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className="border-2 border-[var(--md-ink)] px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide"
+              style={{
+                background: tab === t ? "var(--md-ink)" : "var(--md-white)",
+                color: tab === t ? "var(--md-white)" : "var(--md-ink)",
+                cursor: "pointer",
+              }}
+            >
+              {TAB_LABEL[t]}
+            </button>
+          ))}
+        </div>
+
+        {showCreate ? (
+          <PrivateTournamentCreate onCancel={() => setShowCreate(false)} />
+        ) : (
+          <>
+            <div className="md-card md-card--lift flex flex-col gap-3 p-5">
+              <div>
+                <div className="font-display text-xl font-bold">
+                  Private tournament
+                </div>
+                <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
+                  Host an invite-only bracket for your friends, or open an invite
+                  link someone shared with you.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="md-btn md-btn--teal"
+                onClick={() => setShowCreate(true)}
+              >
+                + Create private tournament
+              </button>
+            </div>
+
+            <form onSubmit={submit} className="md-card flex flex-col gap-3 p-5">
+              <div className="font-display text-sm font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                Already joined one?
+              </div>
+              <label className="flex flex-col gap-1">
+                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  Your name
+                </span>
+                <input
+                  className="md-input md-input--name"
+                  value={name}
+                  maxLength={NAME_MAX_LEN}
+                  autoCapitalize="characters"
+                  onChange={(e) =>
+                    setName(
+                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
+                    )
+                  }
+                  placeholder="PHILJACKSON"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  PIN
+                </span>
+                <input
+                  className="md-input"
+                  value={pin}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                  placeholder="4–6 digits"
+                />
+              </label>
+              {error && (
+                <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
+                  {error}
+                </div>
+              )}
+              <button
+                type="submit"
+                className="md-btn md-btn--secondary"
+                disabled={!canSubmit}
+              >
+                {submitting ? "Checking…" : "Show my private tournaments"}
+              </button>
+            </form>
+          </>
+        )}
+
+        {onBack && (
+          <button
+            type="button"
+            className="md-btn md-btn--secondary"
+            onClick={onBack}
+          >
+            Back
+          </button>
+        )}
+      </div>
+    );
+  }
+
   // ---- Form view (default). ----
   return (
     <form

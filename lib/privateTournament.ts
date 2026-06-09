@@ -9,7 +9,7 @@
 
 import {
   normalizeName,
-  validateName,
+  validateTournamentName,
   validatePin,
 } from "./tournamentValidation";
 
@@ -132,7 +132,7 @@ export function validateCreateParams(
   | { ok: true; value: NormalizedCreateParams }
   | { ok: false; reason: string } {
   const rawName = typeof input.name === "string" ? input.name : "";
-  const nameCheck = validateName(rawName);
+  const nameCheck = validateTournamentName(rawName);
   if (!nameCheck.ok) return { ok: false, reason: nameCheck.reason };
   const name = normalizeTournamentName(rawName);
 

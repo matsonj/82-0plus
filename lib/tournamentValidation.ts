@@ -57,6 +57,39 @@ export function validateName(s: string): ValidationResult {
   return { ok: true };
 }
 
+// A private TOURNAMENT name is the same charset as a username but roomier — up to
+// 24 chars (e.g. "FRIDAY NIGHT HOOPS CUP"). It is NOT an account handle, so the
+// tighter 16-char login limit doesn't apply.
+export const TOURNAMENT_NAME_MAX_LEN = 24;
+
+/** Charset without the length bound (length is checked separately per context). */
+const NAME_CHARSET = /^[A-Z0-9 ]+$/;
+
+/**
+ * Validate a private-tournament name. Same normalization + charset + profanity
+ * rule as a username, but allows up to TOURNAMENT_NAME_MAX_LEN (24) characters.
+ */
+export function validateTournamentName(s: string): ValidationResult {
+  const name = normalizeName(s);
+
+  if (name.length === 0) {
+    return { ok: false, reason: "please enter a name" };
+  }
+  if (name.length > TOURNAMENT_NAME_MAX_LEN) {
+    return { ok: false, reason: "too long — 24 characters max" };
+  }
+  if (!NAME_CHARSET.test(name)) {
+    return {
+      ok: false,
+      reason: "letters, numbers and spaces only — no symbols",
+    };
+  }
+  if (isProfane(name)) {
+    return { ok: false, reason: "please choose another name" };
+  }
+  return { ok: true };
+}
+
 // ── Team names ─────────────────────────────────────────────────────────────────
 
 // A team's (franchise) name is more expressive than the login handle: uppercase
