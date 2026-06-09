@@ -296,7 +296,7 @@ async function hydrateStoredTeam(
     // Prefer the stored seed_net; recompute only if it's missing/invalid.
     const seedNet = Number.isFinite(row.seed_net)
       ? row.seed_net
-      : simulateRoster(hydrated.scoring).netRating;
+      : simulateRoster(hydrated.scoring).seedNet;
     return buildTournamentTeam({
       id,
       name: row.name,

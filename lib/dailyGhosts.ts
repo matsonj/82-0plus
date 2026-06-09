@@ -139,7 +139,7 @@ export function buildDailyGhosts(
     const sixth = weightedByGQ(benchCands, rng);
     const seedNet = simulateRoster(
       starters.map((s) => toScoring(s.player)),
-    ).netRating;
+    ).seedNet;
     ghosts.push({
       ghostId: i,
       name: NAME_POOL[i] ?? `DAILY ${i + 1}`,

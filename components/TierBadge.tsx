@@ -1,17 +1,18 @@
-import { tierForSeedNet } from "@/lib/tier";
+import { tierForSeedNet, tierForWins } from "@/lib/tier";
 
 // A small tier chip (S / AA / A / B / C / D), colored per lib/tier. Derived from
-// the team's seedNet so there's a single source of truth. Renders nothing for an
-// ineligible team (under 40 wins) — those are gated at submit and shouldn't reach
-// a bracket, but degrade gracefully if an old row sneaks through.
-export function TierBadge({
-  seedNet,
-  className = "",
-}: {
-  seedNet: number;
+// either the finished regular-season win total or an unrounded tournament seedNet.
+// Renders nothing for an ineligible team (under 40 wins).
+type TierBadgeProps = {
   className?: string;
-}) {
-  const tier = tierForSeedNet(seedNet);
+} & ({ wins: number; seedNet?: never } | { seedNet: number; wins?: never });
+
+export function TierBadge(props: TierBadgeProps) {
+  const { className = "" } = props;
+  const tier =
+    props.wins !== undefined
+      ? tierForWins(props.wins)
+      : tierForSeedNet(props.seedNet);
   if (!tier) return null;
   return (
     <span
