@@ -7,6 +7,7 @@ import { TierBadge } from "@/components/TierBadge";
 import { PlayerCardCarousel, type CardPlayer } from "@/components/PlayerCard";
 import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
 import { presentShare } from "@/lib/shareActions";
+import { copyText } from "@/lib/copyText";
 import { isEligible } from "@/lib/tier";
 
 // One line of the net-rating breakdown: a label (+ optional detail) and the
@@ -61,7 +62,7 @@ export function ResultsPanel({
   onEnterTournament?: () => void;
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
-  const [status, setStatus] = useState<"idle" | "working">("idle");
+  const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [cardIndex, setCardIndex] = useState<number | null>(null);
@@ -84,26 +85,27 @@ export function ResultsPanel({
     if (cardsOn) for (const c of cardPlayers) prefetchPlayerSeasons(c.entityId);
   }, [cardsOn, cardPlayers]);
 
+  useEffect(() => {
+    let active = true;
+    buildShareImage(result, roster, modeLabel, isDaily)
+      .then((b) => { if (active) setShareBlob(b); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [result, roster, modeLabel, isDaily]);
+
   const share = async () => {
-    setStatus("working");
-    try {
-      const blob = await buildShareImage(result, roster, modeLabel, isDaily);
-      // Mobile → native share sheet (image + text incl. link); desktop → overlay.
-      const handled = await presentShare({
-        blob,
-        filename: "82-0-season.png",
-        text: shareText,
-        link: shareLink,
+    if (!shareBlob) return;
+    const handled = await presentShare({
+      blob: shareBlob,
+      filename: "82-0-season.png",
+      text: shareText,
+      link: shareLink,
+    });
+    if (!handled) {
+      setShareUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(shareBlob);
       });
-      if (!handled && blob) {
-        setShareUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return URL.createObjectURL(blob);
-        });
-      }
-      setStatus("idle");
-    } catch {
-      setStatus("idle"); // user dismissed the share sheet
     }
   };
 
@@ -164,12 +166,10 @@ export function ResultsPanel({
             <button
               className="md-btn md-btn--sm md-btn--secondary"
               onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(shareText);
+                const ok = await copyText(shareLink);
+                if (ok) {
                   setLinkCopied(true);
                   setTimeout(() => setLinkCopied(false), 1500);
-                } catch {
-                  /* clipboard blocked */
                 }
               }}
             >
@@ -320,9 +320,9 @@ export function ResultsPanel({
           <button
             className="md-btn md-btn--lg md-btn--teal flex-1"
             onClick={share}
-            disabled={status === "working"}
+            disabled={!shareBlob}
           >
-            {status === "working" ? "Building…" : "Share result"}
+            {shareBlob ? "Share result" : "Preparing…"}
           </button>
           <button className="md-btn md-btn--lg md-btn--ink flex-1" onClick={onReset}>
             Play again
