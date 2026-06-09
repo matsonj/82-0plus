@@ -27,6 +27,13 @@ function clampName(name: string): string {
   return name.length > 24 ? name.slice(0, 23) + "…" : name;
 }
 
+// reached round: 0 = lost R1 … 4 = champion (mirrors DailyShareTourn).
+function reachedPhrase(r: number): string {
+  return ["FIRST ROUND", "SEMIFINALS", "CONFERENCE FINALS", "RUNNER-UP", "CHAMPION"][
+    Math.max(0, Math.min(4, r))
+  ];
+}
+
 export async function GET(request: Request) {
   const code = new URL(request.url).searchParams.get("r");
   const data = code ? decodeShare(code) : null;
@@ -41,6 +48,76 @@ export async function GET(request: Request) {
   const label = (data?.m ?? "82-0+").toUpperCase();
   const roster = data?.r ?? [];
   const netColor = net >= 0 ? TEAL : CORAL;
+
+  // Tournament share: a daily-tournament link unfurls as the TOURNAMENT card
+  // (reg-season record + playoff record + realized margin), not the plain daily
+  // card. Driven by the signed token's tournament run, threaded via `tn`.
+  const tn = data?.tn;
+  if (tn) {
+    const sharerName = clampName(data?.u || "A player").toUpperCase();
+    const marginColor = tn.n >= 0 ? TEAL : CORAL;
+    const StatCol = ({ heading, value }: { heading: string; value: string }) => (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
+        <div style={{ display: "flex", fontSize: 26, color: MUTED }}>{heading}</div>
+        <div style={{ display: "flex", fontSize: 110, fontWeight: 700, lineHeight: 1, marginTop: 6 }}>
+          {value}
+        </div>
+      </div>
+    );
+    return new ImageResponse(
+      (
+        <div
+          style={{
+            width: "100%", height: "100%", display: "flex", flexDirection: "column",
+            backgroundColor: PAPER, color: INK, fontFamily: "Space Mono", padding: 36,
+          }}
+        >
+          <div
+            style={{
+              display: "flex", flexDirection: "column", flex: 1,
+              border: `8px solid ${INK}`, padding: "28px 44px",
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", fontSize: 38, fontWeight: 700 }}>🦆 82-0+ TOURNAMENT</div>
+              <div style={{ display: "flex", fontSize: 24, color: MUTED }}>{label}</div>
+            </div>
+
+            {/* Sharer + reached round */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 18 }}>
+              <div style={{ display: "flex", fontSize: 64, fontWeight: 700, lineHeight: 1 }}>{sharerName}</div>
+              <div style={{ display: "flex", fontSize: 26, color: ORANGE, marginTop: 8 }}>
+                {reachedPhrase(tn.r)}
+              </div>
+            </div>
+
+            {/* Reg season + playoffs */}
+            <div style={{ display: "flex", flex: 1, alignItems: "center" }}>
+              <StatCol heading="REG SEASON" value={`${wins}–${losses}`} />
+              <StatCol heading="PLAYOFFS" value={`${tn.w}–${tn.l}`} />
+            </div>
+
+            {/* Margin + footer */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", fontSize: 30, fontWeight: 700, color: marginColor }}>
+                {tn.n >= 0 ? "+" : ""}{tn.n.toFixed(1)} playoff margin
+              </div>
+              <div style={{ display: "flex", fontSize: 22, color: MUTED }}>82-0plus.vercel.app</div>
+            </div>
+          </div>
+        </div>
+      ),
+      {
+        width: W, height: H,
+        fonts: [
+          { name: "Space Mono", data: regular, weight: 400, style: "normal" },
+          { name: "Space Mono", data: bold, weight: 700, style: "normal" },
+        ],
+        headers: { "Cache-Control": "public, immutable, no-transform, max-age=31536000" },
+      },
+    );
+  }
 
   return new ImageResponse(
     (
