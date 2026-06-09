@@ -15,6 +15,9 @@ export interface CardPlayer {
   team: string;
   season: number;
   positions?: Role[];
+  // All-Defensive team that drafted season: 1 (1st) / 2 (2nd) / 0 | undefined
+  // (none). Classic only — the roster mapping leaves it unset elsewhere.
+  allDef?: number;
 }
 
 const ROLE_BG: Record<Role, string> = {
@@ -120,6 +123,19 @@ const COLS: { key: keyof PlayerSeasonRow; label: string }[] = [
   { key: "usg", label: "USG" },
 ];
 
+// 🥇/🥈 for a 1st/2nd-team All-Defense season — mirrors the medal shown on the
+// Classic roster rows (ResultsPanel). Renders nothing when the player wasn't
+// selected (or allDef wasn't threaded in, e.g. the draft picker).
+function AllDefMedal({ allDef }: { allDef?: number }) {
+  if (allDef !== 1 && allDef !== 2) return null;
+  const label = allDef === 1 ? "1st Team All-Defense" : "2nd Team All-Defense";
+  return (
+    <span className="shrink-0 text-lg leading-none" title={label} aria-label={label}>
+      {allDef === 1 ? "🥇" : "🥈"}
+    </span>
+  );
+}
+
 function PositionPills({ positions }: { positions?: Role[] }) {
   if (!positions || positions.length === 0) return null;
   return (
@@ -169,6 +185,7 @@ function FullCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate font-display text-xl font-bold leading-tight">{player.playerName}</span>
+            <AllDefMedal allDef={player.allDef} />
             <PositionPills positions={player.positions} />
           </div>
           <div className="mt-0.5 font-display text-xs uppercase tracking-wide text-[var(--md-ink)]">
