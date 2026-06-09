@@ -525,6 +525,9 @@ export function TournamentEntry({
             })}
           </div>
 
+          {/* The name/login + team-name forms appear only AFTER a captain is
+              picked — showing them up-front confused first-time players. */}
+          {captainSlot !== null && (
           <div className="border-t-2 border-[var(--md-ink)] pt-4">
             <div className="font-display text-xl font-bold">Claim your team</div>
             <div className="mt-3 flex flex-col gap-3">
@@ -631,6 +634,7 @@ export function TournamentEntry({
               </label>
             </div>
           </div>
+          )}
 
           {submitError && (
             <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
@@ -638,23 +642,26 @@ export function TournamentEntry({
             </div>
           )}
 
+          {captainSlot === null && (
+            <p className="text-center font-display text-[13px] text-[var(--md-ink-muted)]">
+              Pick a captain to continue.
+            </p>
+          )}
+
           <div className="flex flex-wrap justify-center gap-2">
-            <button
-              className="md-btn md-btn--lg md-btn--teal"
-              disabled={!canSubmit}
-              onClick={submit}
-            >
-              {submitting ? "Running…" : "Enter the tournament"}
-            </button>
+            {captainSlot !== null && (
+              <button
+                className="md-btn md-btn--lg md-btn--teal"
+                disabled={!canSubmit}
+                onClick={submit}
+              >
+                {submitting ? "Running…" : "Enter the tournament"}
+              </button>
+            )}
             <button className="md-btn md-btn--lg md-btn--secondary" onClick={onBack}>
               Cancel
             </button>
           </div>
-          {captainSlot === null && (
-            <p className="text-center font-display text-[11px] text-[var(--md-ink-muted)]">
-              Pick a captain to continue.
-            </p>
-          )}
         </div>
       )}
     </div>
