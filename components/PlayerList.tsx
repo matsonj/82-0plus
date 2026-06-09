@@ -132,6 +132,8 @@ export function PlayerList({
         team,
         season: p.best_season,
         positions: p.positions,
+        // Mirror the picker row's medal in the card header (matches ResultsPanel).
+        allDef: p.allDef ?? undefined,
       })),
     [rows, team],
   );

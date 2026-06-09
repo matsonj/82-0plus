@@ -126,11 +126,11 @@ const COLS: { key: keyof PlayerSeasonRow; label: string }[] = [
 // 🥇/🥈 for a 1st/2nd-team All-Defense season — mirrors the medal shown on the
 // Classic roster rows (ResultsPanel). Renders nothing when the player wasn't
 // selected (or allDef wasn't threaded in, e.g. the draft picker).
-function AllDefMedal({ allDef }: { allDef?: number }) {
+function AllDefMedal({ allDef, className = "text-lg" }: { allDef?: number; className?: string }) {
   if (allDef !== 1 && allDef !== 2) return null;
   const label = allDef === 1 ? "1st Team All-Defense" : "2nd Team All-Defense";
   return (
-    <span className="shrink-0 text-lg leading-none" title={label} aria-label={label}>
+    <span className={`shrink-0 leading-none ${className}`} title={label} aria-label={label}>
       {allDef === 1 ? "🥇" : "🥈"}
     </span>
   );
@@ -255,7 +255,10 @@ function FullCard({
                           className="sticky left-0 z-10 px-2 py-1 text-left font-bold"
                           style={{ background: rowBg ?? "var(--md-white)" }}
                         >
-                          &rsquo;{String(s.season).slice(2)}
+                          <span className="flex items-center gap-1">
+                            &rsquo;{String(s.season).slice(2)}
+                            <AllDefMedal allDef={s.all_def} className="text-[11px]" />
+                          </span>
                         </th>
                         <td className="px-2 py-1 text-right text-[var(--md-ink-muted)]">{s.gp}</td>
                         {COLS.map((c) => (
