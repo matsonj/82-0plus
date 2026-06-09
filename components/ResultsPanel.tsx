@@ -45,6 +45,7 @@ export function ResultsPanel({
   result,
   shareText,
   shareLink,
+  shareReady = true,
   modeLabel,
   mode,
   isDaily = false,
@@ -55,6 +56,10 @@ export function ResultsPanel({
   result: SimResult;
   shareText: string;
   shareLink: string;
+  // For daily, the signed token arrives AFTER the result renders, so the link
+  // is a bare /d/<date> until then. Gate sharing on this so we never share a
+  // cardless URL. Defaults true for modes whose link is ready synchronously.
+  shareReady?: boolean;
   modeLabel: string;
   mode: GameMode;
   isDaily?: boolean;
@@ -63,6 +68,8 @@ export function ResultsPanel({
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
+  // Whether the fallback auto-copy actually landed the link on the clipboard.
+  const [autoCopied, setAutoCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [cardIndex, setCardIndex] = useState<number | null>(null);
@@ -94,14 +101,17 @@ export function ResultsPanel({
   }, [result, roster, modeLabel, isDaily]);
 
   const share = async () => {
-    if (!shareBlob) return;
-    const handled = await presentShare({
+    if (!shareBlob || !shareReady) return;
+    const outcome = await presentShare({
       blob: shareBlob,
       filename: "82-0-season.png",
       text: shareText,
       link: shareLink,
     });
-    if (!handled) {
+    // Native share / user-cancel → nothing more. Fell back to copy → open the
+    // desktop overlay (download + manual copy), noting whether copy landed.
+    if (outcome === "copied" || outcome === "failed") {
+      setAutoCopied(outcome === "copied");
       setShareUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return URL.createObjectURL(shareBlob);
@@ -152,8 +162,10 @@ export function ResultsPanel({
             className="mt-3 w-full border-2 border-[var(--md-ink)]"
           />
           <p className="mt-2 text-center text-[13px] leading-snug text-[var(--md-ink-muted)]">
-            <strong>Right-click to copy and share.</strong> The link is already on
-            your clipboard.
+            <strong>Right-click to copy and share.</strong>{" "}
+            {autoCopied
+              ? "The link is already on your clipboard."
+              : "Use “Copy link” below to copy the link."}
           </p>
           <div className="mt-3 flex flex-wrap justify-center gap-2">
             <a
@@ -320,9 +332,9 @@ export function ResultsPanel({
           <button
             className="md-btn md-btn--lg md-btn--teal flex-1"
             onClick={share}
-            disabled={!shareBlob}
+            disabled={!shareBlob || !shareReady}
           >
-            {shareBlob ? "Share result" : "Preparing…"}
+            {shareBlob && shareReady ? "Share result" : "Preparing…"}
           </button>
           <button className="md-btn md-btn--lg md-btn--ink flex-1" onClick={onReset}>
             Play again

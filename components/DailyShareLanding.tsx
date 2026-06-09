@@ -238,12 +238,20 @@ function ShareLink({ date, you }: { date: string; you: DailyResult }) {
   // failing. By the time the user taps, shareUrl is already in hand so the
   // click handler hits presentShare with no preceding heavy await.
   const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "done" | "error">("idle");
+  // loading: minting the token · ready: link in hand · done: shared/copied ·
+  // error: mint OR share failed (button stays tappable so the user can retry).
+  const [status, setStatus] = useState<"loading" | "ready" | "done" | "error">("loading");
+  // Bumping this re-runs the mint effect (retry after a failed token fetch).
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const u = getSavedUser();
-    if (!u) return;
+    if (!u) {
+      setStatus("error"); // can't mint a signed link without a saved account
+      return;
+    }
     let active = true;
+    setStatus("loading");
     fetch("/api/daily/share", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -251,8 +259,12 @@ function ShareLink({ date, you }: { date: string; you: DailyResult }) {
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (active && d?.share) {
+        if (!active) return;
+        if (d?.share) {
           setShareUrl(`${SITE_URL}/d/${date}?s=${encodeURIComponent(d.share as string)}`);
+          setStatus("ready");
+        } else {
+          setStatus("error"); // non-OK response or missing token
         }
       })
       .catch(() => {
@@ -261,27 +273,41 @@ function ShareLink({ date, you }: { date: string; you: DailyResult }) {
     return () => {
       active = false;
     };
-  }, [date]);
+  }, [date, attempt]);
 
   const onShare = async () => {
     if (!shareUrl) return;
     const text = `82-0+ Daily ${prettyDate(date)} — I went ${you.wins}-${you.losses} (${sign(
       you.margin,
     )}). Can you beat it?\n${shareUrl}`;
-    const handled = await presentShare({ blob: null, filename: "", text, link: shareUrl });
-    setStatus("done");
-    setTimeout(() => setStatus("idle"), 1800);
-    void handled;
+    const outcome = await presentShare({ blob: null, filename: "", text, link: shareUrl });
+    if (outcome === "shared" || outcome === "copied") {
+      setStatus("done");
+      setTimeout(() => setStatus("ready"), 1800);
+    } else if (outcome === "failed") {
+      setStatus("error"); // copy blocked — let the user retry the share
+    }
+    // "cancelled" → leave the button as-is
+  };
+
+  // Ready → share. Error/no-link → retry: re-mint if the token never arrived,
+  // otherwise re-attempt the share itself.
+  const onClick = () => {
+    if (shareUrl) {
+      void onShare();
+    } else {
+      setAttempt((n) => n + 1);
+    }
   };
 
   return (
     <button
       type="button"
       className="md-btn md-btn--lg md-btn--teal"
-      disabled={!shareUrl}
-      onClick={onShare}
+      disabled={status === "loading"}
+      onClick={onClick}
     >
-      {!shareUrl
+      {status === "loading"
         ? "Preparing…"
         : status === "done"
           ? "Shared!"

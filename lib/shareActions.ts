@@ -24,14 +24,21 @@ function isUserCancel(err: unknown): boolean {
   return err instanceof DOMException && err.name === "AbortError";
 }
 
+// What actually happened, so callers only ever claim success on a real share or
+// copy — never when the clipboard was blocked.
+//   "shared"    — the native share sheet accepted it
+//   "cancelled" — the user dismissed the native sheet (do nothing)
+//   "copied"    — fell back to clipboard and the copy succeeded
+//   "failed"    — fell back to clipboard and every copy path failed
+export type ShareOutcome = "shared" | "cancelled" | "copied" | "failed";
+
 /**
- * Returns true if the share was handled natively (shared OR the user cancelled
- * the sheet) — the caller should do nothing more. Returns false when there was
- * no native share or it failed for a real reason; the caller should then show
- * its download/copy overlay. Either way the link is placed on the clipboard on
- * the non-native path.
+ * Tries the native share sheet first (image+link on touch, else text+link),
+ * then falls back to copying the link. The caller should show its download/copy
+ * overlay on "copied"/"failed", do nothing on "shared"/"cancelled", and only
+ * claim success ("Shared!"/"Copied!") on "shared"/"copied".
  */
-export async function presentShare({ blob, filename, text, link }: ShareArgs): Promise<boolean> {
+export async function presentShare({ blob, filename, text, link }: ShareArgs): Promise<ShareOutcome> {
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
   const touchPrimary =
     typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
@@ -48,10 +55,10 @@ export async function presentShare({ blob, filename, text, link }: ShareArgs): P
           ? { files: [file as File], text, url: link, title: "82-0+" }
           : { text, url: link, title: "82-0+" },
       );
-      return true;
+      return "shared";
     } catch (err) {
-      // User dismissed the sheet → handled, don't pop the overlay on top of it.
-      if (isUserCancel(err)) return true;
+      // User dismissed the sheet → don't pop the overlay on top of it.
+      if (isUserCancel(err)) return "cancelled";
       // NotAllowedError / TypeError / anything else is a real failure: fall
       // through to the clipboard + overlay path below.
     }
@@ -59,6 +66,5 @@ export async function presentShare({ blob, filename, text, link }: ShareArgs): P
 
   // Desktop / no file share / native failed: copy the link and tell the caller
   // to show the image overlay (download + copy).
-  await copyText(link);
-  return false;
+  return (await copyText(link)) ? "copied" : "failed";
 }

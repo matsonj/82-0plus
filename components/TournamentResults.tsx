@@ -267,6 +267,8 @@ export function TournamentResults({
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  // Whether the fallback auto-copy actually landed the link on the clipboard.
+  const [autoCopied, setAutoCopied] = useState(false);
   // A SERVER-SIGNED token for the sharer's stored daily result (unforgeable).
   const [dailyShareToken, setDailyShareToken] = useState<string | null>(null);
 
@@ -339,13 +341,14 @@ export function TournamentResults({
   const share = async () => {
     if (!myTeam || !shareReady || !shareBlob) return;
     const text = `82-0+ Tournament · ${you.name} — ${reachedLabel(you.reachedRound, isChampion)}\n${shareLink}`;
-    const handled = await presentShare({
+    const outcome = await presentShare({
       blob: shareBlob,
       filename: "82-0-tournament.png",
       text,
       link: shareLink,
     });
-    if (!handled) {
+    if (outcome === "copied" || outcome === "failed") {
+      setAutoCopied(outcome === "copied");
       setShareUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return URL.createObjectURL(shareBlob);
@@ -389,8 +392,10 @@ export function TournamentResults({
               className="mt-3 w-full border-2 border-[var(--md-ink)]"
             />
             <p className="mt-2 text-center text-[13px] leading-snug text-[var(--md-ink-muted)]">
-              <strong>Right-click to copy and share.</strong> The link is already
-              on your clipboard.
+              <strong>Right-click to copy and share.</strong>{" "}
+              {autoCopied
+                ? "The link is already on your clipboard."
+                : "Use “Copy link” below to copy the link."}
             </p>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <a
