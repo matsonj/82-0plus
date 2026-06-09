@@ -18,6 +18,7 @@ import {
 } from "@/lib/privateTournament";
 import { copyText } from "@/lib/copyText";
 import { SITE_URL } from "@/lib/site";
+import { validateManualBoard } from "@/lib/privateBoardRules";
 
 // A single manual board slot the admin is filling: a decade (from /api/decades)
 // + a team chosen from /api/private-tournament/teams?decade=. Distinctness +
@@ -28,23 +29,15 @@ interface ManualSlot {
   decade: number | null;
 }
 
-const MAX_PER_DECADE = 2;
-
-// Client mirror of validateManualBoard (lib/privateBoard.ts) for instant form
-// feedback. Returns null when the six are legal, else a short reason.
+// Client-side feedback uses the SAME pure validator the server runs
+// (lib/privateBoardRules.validateManualBoard), so the rule can't drift. A slot
+// with no decade yet is fed as NaN so the validator's well-formed check fires.
+// Returns null when the six are legal, else the validator's reason string.
 function manualReason(slots: ManualSlot[]): string | null {
-  if (slots.some((s) => !s.team || s.decade === null)) {
-    return "every slot needs a decade and a team";
-  }
-  const teams = new Set(slots.map((s) => s.team));
-  if (teams.size !== slots.length) return "six distinct teams — no repeats";
-  const per = new Map<number, number>();
-  for (const s of slots) {
-    const n = (per.get(s.decade!) ?? 0) + 1;
-    per.set(s.decade!, n);
-    if (n > MAX_PER_DECADE) return "a decade can appear at most twice";
-  }
-  return null;
+  const res = validateManualBoard(
+    slots.map((s) => ({ team: s.team, decade: s.decade ?? NaN })),
+  );
+  return res.ok ? null : res.reason;
 }
 
 export function PrivateTournamentCreate({

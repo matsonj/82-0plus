@@ -28,13 +28,26 @@ import {
   getTeamDecades,
   type IndexedPlayer,
 } from "./queries";
+import {
+  PRIVATE_STARTER_SLOTS,
+  PRIVATE_TOTAL_SLOTS,
+  validateManualBoard,
+  type PrivateBoard,
+  type PrivateSlot,
+} from "./privateBoardRules";
 import { simulateRoster, type ScoringPlayer } from "./scoring";
 import { hashSeed, mulberry32 } from "./tournament";
 import type { SimPick } from "./types";
 
-// 5 starter slots in lineup order + 1 bench (sixth man). Mirrors daily.ts.
-export const PRIVATE_STARTER_SLOTS = 5;
-const PRIVATE_TOTAL_SLOTS = PRIVATE_STARTER_SLOTS + 1;
+// The pure board types/constants/validator live in the client-safe rules module
+// (lib/privateBoardRules.ts) so the client form and this server module can't
+// drift. Re-export them here for existing importers of "@/lib/privateBoard".
+export {
+  PRIVATE_STARTER_SLOTS,
+  MAX_PER_DECADE,
+  validateManualBoard,
+} from "./privateBoardRules";
+export type { PrivateSlot, PrivateBoard } from "./privateBoardRules";
 
 // Lineup positions for the five starter slots, in board order — same as the
 // daily ghosts' KINDS. The 6th slot is the bench (no lineup position).
@@ -44,21 +57,6 @@ const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 // manual pick. Mirrors queries.ts MIN_PLAYERS_PER_COMBO (not exported there, so
 // re-declared locally; keep in sync).
 const MIN_PLAYERS_PER_COMBO = 10;
-
-// A manual board may repeat a decade at most this many times (six distinct
-// teams, but e.g. two 1990s squads is fine; three is not).
-const MAX_PER_DECADE = 2;
-
-export interface PrivateSlot {
-  team: string;
-  decade: number;
-}
-
-export interface PrivateBoard {
-  slots: PrivateSlot[]; // exactly 5 starter slots, in lineup order [G,FLEX,W,FLEX,B]
-  benchSlot: PrivateSlot; // the 6th (sixth man) — always present on a private board
-  mode: "blind" | "manual";
-}
 
 // ── (a) BLIND board ─────────────────────────────────────────────────────────
 
@@ -89,52 +87,10 @@ export async function computeBlindPrivateBoard(
 }
 
 // ── (b) MANUAL board ────────────────────────────────────────────────────────
-
-/**
- * PURE validator for an admin-built manual board. Enforces, in order:
- *   1. exactly 6 slots,
- *   2. each slot well-formed (non-empty team, a numeric decade),
- *   3. six DISTINCT NBA teams (by abbreviation),
- *   4. no decade appears more than twice.
- * Does NOT check positional depth (per spec — that's not pre-validated; an empty
- * combo is caught only by the async playability check below). The first five
- * slots are starters in the admin's order; the sixth is the bench.
- */
-export function validateManualBoard(
-  slots: PrivateSlot[],
-): { ok: true; board: PrivateBoard } | { ok: false; reason: string } {
-  if (slots.length !== PRIVATE_TOTAL_SLOTS) {
-    return { ok: false, reason: "pick exactly 6 teams" };
-  }
-  for (const s of slots) {
-    if (!s || !s.team || !Number.isFinite(s.decade)) {
-      return { ok: false, reason: "every slot needs a team and a decade" };
-    }
-  }
-
-  const teams = new Set(slots.map((s) => s.team));
-  if (teams.size !== PRIVATE_TOTAL_SLOTS) {
-    return { ok: false, reason: "six distinct teams — no repeats" };
-  }
-
-  const perDecade = new Map<number, number>();
-  for (const s of slots) {
-    const n = (perDecade.get(s.decade) ?? 0) + 1;
-    perDecade.set(s.decade, n);
-    if (n > MAX_PER_DECADE) {
-      return { ok: false, reason: "a decade can appear at most twice" };
-    }
-  }
-
-  return {
-    ok: true,
-    board: {
-      slots: slots.slice(0, PRIVATE_STARTER_SLOTS),
-      benchSlot: slots[PRIVATE_STARTER_SLOTS],
-      mode: "manual",
-    },
-  };
-}
+//
+// The PURE validateManualBoard (slot count, distinct teams, per-decade cap) now
+// lives in lib/privateBoardRules.ts and is imported above. The server adds only
+// the async playability check below on top of it.
 
 /**
  * Server-side manual-board check: everything validateManualBoard enforces PLUS a
