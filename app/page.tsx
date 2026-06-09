@@ -945,6 +945,9 @@ export default function Home() {
             result={result}
             shareText={shareText}
             shareLink={shareUrl}
+            // Daily: don't enable sharing until the signed token has come back
+            // from /api/daily/complete, else shareUrl is a bare /d/<date>.
+            shareReady={gameType !== "daily" || !!dailyShareToken}
             modeLabel={modeLabel}
             mode={mode}
             isDaily={gameType === "daily"}

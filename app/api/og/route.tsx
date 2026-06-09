@@ -17,6 +17,12 @@ const MUTED = "#818181";
 const W = 1200;
 const H = 630;
 
+// Read fonts once per cold start instead of on every request.
+const fontsPromise = Promise.all([
+  readFile(join(process.cwd(), "assets/fonts/SpaceMono-Regular.ttf")),
+  readFile(join(process.cwd(), "assets/fonts/SpaceMono-Bold.ttf")),
+]);
+
 function clampName(name: string): string {
   return name.length > 24 ? name.slice(0, 23) + "…" : name;
 }
@@ -25,10 +31,7 @@ export async function GET(request: Request) {
   const code = new URL(request.url).searchParams.get("r");
   const data = code ? decodeShare(code) : null;
 
-  const [regular, bold] = await Promise.all([
-    readFile(join(process.cwd(), "assets/fonts/SpaceMono-Regular.ttf")),
-    readFile(join(process.cwd(), "assets/fonts/SpaceMono-Bold.ttf")),
-  ]);
+  const [regular, bold] = await fontsPromise;
 
   // Fallback card when the payload is missing/corrupt — still on-brand.
   const wins = data?.w ?? 0;
@@ -156,6 +159,7 @@ export async function GET(request: Request) {
         { name: "Space Mono", data: regular, weight: 400, style: "normal" },
         { name: "Space Mono", data: bold, weight: 700, style: "normal" },
       ],
+      headers: { "Cache-Control": "public, immutable, no-transform, max-age=31536000" },
     },
   );
 }

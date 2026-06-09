@@ -10,6 +10,7 @@ import type {
 import { BracketView } from "@/components/BracketView";
 import { buildTournamentShareImage } from "@/lib/shareImage";
 import { presentShare } from "@/lib/shareActions";
+import { copyText } from "@/lib/copyText";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { SITE_URL } from "@/lib/site";
 import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
@@ -264,8 +265,10 @@ export function TournamentResults({
   })();
   const [showRoster, setShowRoster] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
+  const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  // Whether the fallback auto-copy actually landed the link on the clipboard.
+  const [autoCopied, setAutoCopied] = useState(false);
   // A SERVER-SIGNED token for the sharer's stored daily result (unforgeable).
   const [dailyShareToken, setDailyShareToken] = useState<string | null>(null);
 
@@ -289,6 +292,37 @@ export function TournamentResults({
     };
   }, [isDaily, dailyDate]);
 
+  // Precompute the share PNG so the click handler can call the native share
+  // sheet synchronously (iOS requires the share() call to happen in the same
+  // user-gesture tick — no awaits before it).
+  useEffect(() => {
+    if (!myTeam) { setShareBlob(null); return; }
+    let active = true;
+    const reg = regSeasonRecord(myTeam.seedNet);
+    const playoff = computeRoundRecords(bracket, you.id);
+    buildTournamentShareImage({
+      teamName: you.name,
+      conference: you.conference,
+      seed: you.seed,
+      isChampion,
+      reachedLabel: shortReached(you.reachedRound, isChampion),
+      regWins: reg.w,
+      regLosses: reg.l,
+      playoffWins: playoff.totalW,
+      playoffLosses: playoff.totalL,
+      tier: isDaily ? undefined : tierForSeedNet(myTeam.seedNet)?.label,
+      modeLabel: tournamentModeLabel(mode, dailyDate),
+      roster: isDaily ? [] : myTeam.roster ?? [],
+      sixthMan: isDaily ? undefined : myTeam.sixthMan,
+      box: isDaily ? (data.teamBox ?? EMPTY_BOX) : undefined,
+      actualMargin: isDaily ? data.realizedMargin : undefined,
+    })
+      .then((b) => { if (active) setShareBlob(b); })
+      .catch(() => {});
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myTeam, bracket, you, isChampion, isDaily, mode, dailyDate, data]);
+
   // Daily shares drive recipients into the (login-gated) day's challenge with a
   // head-to-head compare — NOT the public bracket. The signed token carries the
   // sharer's record; others use /t/<id>.
@@ -299,48 +333,26 @@ export function TournamentResults({
         ? `${SITE_URL}/t/${data.teamId}`
         : SITE_URL;
 
+  // For daily we must hold the signed token before sharing — never share a bare
+  // /d/<date> link (it would unfurl without the head-to-head card). Non-daily
+  // shares only need the precomputed image.
+  const shareReady = !!shareBlob && (!isDaily || !!dailyShareToken);
+
   const share = async () => {
-    if (!myTeam) return;
-    setSharing(true);
-    try {
-      const reg = regSeasonRecord(myTeam.seedNet);
-      const playoff = computeRoundRecords(bracket, you.id);
-      const blob = await buildTournamentShareImage({
-        teamName: you.name,
-        conference: you.conference,
-        seed: you.seed,
-        isChampion,
-        reachedLabel: shortReached(you.reachedRound, isChampion),
-        regWins: reg.w,
-        regLosses: reg.l,
-        playoffWins: playoff.totalW,
-        playoffLosses: playoff.totalL,
-        tier: isDaily ? undefined : tierForSeedNet(myTeam.seedNet)?.label,
-        modeLabel: tournamentModeLabel(mode, dailyDate),
-        // Daily cards reveal NOTHING about the picks: pass the team's 9 stats +
-        // the actual playoff margin instead of the roster. (box falls back to the
-        // reg-season teamBox from the run/lookup response.)
-        roster: isDaily ? [] : myTeam.roster ?? [],
-        sixthMan: isDaily ? undefined : myTeam.sixthMan,
-        box: isDaily ? (data.teamBox ?? EMPTY_BOX) : undefined,
-        actualMargin: isDaily ? data.realizedMargin : undefined,
+    if (!myTeam || !shareReady || !shareBlob) return;
+    const text = `82-0+ Tournament · ${you.name} — ${reachedLabel(you.reachedRound, isChampion)}\n${shareLink}`;
+    const outcome = await presentShare({
+      blob: shareBlob,
+      filename: "82-0-tournament.png",
+      text,
+      link: shareLink,
+    });
+    if (outcome === "copied" || outcome === "failed") {
+      setAutoCopied(outcome === "copied");
+      setShareUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(shareBlob);
       });
-      // Mobile → native share sheet (image + text incl. link); desktop → overlay.
-      const text = `82-0+ Tournament · ${you.name} — ${reachedLabel(you.reachedRound, isChampion)}\n${shareLink}`;
-      const handled = await presentShare({
-        blob,
-        filename: "82-0-tournament.png",
-        text,
-        link: shareLink,
-      });
-      if (!handled && blob) {
-        setShareUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return URL.createObjectURL(blob);
-        });
-      }
-    } finally {
-      setSharing(false);
     }
   };
 
@@ -380,8 +392,10 @@ export function TournamentResults({
               className="mt-3 w-full border-2 border-[var(--md-ink)]"
             />
             <p className="mt-2 text-center text-[13px] leading-snug text-[var(--md-ink-muted)]">
-              <strong>Right-click to copy and share.</strong> The link is already
-              on your clipboard.
+              <strong>Right-click to copy and share.</strong>{" "}
+              {autoCopied
+                ? "The link is already on your clipboard."
+                : "Use “Copy link” below to copy the link."}
             </p>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <a
@@ -394,12 +408,10 @@ export function TournamentResults({
               <button
                 className="md-btn md-btn--sm md-btn--secondary"
                 onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(shareLink);
+                  const ok = await copyText(shareLink);
+                  if (ok) {
                     setLinkCopied(true);
                     setTimeout(() => setLinkCopied(false), 1500);
-                  } catch {
-                    /* clipboard blocked */
                   }
                 }}
               >
@@ -504,9 +516,9 @@ export function TournamentResults({
             <button
               className="md-btn md-btn--lg md-btn--teal"
               onClick={share}
-              disabled={sharing}
+              disabled={!shareReady}
             >
-              {sharing ? "Building…" : "Share result"}
+              {shareReady ? "Share result" : "Preparing…"}
             </button>
           )}
           {onReset && (

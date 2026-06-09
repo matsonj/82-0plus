@@ -65,6 +65,11 @@ export async function generateMetadata({
       )}`
     : "/api/og";
 
+  // Canonical share URL: include the signed token only when it actually
+  // verifies (so a tampered/expired token canonicalises to the bare daily).
+  // Relative is fine — metadataBase (app/layout.tsx) absolutizes it.
+  const canonical = sharer && s ? `/d/${date}?s=${encodeURIComponent(s)}` : `/d/${date}`;
+
   return {
     title,
     description,
@@ -73,6 +78,7 @@ export async function generateMetadata({
       description,
       type: "website",
       siteName: "82-0+",
+      url: canonical,
       images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
     },
     twitter: { card: "summary_large_image", title, description, images: [ogImage] },
