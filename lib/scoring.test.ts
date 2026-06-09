@@ -64,6 +64,17 @@ describe("simulateRoster", () => {
     expect(netRatingForPerfect()).toBeCloseTo(15.2, 1);
   });
 
+  it("keeps unrounded seedNet for tier math when display net rounds up", () => {
+    const edgeNet = (81.49 - C.BASE_WINS) / C.WINS_PER_NET;
+    const edgeGq =
+      C.AVG_GQ + edgeNet / (C.NET_PER_GQ * (1 + C.SYNERGY_FRAC));
+    const r = simulateRoster(balancedRoster(edgeGq));
+
+    expect(r.wins).toBe(81);
+    expect(r.netRating).toBe(15);
+    expect(r.seedNet).toBeLessThan(15);
+  });
+
   it("an elite, spaced, ball-moving, balanced roster earns synergy and goes 82-0", () => {
     const r = simulateRoster(balancedRoster(0.92));
     expect(r.synergyBonus).toBeGreaterThan(0);

@@ -25,7 +25,7 @@
  * Stored JSON shape (must match how drawOpponents/hydrateStoredTeam re-reads it):
  *   roster_json : SimPick[]   -> [{ entity_id, team, decade, slot }]  (5 starters)
  *   sixth_json  : StoredSixth -> { entity_id, team, decade }          (bench)
- *   seed_net    : DOUBLE      -> simulateRoster(starters).netRating
+ *   seed_net    : DOUBLE      -> simulateRoster(starters).seedNet
  */
 
 import "./_env"; // loads .env.local before any lib/* module reads process.env
@@ -204,7 +204,7 @@ function buildStrongGhost(
     if (!built) continue;
     const seedNet = simulateRoster(
       built.starters.map((s) => toScoring(s.player)),
-    ).netRating;
+    ).seedNet;
     const candidate = { ...built, seedNet };
     if (seedNet >= NET_FLOOR) return candidate; // cleared the floor — done.
     if (!best || seedNet > best.seedNet) best = candidate; // keep the strongest.

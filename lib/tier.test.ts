@@ -35,6 +35,14 @@ describe("tierForWins — band boundaries", () => {
   it.each(cases)("%i wins → %s", (wins, key) => {
     expect(tierForWins(wins)?.key ?? null).toBe(key);
   });
+
+  it("keeps a displayed +15.0 / 81-win edge in AA when fed unrounded seed net", () => {
+    const seedNet = (81.49 - 41) / 2.7;
+
+    expect(seedNet.toFixed(1)).toBe("15.0");
+    expect(regWinsFromSeedNet(seedNet)).toBe(81);
+    expect(tierForSeedNet(seedNet)?.key).toBe("AA");
+  });
 });
 
 describe("eligibility", () => {
