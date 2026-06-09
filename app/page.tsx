@@ -386,6 +386,25 @@ export default function Home() {
     })();
   }, [flushPendingDaily, refreshDailyResults]);
 
+  // Cross-device freshness: the menu fetches completions only once at mount, so a
+  // result recorded on ANOTHER device (e.g. you played today on mobile) never
+  // reaches an already-open desktop tab — the archive/today card keep showing
+  // "Play" until you click in and the server reveals it. Re-pull whenever the tab
+  // becomes visible again, which covers tab switches and iOS bfcache restores.
+  useEffect(() => {
+    const sync = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!getSavedUser()) return;
+      void refreshDailyResults();
+    };
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("pageshow", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("pageshow", sync);
+    };
+  }, [refreshDailyResults]);
+
   const backToMenu = () => {
     setPhase("menu");
     setResult(null);
