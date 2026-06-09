@@ -61,7 +61,8 @@ export interface TournamentTeam {
  */
 export const TOURNAMENT_CONFIG = {
   // Home-court edge, split zero-sum: home +HOME_BUFF/2, away -HOME_BUFF/2.
-  HOME_BUFF: 5.5,
+  // Trimmed 25% (5.5 → 4.125) so home court matters a bit less.
+  HOME_BUFF: 4.125,
 
   // Size edge: net per inch of summed-starter-height advantage vs the opponent,
   // capped both directions (zero-sum — what one team gains the other loses).
@@ -431,10 +432,11 @@ function teamHeight(team: TournamentTeam): number {
  *  but are unused now. */
 const CLINCH: Record<5 | 7, number> = { 5: 3, 7: 4 };
 
-/** Home/away game ownership by the HIGHER seed (`hi`): 2-2-1 / 2-3-2. */
-const HOME_OWNER: Record<5 | 7, ("hi" | "lo")[]> = {
+/** Home/away game ownership by the HIGHER seed (`hi`): 2-2-1 / 2-2-1-1-1 (the
+ *  modern NBA format — the 7-game series alternates after the first four). */
+export const HOME_OWNER: Record<5 | 7, ("hi" | "lo")[]> = {
   5: ["hi", "hi", "lo", "lo", "hi"],
-  7: ["hi", "hi", "lo", "lo", "lo", "hi", "hi"],
+  7: ["hi", "hi", "lo", "lo", "hi", "lo", "hi"],
 };
 
 /** Static (per-matchup) buffs that don't change game to game within a series. */
