@@ -388,16 +388,6 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
             </button>
           </div>
         )}
-
-        <div className="flex">
-          <button
-            type="button"
-            className="md-btn md-btn--secondary"
-            onClick={resetToForm}
-          >
-            ← Check a different name
-          </button>
-        </div>
       </div>
     );
   }

@@ -11,6 +11,10 @@ export interface SharePayload {
   m: string; // mode label (e.g. "Classic", "Daily 2026-06-03")
   r: SharePlayer[]; // roster lines, in board order (empty for daily — no spoilers)
   u?: string; // sharer's account name (daily links — powers the head-to-head compare)
+  // The sharer's daily-TOURNAMENT run, when they entered one. Its presence flips
+  // the OG card to the tournament layout (reg-season + playoffs), so a shared
+  // bracket link unfurls as a tournament card, not the plain daily card.
+  tn?: { w: number; l: number; n: number; r: number }; // playoff w/l, realized margin, reached round
 }
 
 export interface SharePlayer {
@@ -31,6 +35,7 @@ type Packed = [
   string, // label
   Array<[string, number, string, number, number, number]>,
   string?, // sharer name (optional, daily links)
+  [number, number, number, number]?, // tournament: [w, l, n*10, reachedRound] (optional)
 ];
 
 function toBase64Url(bytes: string): string {
@@ -59,6 +64,9 @@ export function encodeShare(payload: SharePayload): string {
     payload.r.map((p) => [p.t, p.s, p.name, p.pts, p.reb, p.ast]),
     payload.u ?? "",
   ];
+  if (payload.tn) {
+    packed[7] = [payload.tn.w, payload.tn.l, Math.round(payload.tn.n * 10), payload.tn.r];
+  }
   return toBase64Url(JSON.stringify(packed));
 }
 
@@ -66,7 +74,7 @@ export function decodeShare(code: string): SharePayload | null {
   try {
     const packed = JSON.parse(fromBase64Url(code)) as Packed;
     if (!Array.isArray(packed) || packed.length < 6) return null;
-    const [w, l, n10, p, m, r, u] = packed;
+    const [w, l, n10, p, m, r, u, tn] = packed;
     if (
       typeof w !== "number" ||
       typeof l !== "number" ||
@@ -87,6 +95,9 @@ export function decodeShare(code: string): SharePayload | null {
     return {
       w, l, n: n10 / 10, p: p === 1, m, r: roster,
       u: typeof u === "string" && u ? u : undefined,
+      tn: Array.isArray(tn)
+        ? { w: Number(tn[0]), l: Number(tn[1]), n: Number(tn[2]) / 10, r: Number(tn[3]) }
+        : undefined,
     };
   } catch {
     return null;

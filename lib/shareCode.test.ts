@@ -38,6 +38,17 @@ describe("shareCode", () => {
     expect(decoded?.p).toBe(false);
   });
 
+  it("round-trips a daily-tournament payload (reg-season + playoff run)", () => {
+    const tourn: SharePayload = {
+      ...sample, w: 66, l: 16, n: 9.1, p: false, r: [], u: "JMONEY",
+      tn: { w: 13, l: 11, n: -0.8, r: 4 },
+    };
+    const decoded = decodeShare(encodeShare(tourn));
+    expect(decoded?.tn).toEqual({ w: 13, l: 11, n: -0.8, r: 4 });
+    expect(decoded?.u).toBe("JMONEY");
+    expect(decoded?.w).toBe(66);
+  });
+
   it("returns null on garbage input", () => {
     expect(decodeShare("not-valid-base64!!")).toBeNull();
     expect(decodeShare("")).toBeNull();

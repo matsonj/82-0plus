@@ -61,6 +61,15 @@ export async function generateMetadata({
         encodeShare({
           w: sharer.wins, l: sharer.losses, n: sharer.margin, p: sharer.perfect,
           m: `Daily ${date}`, r: [], u: sharer.name,
+          // A tournament share unfurls as the tournament card (reg-season + playoffs).
+          tn: sharer.tournament
+            ? {
+                w: sharer.tournament.recordW,
+                l: sharer.tournament.recordL,
+                n: sharer.tournament.realizedMargin,
+                r: sharer.tournament.reachedRound,
+              }
+            : undefined,
         }),
       )}`
     : "/api/og";
