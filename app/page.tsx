@@ -18,6 +18,7 @@ import { DailyArchive } from "@/components/DailyArchive";
 import { DailySignIn } from "@/components/DailySignIn";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { TournamentEntry } from "@/components/TournamentEntry";
+import { GlobalHeader } from "@/components/GlobalHeader";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
 import { encodeShare } from "@/lib/shareCode";
@@ -777,28 +778,22 @@ export default function Home() {
       )}
       <div className="md-sunbeam" />
 
-      <header className="relative z-10 flex items-center justify-between py-4 sm:py-5">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl" aria-hidden>
-            🦆
-          </span>
-          <span className="font-display text-lg font-bold tracking-tight">
-            82-0<span className="text-[var(--md-orange)]">+</span>
-          </span>
-        </div>
-        {phase === "play" && (
-          <span
-            className="md-capsule"
-            style={
-              mode === "hoopiq"
-                ? { background: "var(--md-ink)", color: "var(--md-white)" }
-                : undefined
-            }
-          >
-            {mode === "hoopiq" ? "Ranked" : "Classic"}
-          </span>
-        )}
-      </header>
+      <GlobalHeader
+        right={
+          phase === "play" ? (
+            <span
+              className="md-capsule"
+              style={
+                mode === "hoopiq"
+                  ? { background: "var(--md-ink)", color: "var(--md-white)" }
+                  : undefined
+              }
+            >
+              {mode === "hoopiq" ? "Ranked" : "Classic"}
+            </span>
+          ) : undefined
+        }
+      />
 
       {/* ---------------- MENU ---------------- */}
       {phase === "menu" && (
@@ -920,6 +915,25 @@ export default function Home() {
               </p>
             </button>
           </div>
+          {/* Private tournaments — invite-only brackets you host or join by link. */}
+          <Link
+            href="/tournament?tab=private"
+            className="md-card md-card--lift mt-6 flex w-full max-w-md items-center justify-between gap-3 p-4 text-left transition-transform hover:-translate-y-0.5"
+            style={{ background: "var(--md-paper-2)" }}
+          >
+            <div>
+              <div className="font-display text-lg font-bold">
+                Private Tournament
+              </div>
+              <p className="mt-0.5 text-[13px] text-[var(--md-ink-muted)]">
+                Host a bracket for your friends, or join one by link.
+              </p>
+            </div>
+            <span className="text-2xl" aria-hidden>
+              🏆
+            </span>
+          </Link>
+
           <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
             <button
               className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"

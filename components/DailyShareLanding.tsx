@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { GlobalHeader } from "@/components/GlobalHeader";
 import { DailySignIn } from "@/components/DailySignIn";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { normalizeName } from "@/lib/tournamentValidation";
@@ -123,12 +124,11 @@ export function DailyShareLanding({
     !!sharer && !!viewer && normalizeName(viewer) === normalizeName(sharer.name);
 
   return (
-    <main className="relative mx-auto flex min-h-full max-w-xl flex-col items-center px-4 py-12 text-center">
+    <main className="relative mx-auto flex min-h-full max-w-xl flex-col items-center px-4 pb-12 text-center">
       <div className="md-sunbeam" />
-      <Link href="/" className="relative z-10 flex items-center gap-2 font-display text-lg font-bold tracking-tight">
-        <span className="text-2xl" aria-hidden>🦆</span>
-        82-0<span className="text-[var(--md-orange)]">+</span>
-      </Link>
+      <div className="w-full">
+        <GlobalHeader />
+      </div>
 
       <div className="md-card md-card--lift relative z-10 mt-8 flex w-full flex-col gap-4 p-6">
         <div className="md-capsule mx-auto">Daily Challenge · {prettyDate(date)}</div>

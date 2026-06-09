@@ -47,6 +47,12 @@ export interface TeamRecord {
  * Walk the bracket for one team and total its game record + average point margin
  * (using the per-game box scores) across every series it played. Stops at the
  * first round it loses (or doesn't appear in). Used to memorialize a team.
+ *
+ * PLAY-IN (size 20): play-in games live in `bracket.playIn`, NOT in `bracket.rounds`,
+ * so they're EXCLUDED from the displayed W-L here by construction (we only iterate
+ * `rounds`). A team eliminated in the play-in never appears in any round, so it
+ * gets 0-0 / reachedRound 0; the UI reads its `lostPlayIn` flag (on the BracketTeam)
+ * to show "Lost Play-In" next to its regular-season record instead.
  */
 export function deriveRecord(
   bracket: BracketResult,

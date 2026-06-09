@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import type {
   TournamentLookupResponse,
   TournamentTeamSummary,
   TournamentRunResponse,
+  TournamentMode,
   BracketPlayer,
 } from "@/lib/types";
 import {
@@ -14,7 +16,44 @@ import {
 } from "@/lib/tournamentValidation";
 import { TournamentResults } from "@/components/TournamentResults";
 import { TierBadge } from "@/components/TierBadge";
+import { PrivateTournamentCreate } from "@/components/private/PrivateTournamentCreate";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
+
+// One private tournament row from POST /api/private-tournament/my — the full
+// list of tournaments the account has an entry in (newest first), INCLUDING
+// viewed-completed ones (unlike /notifications). `needsAttention` drives the
+// unread dot.
+interface MyPrivateRow {
+  tournamentId: string;
+  name: string;
+  mode: string;
+  modeLabel: string;
+  size: number;
+  status: "open" | "completed";
+  championName: string | null;
+  expiresAt: string;
+  finalizedAt: string | null;
+  viewedFinalAt: string | null;
+  entryStatus: string;
+  finalRecordW: number | null;
+  finalRecordL: number | null;
+  finalStatus: string | null;
+  provisionalRecordW: number | null;
+  provisionalRecordL: number | null;
+  provisionalStatus: string | null;
+  needsAttention: boolean;
+}
+
+// The four My-Teams filters. The first three filter the existing team list by
+// TournamentMode; "private" swaps to the private-tournament feed.
+type Tab = "daily" | "hoopiq" | "classic" | "private";
+
+const TAB_LABEL: Record<Tab, string> = {
+  daily: "Daily",
+  hoopiq: "Ranked",
+  classic: "Classic",
+  private: "Private",
+};
 
 // reachedRound: 0 = lost R1 … 4 = champion. Short list-row phrasing.
 function reachedPhrase(reachedRound: number): string {
@@ -172,10 +211,77 @@ function TeamRow({
   );
 }
 
+// One private-tournament row in the Private tab. Unfinished → opens the lobby;
+// completed → opens the final results. Both live at /p/<id>. A red dot marks a
+// row that needs attention (unviewed final / unfinished draft).
+function PrivateRow({ row }: { row: MyPrivateRow }) {
+  const completed = row.status === "completed";
+  return (
+    <Link
+      href={`/p/${row.tournamentId}`}
+      className="md-card md-card--lift flex flex-col gap-2 p-4 transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px]"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2">
+          {row.needsAttention && (
+            <span
+              aria-label="Needs attention"
+              className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--md-ink)]"
+              style={{ background: "var(--md-coral)" }}
+            />
+          )}
+          <span className="min-w-0 truncate font-display text-lg font-bold leading-tight">
+            {row.name}
+          </span>
+        </span>
+        <span
+          className="md-capsule shrink-0"
+          style={
+            row.mode === "hoopiq"
+              ? { background: "var(--md-ink)", color: "var(--md-white)" }
+              : undefined
+          }
+        >
+          {row.modeLabel}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-display text-sm font-bold">
+          {completed
+            ? row.finalRecordW != null && row.finalRecordL != null
+              ? `${row.finalRecordW}–${row.finalRecordL} · ${row.finalStatus ?? "Final"}`
+              : row.championName
+                ? `🏆 ${row.championName}`
+                : "Final ready"
+            : row.entryStatus === "submitted"
+              ? "Submitted · awaiting results"
+              : row.entryStatus === "partial"
+                ? "Draft in progress"
+                : "Draft not started"}
+        </span>
+        <span className="font-display text-[11px] uppercase tracking-wide text-[var(--md-blue)]">
+          {completed ? "View results →" : "Open lobby →"}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
 type View = "form" | "list" | "team";
 
-export function TournamentLookup({ onBack }: { onBack?: () => void }) {
+export function TournamentLookup({
+  onBack,
+  initialTab,
+}: {
+  onBack?: () => void;
+  initialTab?: Tab;
+}) {
   const [view, setView] = useState<View>("form");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "daily");
+  // Private-tab state.
+  const [privateRows, setPrivateRows] = useState<MyPrivateRow[] | null>(null);
+  const [privateLoading, setPrivateLoading] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   // True until we've checked for a saved session on mount. While true (and a
   // saved user exists) we show a loader, not the login form, so a logged-in
@@ -269,8 +375,39 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
     clearUser();
     setName("");
     setPin("");
+    setPrivateRows(null);
     resetToForm();
   };
+
+  // Fetch the user's full private-tournament list (newest-first, incl. viewed-
+  // completed) via /my. Re-authenticates with name+PIN.
+  const loadPrivate = useCallback(async (uname: string, upin: string) => {
+    setPrivateLoading(true);
+    try {
+      const res = await fetch("/api/private-tournament/my", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: uname, pin: upin }),
+      });
+      if (!res.ok) {
+        setPrivateRows([]);
+        return;
+      }
+      const data = (await res.json()) as { tournaments: MyPrivateRow[] };
+      setPrivateRows(data.tournaments ?? []);
+    } catch {
+      setPrivateRows([]);
+    } finally {
+      setPrivateLoading(false);
+    }
+  }, []);
+
+  // Load the private feed the first time the Private tab is opened on the list.
+  useEffect(() => {
+    if (view !== "list" || tab !== "private" || privateRows !== null) return;
+    if (!nameCheck.ok || !pinOk) return;
+    void loadPrivate(name, pin);
+  }, [view, tab, privateRows, name, pin, nameCheck.ok, pinOk, loadPrivate]);
 
   const openTeam = async (teamId: string) => {
     if (loadingTeamId) return;
@@ -314,22 +451,21 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
 
   // ---- Teams list view. ----
   if (view === "list" && lookup) {
-    const teams = lookup.teams;
-    const pageCount = Math.max(1, Math.ceil(teams.length / TEAMS_PER_PAGE));
+    // Filter the existing team list by the active mode tab (daily/hoopiq/classic).
+    const filtered =
+      tab === "private"
+        ? []
+        : lookup.teams.filter((t) => t.mode === (tab as TournamentMode));
+    const pageCount = Math.max(1, Math.ceil(filtered.length / TEAMS_PER_PAGE));
     const safePage = Math.min(page, pageCount - 1);
-    const shown = teams.slice(
+    const shown = filtered.slice(
       safePage * TEAMS_PER_PAGE,
       safePage * TEAMS_PER_PAGE + TEAMS_PER_PAGE,
     );
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-4">
         <div className="flex items-end justify-between gap-3">
-          <div>
-            <div className="font-display text-2xl font-bold">{lookup.name}</div>
-            <p className="mt-0.5 font-display text-xs uppercase tracking-wide text-[var(--md-ink-muted)]">
-              {teams.length} {teams.length === 1 ? "team" : "teams"}
-            </p>
-          </div>
+          <div className="font-display text-2xl font-bold">{lookup.name}</div>
           <button
             type="button"
             className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
@@ -339,17 +475,76 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
           </button>
         </div>
 
+        {/* Filter tabs. */}
+        <div className="flex flex-wrap gap-1.5">
+          {(["daily", "hoopiq", "classic", "private"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => {
+                setTab(t);
+                setPage(0);
+              }}
+              className="border-2 border-[var(--md-ink)] px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide"
+              style={{
+                background: tab === t ? "var(--md-ink)" : "var(--md-white)",
+                color: tab === t ? "var(--md-white)" : "var(--md-ink)",
+                cursor: "pointer",
+              }}
+            >
+              {TAB_LABEL[t]}
+            </button>
+          ))}
+        </div>
+
         {listError && (
           <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
             {listError}
           </div>
         )}
 
-        {teams.length === 0 ? (
+        {/* ---- Private tab ---- */}
+        {tab === "private" ? (
+          <div className="flex flex-col gap-3">
+            {showCreate ? (
+              <PrivateTournamentCreate onCancel={() => setShowCreate(false)} />
+            ) : (
+              <button
+                type="button"
+                className="md-btn md-btn--teal"
+                onClick={() => setShowCreate(true)}
+              >
+                + Create private tournament
+              </button>
+            )}
+
+            {!showCreate &&
+              (privateLoading ? (
+                <div className="py-6 text-center font-display text-sm text-[var(--md-ink-muted)]">
+                  Loading your private tournaments…
+                </div>
+              ) : privateRows && privateRows.length > 0 ? (
+                privateRows.map((r) => (
+                  <PrivateRow key={r.tournamentId} row={r} />
+                ))
+              ) : (
+                <div className="md-card flex flex-col gap-1 p-5 text-center">
+                  <div className="font-display text-lg font-bold">
+                    No active private tournaments
+                  </div>
+                  <p className="text-[13px] text-[var(--md-ink-muted)]">
+                    Create one above, or open a friend&rsquo;s invite link.
+                  </p>
+                </div>
+              ))}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="md-card flex flex-col gap-1 p-5 text-center">
             <div className="font-display text-lg font-bold">No teams yet</div>
             <p className="text-[13px] text-[var(--md-ink-muted)]">
-              Play a Classic or Ranked season and hit Enter Tournament.
+              {tab === "daily"
+                ? "Play a Daily Challenge to see it here."
+                : "Play a Classic or Ranked season and hit Enter Tournament."}
             </p>
           </div>
         ) : (
@@ -365,7 +560,7 @@ export function TournamentLookup({ onBack }: { onBack?: () => void }) {
           </div>
         )}
 
-        {pageCount > 1 && (
+        {tab !== "private" && pageCount > 1 && (
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"

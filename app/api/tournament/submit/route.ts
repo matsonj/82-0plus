@@ -1,8 +1,9 @@
 import { scryptSync, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
 import { simulateRoster } from "@/lib/scoring";
-import { canPlay, type SlotKind } from "@/lib/positions";
+import { canPlay } from "@/lib/positions";
 import { getOfferedIds } from "@/lib/queries";
+import { KINDS, parsePicks, parseSixth } from "@/lib/rosterParse";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import {
   validateName,
@@ -28,7 +29,7 @@ import { isEligible, regWinsFromSeedNet, MIN_ELIGIBLE_WINS } from "@/lib/tier";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import { computeDailyBoard } from "@/lib/daily";
 import { ensureDailyGhosts } from "@/lib/dailyGhosts";
-import type { SimPick, TournamentRunResponse } from "@/lib/types";
+import type { TournamentRunResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,63 +37,6 @@ export const dynamic = "force-dynamic";
 // Per-game modifier breakdown is debug-only; gate it server-side too (not just
 // the UI), so the model internals aren't readable from the API in normal play.
 const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "1";
-
-// Must mirror the client lineup board (same as /api/simulate).
-const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
-
-// 5 entries, distinct slots covering all of [G,FLEX,W,FLEX,B], distinct players,
-// team matches /^[A-Z]{3}$/. Identical logic to /api/simulate's parsePicks.
-function parsePicks(raw: unknown): SimPick[] | null {
-  if (!Array.isArray(raw) || raw.length !== KINDS.length) return null;
-  const picks: SimPick[] = [];
-  const slotsSeen = new Set<number>();
-  const idsSeen = new Set<string>();
-  for (const item of raw) {
-    const r = (item ?? {}) as Record<string, unknown>;
-    const entity_id = String(r.entity_id ?? "");
-    const team = String(r.team ?? "");
-    const decade = Number(r.decade);
-    const slot = Number(r.slot);
-    if (
-      !entity_id ||
-      !/^[A-Z]{3}$/.test(team) ||
-      !Number.isInteger(decade) ||
-      !Number.isInteger(slot) ||
-      slot < 0 ||
-      slot >= KINDS.length ||
-      slotsSeen.has(slot) ||
-      idsSeen.has(entity_id)
-    ) {
-      return null;
-    }
-    slotsSeen.add(slot);
-    idsSeen.add(entity_id);
-    picks.push({ entity_id, team, decade, slot });
-  }
-  return picks;
-}
-
-interface SixthPick {
-  entity_id: string;
-  team: string;
-  decade: number;
-}
-
-/** Validate the sixth man payload shape; null on malformed input. */
-function parseSixth(raw: unknown): SixthPick | null {
-  const r = (raw ?? {}) as Record<string, unknown>;
-  const entity_id = String(r.entity_id ?? "");
-  const team = String(r.team ?? "");
-  const decade = Number(r.decade);
-  if (
-    !entity_id ||
-    !/^[A-Z]{3}$/.test(team) ||
-    !Number.isInteger(decade)
-  ) {
-    return null;
-  }
-  return { entity_id, team, decade };
-}
 
 export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);

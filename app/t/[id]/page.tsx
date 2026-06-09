@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import type { BracketResult } from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
+import { GlobalHeader } from "@/components/GlobalHeader";
 
 type Status = "loading" | "ok" | "error";
 
@@ -45,19 +46,13 @@ export default function PublicBracketPage({
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
       <div className="md-sunbeam" />
-      <header className="relative z-10 flex items-center justify-between py-4 sm:py-5">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-2xl" aria-hidden>
-            🦆
+      <GlobalHeader
+        right={
+          <span className="md-capsule" style={{ background: "var(--md-orange)" }}>
+            Tournament Edition
           </span>
-          <span className="font-display text-lg font-bold tracking-tight">
-            82-0<span className="text-[var(--md-orange)]">+</span>
-          </span>
-        </Link>
-        <span className="md-capsule" style={{ background: "var(--md-orange)" }}>
-          Tournament Edition
-        </span>
-      </header>
+        }
+      />
 
       <section className="relative z-10 mt-4">
         {status === "loading" && (

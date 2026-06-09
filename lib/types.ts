@@ -168,11 +168,13 @@ export interface GameResult {
   breakdown?: Record<string, GameBreakdown>; // keyed by team id (home & away)
 }
 
-/** A playoff series. `hi` = higher seed (owns home court under 2-2-1 / 2-3-2). */
+/** A playoff series. `hi` = higher seed (owns home court under 2-2-1 / 2-3-2).
+ *  `bestOf` is 7 for every main-bracket round; 1 only appears internally for the
+ *  size-20 play-in (which is surfaced as a PlayInResult, not in `rounds`). */
 export interface SeriesResult {
   hiId: string;
   loId: string;
-  bestOf: 5 | 7;
+  bestOf: 1 | 5 | 7;
   games: GameResult[];
   winnerId: string;
   scoreHi: number;
@@ -193,20 +195,48 @@ export interface BracketTeam {
   name: string;
   isGhost: boolean;
   conference: Conference;
-  seed: number; // 1..8 within conference
+  seed: number; // 1..N within conference (N = size/2)
   seedNet: number; // seeding net rating (NO buffs)
   // Roster for the expandable team panel. Optional: brackets stored before this
   // field shipped won't carry it (the viewer degrades gracefully).
   roster?: BracketPlayer[]; // the five starters, slot order [G,FLEX,W,FLEX,B]
   sixthMan?: BracketPlayer; // the bench player
+  // Size-20 play-in flag: true if this team lost its conference play-in game and
+  // never reached the main bracket. The UI shows "Lost Play-In" next to the
+  // team's regular-season record. Absent (undefined) for every other size/team.
+  lostPlayIn?: boolean;
+}
+
+/** One size-20 play-in matchup: a SINGLE game (best-of-1, modeled like a real
+ *  NBA play-in game). `forSeed` is the bracket seed being decided (7 or 8) so the
+ *  UI can label it; the loser of the 8-seed game is flagged `lostPlayIn` on its
+ *  BracketTeam. Play-in games AFFECT advancement + fatigue but are EXCLUDED from
+ *  a team's displayed playoff W-L (they live here, not in `rounds`). */
+export interface PlayInResult {
+  conference: Conference;
+  // The seed at stake: 7 for the 7v8 game, 8 for the deciding 8-seed game. The
+  // 9v10 FEEDER also carries 8 (its winner advances to the 8-seed decider — it
+  // doesn't seat a seed directly), so the UI should distinguish the feeder from
+  // the decider by game order within a conference, not by forSeed alone.
+  forSeed: number;
+  hiId: string; // higher-seeded entrant (home court)
+  loId: string;
+  game: GameResult; // the single play-in game
+  winnerId: string;
 }
 
 /** The full resolved bracket — the stored, immutable artifact (`bracket_json`). */
 export interface BracketResult {
-  teams: BracketTeam[]; // all 16, with conference + seed
-  rounds: SeriesResult[][]; // [R1: 8 series, R2: 4, ConfFinals: 2, Final: 1]
+  teams: BracketTeam[]; // all `size` teams, with conference + seed
+  rounds: SeriesResult[][]; // main bracket, e.g. size 16 → [R1: 8, R2: 4, ConfFinals: 2, Final: 1]
   championId: string;
   championName: string;
+  // Bracket size: one of 4 | 8 | 12 | 16 | 20. Optional + defaulted at the read
+  // site so brackets stored before this field shipped (always size 16) still load.
+  size?: number;
+  // Size-20 only: the per-conference play-in games (single games, EXCLUDED from
+  // displayed W-L since they aren't in `rounds`). Absent for every other size.
+  playIn?: PlayInResult[];
 }
 
 /** Identifies the human's own team within a stored bracket (for the results view). */
