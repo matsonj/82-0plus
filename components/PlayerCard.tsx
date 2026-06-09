@@ -189,7 +189,7 @@ function FullCard({
             <PositionPills positions={player.positions} />
           </div>
           <div className="mt-0.5 font-display text-xs uppercase tracking-wide text-[var(--md-ink)]">
-            <span className="text-[var(--md-orange-deep)]">{player.team}</span> · drafted &rsquo;{String(player.season).slice(2)} · career card
+            <span className="text-[var(--md-orange-deep)]">{player.team}</span> · best year &rsquo;{String(player.season).slice(2)} · career card
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -230,10 +230,9 @@ function FullCard({
               <table className="w-full border-collapse font-display text-[11px] tabular-nums">
                 <thead>
                   <tr style={{ background: "var(--md-paper-2)" }}>
-                    <th className="sticky left-0 z-10 px-2 py-1 text-left" style={{ background: "var(--md-white)" }}>YR</th>
-                    <th className="px-2 py-1 text-right">GP</th>
+                    <th className="sticky left-0 z-10 px-1.5 py-1 text-left" style={{ background: "var(--md-white)" }}>YR</th>
                     {COLS.map((c) => (
-                      <th key={c.key} className="px-2 py-1 text-right">{c.label}</th>
+                      <th key={c.key} className="px-1.5 py-1 text-right">{c.label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -252,17 +251,16 @@ function FullCard({
                       >
                         <th
                           scope="row"
-                          className="sticky left-0 z-10 px-2 py-1 text-left font-bold"
+                          className="sticky left-0 z-10 px-1.5 py-1 text-left font-bold"
                           style={{ background: rowBg ?? "var(--md-white)" }}
                         >
                           <span className="flex items-center gap-1">
                             &rsquo;{String(s.season).slice(2)}
-                            <AllDefMedal allDef={s.all_def} className="text-[11px]" />
+                            <AllDefMedal allDef={s.all_def} className="text-[10px]" />
                           </span>
                         </th>
-                        <td className="px-2 py-1 text-right text-[var(--md-ink-muted)]">{s.gp}</td>
                         {COLS.map((c) => (
-                          <td key={c.key} className="px-2 py-1 text-right">{f1(s[c.key] as number)}</td>
+                          <td key={c.key} className="px-1.5 py-1 text-right">{f1(s[c.key] as number)}</td>
                         ))}
                       </tr>
                     );
