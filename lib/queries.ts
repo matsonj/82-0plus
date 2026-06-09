@@ -267,6 +267,7 @@ export interface PlayerSeasonRow {
   ft_pct: number;
   tov: number;
   fg3m: number;
+  all_def: number; // All-Defensive team that season: 1 (1st) / 2 (2nd) / 0 (none)
 }
 
 /**
@@ -294,11 +295,16 @@ export async function getPlayerSeasonHistory(
             COALESCE(round(100.0 * sum(b.fg_made) / nullif(sum(b.fg_attempted), 0)), 0) AS fg_pct,
             COALESCE(round(100.0 * sum(b.ft_made) / nullif(sum(b.ft_attempted), 0)), 0) AS ft_pct,
             round(avg(b.turnovers), 1) AS tov,
-            round(avg(b.fg3_made), 1)  AS fg3m
+            round(avg(b.fg3_made), 1)  AS fg3m,
+            -- All-Defense is keyed by (entity, season); within a season group it's
+            -- constant, so max() collapses the per-game join to that season's team.
+            COALESCE(max(ad.all_team), 0) AS all_def
        FROM ${DB}.game_quality g
        JOIN ${DB}.box_scores b
          ON g.game_id = b.game_id AND g.entity_id = b.entity_id AND b.period = 'FullGame'
        JOIN ${DB}.schedule s ON g.game_id = s.game_id
+       LEFT JOIN ${DB}.all_defense ad
+         ON ad.entity_id = g.entity_id AND ad.season_year = s.season_year
       WHERE g.entity_id = $1
         AND g.game_quality >= 0
         AND s.season_type = 'Regular Season'

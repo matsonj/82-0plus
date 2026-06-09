@@ -84,6 +84,8 @@ export function ResultsPanel({
         team: r.team,
         season: r.best_season,
         positions: r.positions,
+        // 🥇/🥈 on the card, matching the roster row. null → unset (no medal).
+        allDef: r.allDef ?? undefined,
       })),
     [roster],
   );

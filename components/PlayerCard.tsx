@@ -15,6 +15,9 @@ export interface CardPlayer {
   team: string;
   season: number;
   positions?: Role[];
+  // All-Defensive team that drafted season: 1 (1st) / 2 (2nd) / 0 | undefined
+  // (none). Classic only — the roster mapping leaves it unset elsewhere.
+  allDef?: number;
 }
 
 const ROLE_BG: Record<Role, string> = {
@@ -120,6 +123,19 @@ const COLS: { key: keyof PlayerSeasonRow; label: string }[] = [
   { key: "usg", label: "USG" },
 ];
 
+// 🥇/🥈 for a 1st/2nd-team All-Defense season — mirrors the medal shown on the
+// Classic roster rows (ResultsPanel). Renders nothing when the player wasn't
+// selected (or allDef wasn't threaded in, e.g. the draft picker).
+function AllDefMedal({ allDef, className = "text-lg" }: { allDef?: number; className?: string }) {
+  if (allDef !== 1 && allDef !== 2) return null;
+  const label = allDef === 1 ? "1st Team All-Defense" : "2nd Team All-Defense";
+  return (
+    <span className={`shrink-0 leading-none ${className}`} title={label} aria-label={label}>
+      {allDef === 1 ? "🥇" : "🥈"}
+    </span>
+  );
+}
+
 function PositionPills({ positions }: { positions?: Role[] }) {
   if (!positions || positions.length === 0) return null;
   return (
@@ -169,10 +185,11 @@ function FullCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate font-display text-xl font-bold leading-tight">{player.playerName}</span>
+            <AllDefMedal allDef={player.allDef} />
             <PositionPills positions={player.positions} />
           </div>
           <div className="mt-0.5 font-display text-xs uppercase tracking-wide text-[var(--md-ink)]">
-            <span className="text-[var(--md-orange-deep)]">{player.team}</span> · drafted &rsquo;{String(player.season).slice(2)} · career card
+            <span className="text-[var(--md-orange-deep)]">{player.team}</span> · best year &rsquo;{String(player.season).slice(2)} · career card
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -213,10 +230,9 @@ function FullCard({
               <table className="w-full border-collapse font-display text-[11px] tabular-nums">
                 <thead>
                   <tr style={{ background: "var(--md-paper-2)" }}>
-                    <th className="sticky left-0 z-10 px-2 py-1 text-left" style={{ background: "var(--md-white)" }}>YR</th>
-                    <th className="px-2 py-1 text-right">GP</th>
+                    <th className="sticky left-0 z-10 px-1.5 py-1 text-left" style={{ background: "var(--md-white)" }}>YR</th>
                     {COLS.map((c) => (
-                      <th key={c.key} className="px-2 py-1 text-right">{c.label}</th>
+                      <th key={c.key} className="px-1.5 py-1 text-right">{c.label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -235,14 +251,16 @@ function FullCard({
                       >
                         <th
                           scope="row"
-                          className="sticky left-0 z-10 px-2 py-1 text-left font-bold"
+                          className="sticky left-0 z-10 px-1.5 py-1 text-left font-bold"
                           style={{ background: rowBg ?? "var(--md-white)" }}
                         >
-                          &rsquo;{String(s.season).slice(2)}
+                          <span className="flex items-center gap-1">
+                            &rsquo;{String(s.season).slice(2)}
+                            <AllDefMedal allDef={s.all_def} className="text-[10px]" />
+                          </span>
                         </th>
-                        <td className="px-2 py-1 text-right text-[var(--md-ink-muted)]">{s.gp}</td>
                         {COLS.map((c) => (
-                          <td key={c.key} className="px-2 py-1 text-right">{f1(s[c.key] as number)}</td>
+                          <td key={c.key} className="px-1.5 py-1 text-right">{f1(s[c.key] as number)}</td>
                         ))}
                       </tr>
                     );
