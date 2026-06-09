@@ -47,11 +47,13 @@ interface MyPrivateRow {
   needsAttention: boolean;
 }
 
-// The four My-Teams filters. The first three filter the existing team list by
-// TournamentMode; "private" swaps to the private-tournament feed.
-type Tab = "daily" | "hoopiq" | "classic" | "private";
+// The My-Teams filters. daily/hoopiq/classic filter the existing team list by
+// TournamentMode; "private" swaps to the private-tournament feed; "all" clears the
+// mode filter and shows every (non-private) team.
+type Tab = "all" | "daily" | "hoopiq" | "classic" | "private";
 
 const TAB_LABEL: Record<Tab, string> = {
+  all: "All",
   daily: "Daily",
   hoopiq: "Ranked",
   classic: "Classic",
@@ -566,7 +568,9 @@ export function TournamentLookup({
     const filtered =
       tab === "private"
         ? []
-        : (lookup?.teams ?? []).filter((t) => t.mode === (tab as TournamentMode));
+        : tab === "all"
+          ? (lookup?.teams ?? [])
+          : (lookup?.teams ?? []).filter((t) => t.mode === (tab as TournamentMode));
     const pageCount = Math.max(1, Math.ceil(filtered.length / TEAMS_PER_PAGE));
     const safePage = Math.min(page, pageCount - 1);
     const shown = filtered.slice(
@@ -609,6 +613,20 @@ export function TournamentLookup({
             </button>
           ))}
         </div>
+
+        {/* Clear the mode filter to show every (non-private) team. */}
+        {tab !== "all" && tab !== "private" && (
+          <button
+            type="button"
+            onClick={() => {
+              setTab("all");
+              setPage(0);
+            }}
+            className="self-start font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+          >
+            Clear filter · show all
+          </button>
+        )}
 
         {listError && (
           <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">

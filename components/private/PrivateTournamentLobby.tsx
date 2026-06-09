@@ -256,7 +256,7 @@ export function PrivateTournamentLobby({
               : midDraft
                 ? "Continue draft"
                 : isAdmin
-                  ? "Start tournament"
+                  ? "Submit team"
                   : "Register & draft"}
           </button>
         </div>
