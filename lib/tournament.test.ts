@@ -12,6 +12,7 @@ import {
   gameScoreBuff,
   ageFactor,
   fatigue,
+  HOME_OWNER,
   recoveryCarry,
   regionScore,
   simulateBracket,
@@ -498,6 +499,19 @@ describe("region affinity", () => {
     expect(east).toHaveLength(8);
     expect(west.every((t) => t.id.startsWith("W"))).toBe(true);
     expect(east.every((t) => t.id.startsWith("E"))).toBe(true);
+  });
+});
+
+describe("home-court ownership", () => {
+  it("best-of-7 follows the NBA 2-2-1-1-1 format (higher seed hosts 4)", () => {
+    expect(HOME_OWNER[7]).toEqual(["hi", "hi", "lo", "lo", "hi", "lo", "hi"]);
+    expect(HOME_OWNER[7].filter((o) => o === "hi")).toHaveLength(4);
+    expect(HOME_OWNER[7].filter((o) => o === "lo")).toHaveLength(3);
+  });
+
+  it("best-of-5 follows 2-2-1 (higher seed hosts 3)", () => {
+    expect(HOME_OWNER[5]).toEqual(["hi", "hi", "lo", "lo", "hi"]);
+    expect(HOME_OWNER[5].filter((o) => o === "hi")).toHaveLength(3);
   });
 });
 
