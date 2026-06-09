@@ -42,12 +42,37 @@ export type AuthResult =
   | { ok: true; userId: string; name: string; nameNorm: string }
   | { ok: false; reason: string };
 
+// In-flight create-or-match calls, keyed by (normalized name + PIN). The account
+// identity has no DB-level uniqueness (the PIN is stored as a per-row salted hash,
+// so a UNIQUE index can't cover it), which means two concurrent authenticate()
+// calls for brand-new credentials can both miss the SELECT and both INSERT a
+// duplicate account. Coalescing identical calls within a process collapses that
+// burst to a single create-or-match. The client also single-flights its post-
+// sign-in path; this is the server-side backstop (effective per warm instance —
+// full cross-instance atomicity would need a DB constraint, a tracked follow-up).
+const inFlightAuth = new Map<string, Promise<AuthResult>>();
+
 /**
  * Resolve a (name, PIN) pair to a user id, creating the account on first sight —
  * identical semantics to the tournament submit (same name + same PIN reuses the
  * account; a different PIN is a different account; no name is ever "taken").
  */
 export async function authenticate(
+  rawName: string,
+  rawPin: string,
+): Promise<AuthResult> {
+  // Coalesce concurrent identical calls so a fresh login can't create duplicates.
+  const key = JSON.stringify([normalizeName(String(rawName)), String(rawPin)]);
+  const pending = inFlightAuth.get(key);
+  if (pending) return pending;
+  const run = authenticateUncoalesced(rawName, rawPin).finally(() => {
+    inFlightAuth.delete(key);
+  });
+  inFlightAuth.set(key, run);
+  return run;
+}
+
+async function authenticateUncoalesced(
   rawName: string,
   rawPin: string,
 ): Promise<AuthResult> {

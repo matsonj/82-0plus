@@ -729,11 +729,15 @@ export default function Home() {
       {showDailySignIn && (
         <DailySignIn
           onCancel={() => setShowDailySignIn(false)}
-          onSignedIn={() => {
+          onSignedIn={async () => {
             setShowDailySignIn(false);
             const d = pendingDaily.current?.date;
             pendingDaily.current = null;
-            void refreshDailyResults(); // populate the menu's completion map
+            // Single-flight the create-or-match: for first-time credentials both
+            // calls would otherwise race authenticate() (no DB uniqueness on the
+            // name/PIN pair) and insert duplicate accounts. Await the first so the
+            // account exists before the second auth runs and simply matches it.
+            await refreshDailyResults(); // populate the menu's completion map
             void playDaily(d); // re-check completion now that we're signed in
           }}
         />
