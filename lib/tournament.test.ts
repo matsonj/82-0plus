@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ScoringPlayer } from "./scoring";
+import { simulateRoster, type ScoringPlayer } from "./scoring";
 import type { StatNorms, BracketResult, BracketPlayer } from "./types";
 import { STAT_KEYS } from "./types";
 import {
@@ -10,6 +10,7 @@ import {
   captainMultipliers,
   gameScoreCompare,
   gameScoreBuff,
+  ageFactor,
   fatigue,
   recoveryCarry,
   regionScore,
@@ -201,6 +202,16 @@ describe("fatigue", () => {
     const young = team({ ageAtPeak: 2 });
     const old = team({ ageAtPeak: 14 });
     expect(fatigue(old, 5)).toBeGreaterThan(fatigue(young, 5));
+  });
+
+  it("older teams fatigue ~33% harder; the young-team buff is unchanged", () => {
+    // Young side (below average) uses the plain deviation: ageAtPeak 2 → 1 − 0.4.
+    expect(ageFactor(team({ ageAtPeak: 2 }))).toBeCloseTo(0.6, 6);
+    // Old side (above average) is steepened by AGE_OLD_FATIGUE_MULT (≈ 4/3).
+    const oldDev = (11 - C.LEAGUE_AVG_EXP) / 10; // +0.5
+    expect(ageFactor(team({ ageAtPeak: 11 }))).toBeCloseTo(1 + oldDev * C.AGE_OLD_FATIGUE_MULT, 6);
+    // The above-average increase IS the multiplier (≈33% more than the raw slope).
+    expect((ageFactor(team({ ageAtPeak: 11 })) - 1) / oldDev).toBeCloseTo(C.AGE_OLD_FATIGUE_MULT, 6);
   });
 
   it("the sixth-man multiplier halves the slope", () => {
@@ -520,6 +531,28 @@ describe("simulateBracket: per-game box scores", () => {
       expect(g.homeScore).toBeLessThan(135);
       expect(g.awayScore).toBeGreaterThan(70);
       expect(g.awayScore).toBeLessThan(135);
+    }
+  });
+
+  it("the game total tracks the two teams' combined PTS minus playoff defense", () => {
+    // Identical realistic teams → combined base is constant; every game total
+    // should land near (2 × teamPTS) × (1 − playoff defense), within jitter.
+    const realStarters = Array.from({ length: 5 }, () =>
+      p({ pts: 20, fga: 17.8, fgm: 9, fta: 5, ftm: 4, ast: 4, reb: 6, tov: 2, fg3a: 4, fg3m: 1.6 }),
+    );
+    const teamPts = simulateRoster(realStarters).teamBox.pts;
+    const fieldReal = Array.from({ length: 16 }, (_, i) =>
+      team({ id: `R${i}`, name: `R${i}`, seedNet: 0, starters: realStarters.map((s) => ({ ...s })) }),
+    );
+    const games = simulateBracket(fieldReal, "ptsbase", norms())
+      .rounds.flat().flatMap((s) => s.games);
+    const expected = 2 * teamPts * (1 - C.PLAYOFF_DEFENSE_PCT);
+    expect(expected).toBeGreaterThan(C.MIN_GAME_TOTAL); // not floored by the guardrail
+    expect(expected).toBeLessThan(C.MAX_GAME_TOTAL); // …nor capped
+    for (const g of games) {
+      const total = g.homeScore + g.awayScore;
+      expect(total).toBeGreaterThanOrEqual(expected * (1 - C.SCORE_JITTER_PCT) - 2);
+      expect(total).toBeLessThanOrEqual(expected * (1 + C.SCORE_JITTER_PCT) + 2);
     }
   });
 
