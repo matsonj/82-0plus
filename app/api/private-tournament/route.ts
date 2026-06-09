@@ -1,14 +1,12 @@
-import { scryptSync, timingSafeEqual } from "node:crypto";
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { normalizeName, validateName, validatePin } from "@/lib/tournamentValidation";
 import { isExpired, needsAttention } from "@/lib/privateTournament";
 import {
   getPrivateEntry,
   getPrivateTournament,
   listPrivateEntries,
 } from "@/lib/privateTournamentQueries";
-import { getUsersByName } from "@/lib/tournamentQueries";
+import { findExistingUserByCredentials } from "@/lib/dailyResults";
 import { finalizePrivate } from "@/lib/privateTournamentFinalize";
 import type { BracketResult } from "@/lib/types";
 
@@ -147,11 +145,12 @@ export async function POST(req: NextRequest) {
     }
 
     // ---- Resolve entrant identity (existing accounts only; NEVER creates). ----
-    const viewerUserId = await matchExistingUser(body?.name, body?.pin);
-    if (!viewerUserId) {
+    const viewer = await findExistingUserByCredentials(body?.name, body?.pin);
+    if (!viewer) {
       // No creds / bad creds / no such account → no entrant-specific state.
       return jsonWithSessionHint(sessionHint, { you: null });
     }
+    const viewerUserId = viewer.userId;
 
     const isAdmin = tournament.adminUserId === viewerUserId;
     const myEntry = await getPrivateEntry(id, viewerUserId);
@@ -210,28 +209,4 @@ export async function POST(req: NextRequest) {
     console.error("[/api/private-tournament POST]", err);
     return jsonWithSessionHint(sessionHint, { error: "Couldn't load your entry right now." }, { status: 500 });
   }
-}
-
-/**
- * Verify a (name, PIN) pair against EXISTING accounts only and return the user_id,
- * or null. Mirrors authenticate()'s PIN check but NEVER creates an account — this
- * is a public read path. Validates shape first; reuses the RW user lookup for
- * read-your-writes (a freshly registered entrant can authenticate immediately).
- */
-async function matchExistingUser(
-  rawName: unknown,
-  rawPin: unknown,
-): Promise<string | null> {
-  const name = typeof rawName === "string" ? rawName : "";
-  const pin = typeof rawPin === "string" ? rawPin : "";
-  if (!name || !pin || !validateName(name).ok || !validatePin(pin)) return null;
-  const nameNorm = normalizeName(name);
-  for (const u of await getUsersByName(nameNorm)) {
-    const candidate = scryptSync(pin, u.pin_salt, 32);
-    const stored = Buffer.from(u.pin_hash, "hex");
-    if (candidate.length === stored.length && timingSafeEqual(candidate, stored)) {
-      return u.user_id;
-    }
-  }
-  return null;
 }

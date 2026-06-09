@@ -3,26 +3,25 @@
 import { useEffect, useRef } from "react";
 import { BracketView } from "@/components/BracketView";
 import { getSavedUser } from "@/lib/tournamentSession";
-import { privateModeLabel } from "@/lib/privateTournament";
 import { DeleteTournamentControl } from "@/components/private/DeleteTournamentControl";
 import type { PrivateCompletedResponse } from "@/components/private/types";
+import {
+  privateModeLabel,
+  formatPrivateEntryStatus,
+  formatRecordWithStatus,
+} from "@/lib/tournamentLabels";
 
-// Final standing label for one entrant row.
+// Final standing label for one entrant row. A bot-replaced entrant shows the
+// timed-out copy; everyone else shows "W–L · Status" (finalStatus carries the
+// human round label, e.g. "Champion"/"Lost R1"/"Lost Play-In").
 function statusLabel(e: {
   status: string;
   finalStatus: string | null;
   finalRecordW: number | null;
   finalRecordL: number | null;
 }): string {
-  if (e.status === "bot_replaced") return "🤖 Bot (timed out)";
-  const rec =
-    e.finalRecordW != null && e.finalRecordL != null
-      ? `${e.finalRecordW}–${e.finalRecordL}`
-      : null;
-  // finalStatus carries the human round label (e.g. "Champion", "Lost R1") OR
-  // "Lost Play-In" for a size-20 play-in casualty.
-  const status = e.finalStatus ?? "Final";
-  return rec ? `${rec} · ${status}` : status;
+  if (e.status === "bot_replaced") return formatPrivateEntryStatus(e.status);
+  return formatRecordWithStatus(e.finalRecordW, e.finalRecordL, e.finalStatus);
 }
 
 export function PrivateTournamentResult({

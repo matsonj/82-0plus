@@ -18,6 +18,7 @@
 // This module is NEW and imports the existing daily/queries/positions/scoring
 // helpers; it does not modify them.
 
+import { buildTeamDecadeBoard } from "./boardGen";
 import type { QueryOptions } from "./motherduck";
 import { canPlay, type SlotKind } from "./positions";
 import {
@@ -25,7 +26,6 @@ import {
   getPlayableTeams,
   getPlayerIndex,
   getTeamDecades,
-  getTeamWeights,
   type IndexedPlayer,
 } from "./queries";
 import { simulateRoster, type ScoringPlayer } from "./scoring";
@@ -62,83 +62,24 @@ export interface PrivateBoard {
 
 // ── (a) BLIND board ─────────────────────────────────────────────────────────
 
-/** Same weighted pick as daily.ts (kept private — daily.ts can't be imported). */
-function weightedPick<T>(items: T[], weights: number[], rng: () => number): T {
-  const total = weights.reduce((a, b) => a + b, 0);
-  let r = rng() * total;
-  for (let i = 0; i < items.length; i++) {
-    r -= weights[i];
-    if (r <= 0) return items[i];
-  }
-  return items[items.length - 1];
-}
-
 /**
- * The deterministic BLIND board for a private tournament. Byte-for-byte the same
- * generation as computeDailyBoard (decade usage decays 90% per use; teams never
- * repeat; deterministic tie-breaks) — the ONLY difference is the seed: it's keyed
- * to the tournament UUID, not a date. Always returns a full six (5 starters +
- * bench); if the data can't fill six distinct (team, decade) slots, it throws.
+ * The deterministic BLIND board for a private tournament. Uses the shared
+ * buildTeamDecadeBoard generator — byte-for-byte the same generation as the
+ * daily board (decade usage decays 90% per use; teams never repeat; deterministic
+ * tie-breaks) — the ONLY difference is the seed (keyed to the tournament UUID,
+ * not a date) and requireFull: it always returns a full six (5 starters + bench),
+ * throwing if the data can't fill six distinct (team, decade) slots.
  */
 export async function computeBlindPrivateBoard(
   tournamentId: string,
   options: QueryOptions = {},
 ): Promise<PrivateBoard> {
-  const rng = mulberry32(hashSeed(`private-board:${tournamentId}`));
-
-  const decades = await getDecades(options);
-  const playableByDecade = new Map(
-    await Promise.all(
-      decades.map(
-        async (d) =>
-          [d, await getPlayableTeams(d, options)] as [number, Set<string>],
-      ),
-    ),
-  );
-  const teamWeightsCache = new Map<number, { team: string; weight: number }[]>();
-  const teamWeightsFor = async (d: number) => {
-    if (!teamWeightsCache.has(d)) {
-      teamWeightsCache.set(d, await getTeamWeights(d, options));
-    }
-    return teamWeightsCache.get(d)!;
-  };
-
-  const usedTeams = new Set<string>();
-  const usage: Record<number, number> = {};
-  const all: PrivateSlot[] = [];
-
-  for (let round = 0; round < PRIVATE_TOTAL_SLOTS; round++) {
-    const candidates = decades.filter((d) =>
-      [...playableByDecade.get(d)!].some((t) => !usedTeams.has(t)),
-    );
-    if (candidates.length === 0) break;
-    const decade = weightedPick(
-      candidates,
-      candidates.map((d) => Math.pow(0.1, usage[d] ?? 0)),
-      rng,
-    );
-
-    const playable = playableByDecade.get(decade)!;
-    const pool = (await teamWeightsFor(decade))
-      .filter((t) => playable.has(t.team) && !usedTeams.has(t.team))
-      .sort((a, b) => b.weight - a.weight || a.team.localeCompare(b.team));
-    const team = weightedPick(
-      pool.map((t) => t.team),
-      pool.map((t) => t.weight),
-      rng,
-    );
-
-    usedTeams.add(team);
-    usage[decade] = (usage[decade] ?? 0) + 1;
-    all.push({ team, decade });
-  }
-
-  if (all.length < PRIVATE_TOTAL_SLOTS) {
-    throw new Error(
-      `cannot build a full 6-slot blind board for tournament ${tournamentId}: ` +
-        `only ${all.length} distinct (team, decade) slots available`,
-    );
-  }
+  const all = await buildTeamDecadeBoard({
+    seed: `private-board:${tournamentId}`,
+    totalSlots: PRIVATE_TOTAL_SLOTS,
+    requireFull: true,
+    options,
+  });
 
   return {
     slots: all.slice(0, PRIVATE_STARTER_SLOTS),

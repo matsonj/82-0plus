@@ -14,6 +14,10 @@ import { copyText } from "@/lib/copyText";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { SITE_URL } from "@/lib/site";
 import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
+import {
+  reachedRoundLabelPlain,
+  reachedRoundSentence,
+} from "@/lib/tournamentLabels";
 
 // Fallback so a daily card never falls back to rendering the roster (a spoiler)
 // even if an older stored team lacks team_box_json.
@@ -24,14 +28,6 @@ const EMPTY_BOX = { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgPct: 0, ftPct: 0, 
 function regSeasonRecord(seedNet: number): { w: number; l: number } {
   const w = regWinsFromSeedNet(seedNet);
   return { w, l: 82 - w };
-}
-
-// Compact "how far" label for the share image.
-function shortReached(reachedRound: number, isChampion: boolean): string {
-  if (isChampion) return "Champion";
-  return ["Lost R1", "Lost Conf Semis", "Lost Conf Finals", "Lost the Final"][
-    reachedRound
-  ] ?? "Eliminated";
 }
 
 // Signed net-rating string, deliberately ROUNDED TO A WHOLE NUMBER so the team
@@ -163,23 +159,6 @@ function RecordSummary({
   );
 }
 
-// reachedRound: 0 = lost R1 … 4 = champion. Maps to a player-facing phrase.
-function reachedLabel(reachedRound: number, isChampion: boolean): string {
-  if (isChampion) return "🏆 Champion";
-  switch (reachedRound) {
-    case 0:
-      return "Lost in Round 1";
-    case 1:
-      return "Lost in the Conference Semifinals";
-    case 2:
-      return "Lost in the Conference Finals";
-    case 3:
-      return "Lost in the Final";
-    default:
-      return "Eliminated";
-  }
-}
-
 // A four-pip progress meter (R1 → Final). Filled pips = rounds the team won
 // through; the last filled pip glows teal for a champion.
 function ProgressPips({
@@ -305,7 +284,7 @@ export function TournamentResults({
       conference: you.conference,
       seed: you.seed,
       isChampion,
-      reachedLabel: shortReached(you.reachedRound, isChampion),
+      reachedLabel: reachedRoundLabelPlain(you.reachedRound),
       regWins: reg.w,
       regLosses: reg.l,
       playoffWins: playoff.totalW,
@@ -340,7 +319,7 @@ export function TournamentResults({
 
   const share = async () => {
     if (!myTeam || !shareReady || !shareBlob) return;
-    const text = `82-0+ Tournament · ${you.name} — ${reachedLabel(you.reachedRound, isChampion)}\n${shareLink}`;
+    const text = `82-0+ Tournament · ${you.name} — ${reachedRoundSentence(you.reachedRound, isChampion)}\n${shareLink}`;
     const outcome = await presentShare({
       blob: shareBlob,
       filename: "82-0-tournament.png",
@@ -465,7 +444,7 @@ export function TournamentResults({
             className="mt-3 font-display text-lg font-bold sm:text-xl"
             style={{ color: isChampion ? "var(--md-teal)" : "var(--md-ink)" }}
           >
-            {reachedLabel(you.reachedRound, isChampion)}
+            {reachedRoundSentence(you.reachedRound, isChampion)}
           </div>
           <div className="mt-3">
             <ProgressPips reachedRound={you.reachedRound} isChampion={isChampion} />

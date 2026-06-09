@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getSavedUser } from "@/lib/tournamentSession";
+import {
+  privateModeLabel,
+  formatPrivateEntryStatus,
+} from "@/lib/tournamentLabels";
+import type { PrivateMode } from "@/lib/privateTournament";
 
 // One private-tournament summary as returned by /api/private-tournament/notifications.
 interface NotifSummary {
@@ -187,8 +192,7 @@ function NotifRow({
   t: NotifSummary;
   kind: "pending" | "completed";
 }) {
-  const label =
-    t.mode === "hoopiq" ? "Private - Ranked" : "Private - Classic";
+  const label = privateModeLabel(t.mode as PrivateMode);
   return (
     <Link
       href={`/p/${t.tournamentId}`}
@@ -204,11 +208,7 @@ function NotifRow({
           ? t.championName
             ? `🏆 ${t.championName}`
             : "Final ready"
-          : t.entryStatus === "submitted"
-            ? "Submitted · awaiting results"
-            : t.entryStatus === "partial"
-              ? "Draft in progress"
-              : "Draft not started"}
+          : formatPrivateEntryStatus(t.entryStatus)}
       </span>
     </Link>
   );

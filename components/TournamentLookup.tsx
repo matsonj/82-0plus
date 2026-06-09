@@ -21,6 +21,12 @@ import { TournamentResults } from "@/components/TournamentResults";
 import { TierBadge } from "@/components/TierBadge";
 import { PrivateTournamentCreate } from "@/components/private/PrivateTournamentCreate";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
+import {
+  reachedRoundLabel,
+  formatPrivateEntryStatus,
+  formatRecordWithStatus,
+  formatSignedMargin,
+} from "@/lib/tournamentLabels";
 
 // One private tournament row from POST /api/private-tournament/my — the full
 // list of tournaments the account has an entry in (newest first), INCLUDING
@@ -60,28 +66,9 @@ const TAB_LABEL: Record<Tab, string> = {
   private: "Private",
 };
 
-// reachedRound: 0 = lost R1 … 4 = champion. Short list-row phrasing.
-function reachedPhrase(reachedRound: number): string {
-  switch (reachedRound) {
-    case 0:
-      return "Lost R1";
-    case 1:
-      return "Lost Conf. Semis";
-    case 2:
-      return "Lost Conf. Finals";
-    case 3:
-      return "Lost the Final";
-    case 4:
-      return "🏆 Champion";
-    default:
-      return "Eliminated";
-  }
-}
-
 // Signed realized margin, teal if ≥0 else coral, using U+2212 for negatives.
 function MarginTag({ value }: { value: number }) {
-  const positive = value >= 0;
-  const text = `${positive ? "+" : "−"}${Math.abs(value).toFixed(1)}`;
+  const { text, positive } = formatSignedMargin(value);
   return (
     <span
       className="font-display text-sm font-bold tabular-nums"
@@ -165,7 +152,7 @@ function TeamRow({
 
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <span className="font-display text-sm font-bold">
-            {reachedPhrase(team.reachedRound)}
+            {reachedRoundLabel(team.reachedRound)}
           </span>
           {isChampion ? (
             <span className="font-display text-sm text-[var(--md-teal)]">
@@ -254,15 +241,15 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
         <span className="font-display text-sm font-bold">
           {completed
             ? row.finalRecordW != null && row.finalRecordL != null
-              ? `${row.finalRecordW}–${row.finalRecordL} · ${row.finalStatus ?? "Final"}`
+              ? formatRecordWithStatus(
+                  row.finalRecordW,
+                  row.finalRecordL,
+                  row.finalStatus,
+                )
               : row.championName
                 ? `🏆 ${row.championName}`
                 : "Final ready"
-            : row.entryStatus === "submitted"
-              ? "Submitted · awaiting results"
-              : row.entryStatus === "partial"
-                ? "Draft in progress"
-                : "Draft not started"}
+            : formatPrivateEntryStatus(row.entryStatus)}
         </span>
         <span className="font-display text-[11px] uppercase tracking-wide text-[var(--md-blue)]">
           {completed ? "View results →" : "Open lobby →"}

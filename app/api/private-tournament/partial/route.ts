@@ -1,19 +1,15 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { authenticate } from "@/lib/dailyResults";
-import { canPlay } from "@/lib/positions";
-import { getOfferedIds } from "@/lib/queries";
-import { simulateRoster } from "@/lib/scoring";
-import { KINDS, parsePicks } from "@/lib/rosterParse";
-import { isExpired } from "@/lib/privateTournament";
-import { startersMatchBoard } from "@/lib/privateTournamentRun";
-import {
-  getPrivateEntry,
-  getPrivateTournament,
-  savePrivatePartial,
-} from "@/lib/privateTournamentQueries";
-import { hydrateTournamentRoster, buildTournamentTeam } from "@/lib/tournamentQueries";
+import { parsePicks } from "@/lib/rosterParse";
+import { savePrivatePartial } from "@/lib/privateTournamentQueries";
+import { buildTournamentTeam } from "@/lib/tournamentQueries";
 import { validateTeamName, normalizeTeamName } from "@/lib/tournamentValidation";
+import {
+  loadOpenPrivateEntry,
+  validatePrivateStarters,
+  hydratePrivateRoster,
+} from "@/lib/privateRoster";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +19,8 @@ export const dynamic = "force-dynamic";
 // Validates the five against the tournament BOARD's starter slots (set-match, like
 // daily) + position legality + off-list guard + distinct teams, hydrates, computes
 // seedNet + reg-season W-L + teamBox, and saves as 'partial'. Does NOT count as a
-// completed entry.
+// completed entry. The validate→hydrate→sim pipeline is shared with submit via
+// lib/privateRoster; this route ORCHESTRATES it for the 5-only partial save.
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -66,74 +63,29 @@ export async function POST(req: NextRequest) {
       return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
     }
 
-    const tournament = await getPrivateTournament(tournamentId);
-    if (!tournament) {
-      return jsonWithSessionHint(sessionHint, { error: "tournament not found" }, { status: 404 });
+    // ---- Tournament-open + entry-in-progress gate (shared with submit). ----
+    const loaded = await loadOpenPrivateEntry({ tournamentId, userId: auth.userId });
+    if (!loaded.ok) {
+      return jsonWithSessionHint(sessionHint, { error: loaded.error }, { status: loaded.status });
     }
-    if (tournament.status === "completed") {
-      return jsonWithSessionHint(sessionHint, { error: "this tournament is already finished" }, { status: 400 });
-    }
-    if (isExpired(tournament.expiresAt, Date.now())) {
-      return jsonWithSessionHint(sessionHint, { error: "this tournament's entry window has closed" }, { status: 400 });
+    const { tournament, entry } = loaded;
+
+    // ---- The five must match the board's starter slots + distinct teams. ----
+    const starters = validatePrivateStarters(picks, tournament.board);
+    if (!starters.ok) {
+      return jsonWithSessionHint(sessionHint, { error: starters.reason }, { status: 400 });
     }
 
-    // ---- Must have an entry that's still in progress (not already submitted). ----
-    const entry = await getPrivateEntry(tournamentId, auth.userId);
-    if (!entry) {
-      return jsonWithSessionHint(sessionHint, { error: "register for this tournament first" }, { status: 400 });
+    // ---- Off-list guard + hydrate + position legality + score the FIVE. ----
+    const hydrate = await hydratePrivateRoster({
+      picks,
+      board: tournament.board,
+      options: queryOptions,
+    });
+    if (!hydrate.ok) {
+      return jsonWithSessionHint(sessionHint, { error: hydrate.error }, { status: hydrate.status });
     }
-    if (entry.status === "submitted" || entry.status === "bot_replaced") {
-      return jsonWithSessionHint(sessionHint, { error: "your entry is already locked in" }, { status: 400 });
-    }
-
-    // ---- The five must match the board's starter slots (set-match). ----
-    if (!startersMatchBoard(picks, tournament.board)) {
-      return jsonWithSessionHint(sessionHint, { error: "those picks aren't from this tournament's board" }, { status: 400 });
-    }
-
-    // ---- Distinct teams across the five (the sixth man is added at submit). ----
-    const teams = picks.map((p) => p.team);
-    if (new Set(teams).size !== teams.length) {
-      return jsonWithSessionHint(sessionHint, { error: "each player must come from a different team" }, { status: 400 });
-    }
-
-    // ---- Off-list guard: every pick must be a real offered player. ----
-    for (const pk of picks) {
-      const offered = await getOfferedIds(pk.team, pk.decade, queryOptions);
-      if (!offered.has(pk.entity_id)) {
-        return jsonWithSessionHint(sessionHint, { error: "that player wasn't in the draft list" }, { status: 400 });
-      }
-    }
-
-    // ---- Hydrate the five + a placeholder sixth man so we can score the five.
-    // savePrivatePartial only persists the five; we hydrate using the board's
-    // BENCH slot as a throwaway sixth so hydrateTournamentRoster (which requires a
-    // sixth) succeeds — but seedNet/teamBox are computed from the FIVE only.
-    // Pick any offered bench player just to satisfy hydration is overkill; instead
-    // score the five directly via simulateRoster on the hydrated starters.
-    let hydrated;
-    try {
-      // Use the first board starter as a dummy bench pick — its stats are never
-      // used (we score `hydrated.scoring`, the five). Any resolvable pick works.
-      const dummySixth = {
-        entity_id: picks[0].entity_id,
-        team: picks[0].team,
-        decade: picks[0].decade,
-      };
-      hydrated = await hydrateTournamentRoster(picks, dummySixth, queryOptions);
-    } catch {
-      return jsonWithSessionHint(sessionHint, { error: "unknown roster pick" }, { status: 400 });
-    }
-
-    // ---- Position legality: each starter must be eligible for its slot. ----
-    for (let i = 0; i < picks.length; i++) {
-      if (!canPlay(hydrated.players[i], KINDS[picks[i].slot])) {
-        return jsonWithSessionHint(sessionHint, { error: "illegal lineup" }, { status: 400 });
-      }
-    }
-
-    // ---- Score the FIVE (no buffs): seedNet, reg-season W-L, the 9-stat box. ----
-    const sim = simulateRoster(hydrated.scoring);
+    const { hydrated, sim } = hydrate;
 
     // Display names for the lobby list (captain flagged if chosen).
     const built = buildTournamentTeam({

@@ -2,11 +2,24 @@ import { randomUUID } from "node:crypto";
 import type { PrivateBoard } from "./privateBoard";
 import type {
   PrivateBoardMode,
-  PrivateEntryStatus,
   PrivateMode,
   PrivateSize,
   PrivateStatus,
 } from "./privateTournament";
+import {
+  type EntryDbRow,
+  type EntryForUserDbRow,
+  mapEntryForUserRow,
+  mapEntryRow,
+  mapTournamentRow,
+  PRIVATE_ENTRY_COLS,
+  PRIVATE_ENTRY_FOR_USER_COLS,
+  PRIVATE_TOURNAMENT_COLS,
+  type PrivateEntryForUserRow,
+  type PrivateEntryRow,
+  type PrivateTournamentRow,
+  type TournamentDbRow,
+} from "./privateTournamentRows";
 import { ensureSchema, queryRW } from "./tournamentDb";
 
 // Private (invite-only) tournament WRITE helpers. Mirror tournamentQueries.ts:
@@ -15,203 +28,22 @@ import { ensureSchema, queryRW } from "./tournamentDb";
 // columns are JSON.stringify'd on write and parsed defensively on read; params
 // bind positionally to $1, $2, …. This file ONLY persists — finalization MATH
 // (bracket sim, records, margins) lives elsewhere; here we just store results.
+//
+// The raw row shapes, the camelCase mapped types, the SELECT column lists, and
+// the row→object mappers all live in lib/privateTournamentRows.ts so the RW
+// pool here and the RO pool (lib/privateTournamentReadQueries.ts) can never
+// diverge. This file injects queryRW + ensureSchema(); the reads reuse the same
+// mappers and column constants.
+
+// Re-export the shared mapped row types so existing importers of this module
+// keep their import paths.
+export type {
+  PrivateEntryForUserRow,
+  PrivateEntryRow,
+  PrivateTournamentRow,
+};
 
 const TDB = "nba_tournament.main";
-
-/** Parse a stored JSON column (the pg endpoint returns JSON as a string). */
-function parseJson<T>(value: unknown): T {
-  return typeof value === "string" ? (JSON.parse(value) as T) : (value as T);
-}
-
-/** Coerce a TIMESTAMP cell (Date or string) to an ISO string, or null. */
-function toIso(value: string | Date | null | undefined): string | null {
-  if (value == null) return null;
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
-}
-
-// ── Row shapes (raw — include auth fields the camelCase summaries omit) ───────
-
-/** A full private_tournaments row, mapped to camelCase with JSON parsed. */
-export interface PrivateTournamentRow {
-  tournamentId: string;
-  name: string;
-  nameNorm: string;
-  pinHash: string;
-  pinSalt: string;
-  adminUserId: string;
-  adminName: string;
-  mode: PrivateMode;
-  size: PrivateSize;
-  boardMode: PrivateBoardMode;
-  board: PrivateBoard;
-  status: PrivateStatus;
-  createdAt: string;
-  expiresAt: string;
-  finalizedAt: string | null;
-  finalBracketJson: unknown; // BracketResult once finalized; null while open
-  championName: string | null;
-}
-
-/** A full private_entries row, mapped to camelCase with JSON parsed. */
-export interface PrivateEntryRow {
-  entryId: string;
-  tournamentId: string;
-  userId: string;
-  userName: string;
-  teamName: string | null;
-  status: PrivateEntryStatus;
-  rosterJson: unknown; // SimPick[] once a roster is saved; null before
-  sixthJson: unknown; // { entity_id, team, decade } once submitted; null before
-  rosterDisplay: unknown; // { roster: BracketPlayer[]; sixthMan: BracketPlayer } | null
-  captainSlot: number | null;
-  seedNet: number | null;
-  regW: number | null;
-  regL: number | null;
-  teamBoxJson: unknown; // the five's reg-season 9-stat box; null before
-  provisionalRecordW: number | null;
-  provisionalRecordL: number | null;
-  provisionalStatus: PrivateStatus | null;
-  finalRecordW: number | null;
-  finalRecordL: number | null;
-  finalStatus: PrivateStatus | null;
-  finalRealizedMargin: number | null;
-  finalReachedRound: number | null;
-  viewedFinalAt: string | null;
-  createdAt: string;
-  submittedAt: string | null;
-}
-
-/** A user's private entry joined with its tournament summary (My Teams rows). */
-export interface PrivateEntryForUserRow {
-  entryId: string;
-  tournamentId: string;
-  tournamentName: string;
-  tournamentStatus: PrivateStatus;
-  mode: PrivateMode;
-  size: PrivateSize;
-  expiresAt: string;
-  finalizedAt: string | null;
-  championName: string | null;
-  teamName: string | null;
-  status: PrivateEntryStatus;
-  seedNet: number | null;
-  regW: number | null;
-  regL: number | null;
-  provisionalRecordW: number | null;
-  provisionalRecordL: number | null;
-  provisionalStatus: PrivateStatus | null;
-  finalRecordW: number | null;
-  finalRecordL: number | null;
-  finalStatus: PrivateStatus | null;
-  finalReachedRound: number | null;
-  viewedFinalAt: string | null;
-}
-
-// ── Raw DB row interfaces (snake_case, as returned by the pg endpoint) ────────
-
-interface TournamentDbRow {
-  tournament_id: string;
-  name: string;
-  name_norm: string;
-  pin_hash: string;
-  pin_salt: string;
-  admin_user_id: string;
-  admin_name: string;
-  mode: string;
-  size: number;
-  board_mode: string;
-  board_json: unknown;
-  status: string;
-  created_at: string | Date;
-  expires_at: string | Date;
-  finalized_at: string | Date | null;
-  final_bracket_json: unknown;
-  champion_name: string | null;
-}
-
-interface EntryDbRow {
-  entry_id: string;
-  tournament_id: string;
-  user_id: string;
-  user_name: string;
-  team_name: string | null;
-  status: string;
-  roster_json: unknown;
-  sixth_json: unknown;
-  roster_display: unknown;
-  captain_slot: number | null;
-  seed_net: number | null;
-  reg_w: number | null;
-  reg_l: number | null;
-  team_box_json: unknown;
-  provisional_record_w: number | null;
-  provisional_record_l: number | null;
-  provisional_status: string | null;
-  final_record_w: number | null;
-  final_record_l: number | null;
-  final_status: string | null;
-  final_realized_margin: number | null;
-  final_reached_round: number | null;
-  viewed_final_at: string | Date | null;
-  created_at: string | Date;
-  submitted_at: string | Date | null;
-}
-
-// ── Row mappers ───────────────────────────────────────────────────────────────
-
-function mapTournamentRow(r: TournamentDbRow): PrivateTournamentRow {
-  return {
-    tournamentId: r.tournament_id,
-    name: r.name,
-    nameNorm: r.name_norm,
-    pinHash: r.pin_hash,
-    pinSalt: r.pin_salt,
-    adminUserId: r.admin_user_id,
-    adminName: r.admin_name,
-    mode: r.mode as PrivateMode,
-    size: r.size as PrivateSize,
-    boardMode: r.board_mode as PrivateBoardMode,
-    board: parseJson<PrivateBoard>(r.board_json),
-    status: r.status as PrivateStatus,
-    createdAt: toIso(r.created_at) ?? "",
-    expiresAt: toIso(r.expires_at) ?? "",
-    finalizedAt: toIso(r.finalized_at),
-    finalBracketJson:
-      r.final_bracket_json == null ? null : parseJson(r.final_bracket_json),
-    championName: r.champion_name ?? null,
-  };
-}
-
-function mapEntryRow(r: EntryDbRow): PrivateEntryRow {
-  return {
-    entryId: r.entry_id,
-    tournamentId: r.tournament_id,
-    userId: r.user_id,
-    userName: r.user_name,
-    teamName: r.team_name ?? null,
-    status: r.status as PrivateEntryStatus,
-    rosterJson: r.roster_json == null ? null : parseJson(r.roster_json),
-    sixthJson: r.sixth_json == null ? null : parseJson(r.sixth_json),
-    rosterDisplay:
-      r.roster_display == null ? null : parseJson(r.roster_display),
-    captainSlot: r.captain_slot ?? null,
-    seedNet: r.seed_net ?? null,
-    regW: r.reg_w ?? null,
-    regL: r.reg_l ?? null,
-    teamBoxJson: r.team_box_json == null ? null : parseJson(r.team_box_json),
-    provisionalRecordW: r.provisional_record_w ?? null,
-    provisionalRecordL: r.provisional_record_l ?? null,
-    provisionalStatus: (r.provisional_status as PrivateStatus | null) ?? null,
-    finalRecordW: r.final_record_w ?? null,
-    finalRecordL: r.final_record_l ?? null,
-    finalStatus: (r.final_status as PrivateStatus | null) ?? null,
-    finalRealizedMargin: r.final_realized_margin ?? null,
-    finalReachedRound: r.final_reached_round ?? null,
-    viewedFinalAt: toIso(r.viewed_final_at),
-    createdAt: toIso(r.created_at) ?? "",
-    submittedAt: toIso(r.submitted_at),
-  };
-}
 
 // ── Tournament create / read ──────────────────────────────────────────────────
 
@@ -270,18 +102,13 @@ export async function createPrivateTournament(
   return tournamentId;
 }
 
-const TOURNAMENT_COLS = `tournament_id, name, name_norm, pin_hash, pin_salt,
-            admin_user_id, admin_name, mode, size, board_mode, board_json,
-            status, created_at, expires_at, finalized_at,
-            final_bracket_json, champion_name`;
-
 /** Full tournament row (board + final bracket parsed), or null if not found. */
 export async function getPrivateTournament(
   tournamentId: string,
 ): Promise<PrivateTournamentRow | null> {
   await ensureSchema();
   const rows = await queryRW<TournamentDbRow>(
-    `SELECT ${TOURNAMENT_COLS}
+    `SELECT ${PRIVATE_TOURNAMENT_COLS}
        FROM ${TDB}.private_tournaments
       WHERE tournament_id = $1
       LIMIT 1`,
@@ -300,7 +127,7 @@ export async function getPrivateTournamentsByNameNorm(
 ): Promise<PrivateTournamentRow[]> {
   await ensureSchema();
   const rows = await queryRW<TournamentDbRow>(
-    `SELECT ${TOURNAMENT_COLS}
+    `SELECT ${PRIVATE_TOURNAMENT_COLS}
        FROM ${TDB}.private_tournaments
       WHERE name_norm = $1
       ORDER BY created_at ASC`,
@@ -311,21 +138,13 @@ export async function getPrivateTournamentsByNameNorm(
 
 // ── Entry list / read ─────────────────────────────────────────────────────────
 
-const ENTRY_COLS = `entry_id, tournament_id, user_id, user_name, team_name, status,
-            roster_json, sixth_json, roster_display, captain_slot, seed_net,
-            reg_w, reg_l, team_box_json,
-            provisional_record_w, provisional_record_l, provisional_status,
-            final_record_w, final_record_l, final_status,
-            final_realized_margin, final_reached_round, viewed_final_at,
-            created_at, submitted_at`;
-
 /** All entries for a tournament, oldest first (registration order). */
 export async function listPrivateEntries(
   tournamentId: string,
 ): Promise<PrivateEntryRow[]> {
   await ensureSchema();
   const rows = await queryRW<EntryDbRow>(
-    `SELECT ${ENTRY_COLS}
+    `SELECT ${PRIVATE_ENTRY_COLS}
        FROM ${TDB}.private_entries
       WHERE tournament_id = $1
       ORDER BY created_at ASC`,
@@ -345,7 +164,7 @@ export async function getPrivateEntry(
 ): Promise<PrivateEntryRow | null> {
   await ensureSchema();
   const rows = await queryRW<EntryDbRow>(
-    `SELECT ${ENTRY_COLS}
+    `SELECT ${PRIVATE_ENTRY_COLS}
        FROM ${TDB}.private_entries
       WHERE tournament_id = $1 AND user_id = $2
       ORDER BY created_at ASC
@@ -578,72 +397,6 @@ export async function deletePrivateTournament(
 
 // ── My Teams / notifications (entries joined with their tournament) ───────────
 
-interface EntryForUserDbRow {
-  entry_id: string;
-  tournament_id: string;
-  tournament_name: string;
-  tournament_status: string;
-  mode: string;
-  size: number;
-  expires_at: string | Date;
-  finalized_at: string | Date | null;
-  champion_name: string | null;
-  team_name: string | null;
-  status: string;
-  seed_net: number | null;
-  reg_w: number | null;
-  reg_l: number | null;
-  provisional_record_w: number | null;
-  provisional_record_l: number | null;
-  provisional_status: string | null;
-  final_record_w: number | null;
-  final_record_l: number | null;
-  final_status: string | null;
-  final_reached_round: number | null;
-  viewed_final_at: string | Date | null;
-}
-
-function mapEntryForUserRow(r: EntryForUserDbRow): PrivateEntryForUserRow {
-  return {
-    entryId: r.entry_id,
-    tournamentId: r.tournament_id,
-    tournamentName: r.tournament_name,
-    tournamentStatus: r.tournament_status as PrivateStatus,
-    mode: r.mode as PrivateMode,
-    size: r.size as PrivateSize,
-    expiresAt: toIso(r.expires_at) ?? "",
-    finalizedAt: toIso(r.finalized_at),
-    championName: r.champion_name ?? null,
-    teamName: r.team_name ?? null,
-    status: r.status as PrivateEntryStatus,
-    seedNet: r.seed_net ?? null,
-    regW: r.reg_w ?? null,
-    regL: r.reg_l ?? null,
-    provisionalRecordW: r.provisional_record_w ?? null,
-    provisionalRecordL: r.provisional_record_l ?? null,
-    provisionalStatus: (r.provisional_status as PrivateStatus | null) ?? null,
-    finalRecordW: r.final_record_w ?? null,
-    finalRecordL: r.final_record_l ?? null,
-    finalStatus: (r.final_status as PrivateStatus | null) ?? null,
-    finalReachedRound: r.final_reached_round ?? null,
-    viewedFinalAt: toIso(r.viewed_final_at),
-  };
-}
-
-const ENTRY_FOR_USER_COLS = `e.entry_id AS entry_id, e.tournament_id AS tournament_id,
-            t.name AS tournament_name, t.status AS tournament_status,
-            t.mode AS mode, t.size AS size, t.expires_at AS expires_at,
-            t.finalized_at AS finalized_at, t.champion_name AS champion_name,
-            e.team_name AS team_name, e.status AS status, e.seed_net AS seed_net,
-            e.reg_w AS reg_w, e.reg_l AS reg_l,
-            e.provisional_record_w AS provisional_record_w,
-            e.provisional_record_l AS provisional_record_l,
-            e.provisional_status AS provisional_status,
-            e.final_record_w AS final_record_w, e.final_record_l AS final_record_l,
-            e.final_status AS final_status,
-            e.final_reached_round AS final_reached_round,
-            e.viewed_final_at AS viewed_final_at`;
-
 /**
  * All of a user's private entries joined with their tournament summary (name,
  * status, mode, size, expiry, finalize time, champion) — powers the My Teams
@@ -654,7 +407,7 @@ export async function listPrivateEntriesForUser(
 ): Promise<PrivateEntryForUserRow[]> {
   await ensureSchema();
   const rows = await queryRW<EntryForUserDbRow>(
-    `SELECT ${ENTRY_FOR_USER_COLS}
+    `SELECT ${PRIVATE_ENTRY_FOR_USER_COLS}
        FROM ${TDB}.private_entries e
        JOIN ${TDB}.private_tournaments t ON t.tournament_id = e.tournament_id
       WHERE e.user_id = $1

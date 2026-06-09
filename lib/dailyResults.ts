@@ -72,6 +72,35 @@ export async function authenticate(
   return run;
 }
 
+/**
+ * Resolve a (name, PIN) pair to an EXISTING account only — normalize the name,
+ * look up candidates, and return the one whose stored salted hash matches the PIN
+ * (or null). NEVER creates an account, so it's safe for public read paths that
+ * must not mint identities. Validates shape first; uses the RW user lookup so a
+ * freshly registered account authenticates immediately (read-your-writes).
+ *
+ * `authenticate()` calls this first and only falls through to create-on-miss.
+ */
+export async function findExistingUserByCredentials(
+  rawName: unknown,
+  rawPin: unknown,
+): Promise<{ userId: string; name: string; nameNorm: string } | null> {
+  const name = typeof rawName === "string" ? rawName : "";
+  const pin = typeof rawPin === "string" ? rawPin : "";
+  if (!name || !pin || !validateName(name).ok || !validatePin(pin)) return null;
+
+  await ensureSchema();
+  const nameNorm = normalizeName(name);
+  for (const u of await getUsersByName(nameNorm)) {
+    const candidate = scryptSync(pin, u.pin_salt, 32);
+    const stored = Buffer.from(u.pin_hash, "hex");
+    if (candidate.length === stored.length && timingSafeEqual(candidate, stored)) {
+      return { userId: u.user_id, name, nameNorm };
+    }
+  }
+  return null;
+}
+
 async function authenticateUncoalesced(
   rawName: string,
   rawPin: string,
@@ -80,20 +109,14 @@ async function authenticateUncoalesced(
   if (!nameCheck.ok) return { ok: false, reason: nameCheck.reason };
   if (!validatePin(rawPin)) return { ok: false, reason: "PIN must be 4–6 digits" };
 
-  await ensureSchema();
+  // Match an existing account first (normalize + lookup + PIN check, no create).
+  const existing = await findExistingUserByCredentials(rawName, rawPin);
+  if (existing) return { ok: true, ...existing };
+
+  // No match → create the account on first sight (ensureSchema already ran).
   const name = String(rawName);
   const nameNorm = normalizeName(name);
   const pin = String(rawPin);
-
-  const pinMatches = (row: { pin_hash: string; pin_salt: string }): boolean => {
-    const candidate = scryptSync(pin, row.pin_salt, 32);
-    const stored = Buffer.from(row.pin_hash, "hex");
-    return candidate.length === stored.length && timingSafeEqual(candidate, stored);
-  };
-
-  for (const u of await getUsersByName(nameNorm)) {
-    if (pinMatches(u)) return { ok: true, userId: u.user_id, name, nameNorm };
-  }
   const salt = randomBytes(16).toString("hex");
   const pinHash = scryptSync(pin, salt, 32).toString("hex");
   const userId = await insertUser({ name, nameNorm, pinHash, pinSalt: salt });
