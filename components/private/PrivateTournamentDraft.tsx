@@ -331,10 +331,10 @@ export function PrivateTournamentDraft({
         modeLabel={mode === "hoopiq" ? "Private - Ranked" : "Private - Classic"}
         mode={gameMode}
         onReset={() => setStep("draft")}
-        resetLabel="Back to lineup"
         onEnterTournament={() => setStep("finalize")}
         entryCtaLabel="Add sixth man & captain"
         entryRequiresEligible={false}
+        entryOnly
       />
     );
   }

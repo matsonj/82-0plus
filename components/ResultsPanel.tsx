@@ -54,6 +54,7 @@ export function ResultsPanel({
   onEnterTournament,
   entryCtaLabel,
   entryRequiresEligible = true,
+  entryOnly = false,
 }: {
   roster: SimRosterLine[];
   result: SimResult;
@@ -78,6 +79,9 @@ export function ResultsPanel({
   // Whether the entry CTA is gated by the 40-win floor. Default true (Classic/
   // Ranked free play). Private tournaments accept any roster, so pass false.
   entryRequiresEligible?: boolean;
+  // Render ONLY the entry CTA — no Share / secondary button. The private draft
+  // interstitial is a "continue" step, not a shareable final result.
+  entryOnly?: boolean;
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
@@ -343,18 +347,20 @@ export function ResultsPanel({
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="flex gap-2">
-          <button
-            className="md-btn md-btn--lg md-btn--teal flex-1"
-            onClick={share}
-            disabled={!shareBlob || !shareReady}
-          >
-            {shareBlob && shareReady ? "Share result" : "Preparing…"}
-          </button>
-          <button className="md-btn md-btn--lg md-btn--ink flex-1" onClick={onReset}>
-            {resetLabel ?? "Play again"}
-          </button>
-        </div>
+        {!entryOnly && (
+          <div className="flex gap-2">
+            <button
+              className="md-btn md-btn--lg md-btn--teal flex-1"
+              onClick={share}
+              disabled={!shareBlob || !shareReady}
+            >
+              {shareBlob && shareReady ? "Share result" : "Preparing…"}
+            </button>
+            <button className="md-btn md-btn--lg md-btn--ink flex-1" onClick={onReset}>
+              {resetLabel ?? "Play again"}
+            </button>
+          </div>
+        )}
         {onEnterTournament &&
           (!entryRequiresEligible || wins >= MIN_ELIGIBLE_WINS ? (
             <button
