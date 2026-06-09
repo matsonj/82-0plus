@@ -50,7 +50,10 @@ export function ResultsPanel({
   mode,
   isDaily = false,
   onReset,
+  resetLabel,
   onEnterTournament,
+  entryCtaLabel,
+  entryRequiresEligible = true,
 }: {
   roster: SimRosterLine[];
   result: SimResult;
@@ -64,7 +67,17 @@ export function ResultsPanel({
   mode: GameMode;
   isDaily?: boolean;
   onReset: () => void;
+  // Label for the secondary (ink) button — default "Play again". The private
+  // interstitial uses "Back to lineup".
+  resetLabel?: string;
   onEnterTournament?: () => void;
+  // Override the entry-CTA label (default: "Enter this team in the …Tournament").
+  // Private tournaments reuse this screen as the draft interstitial with a
+  // "Add sixth man & captain" button.
+  entryCtaLabel?: string;
+  // Whether the entry CTA is gated by the 40-win floor. Default true (Classic/
+  // Ranked free play). Private tournaments accept any roster, so pass false.
+  entryRequiresEligible?: boolean;
 }) {
   const { wins, losses, pf, pa, perfect, netRating } = result;
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
@@ -339,19 +352,21 @@ export function ResultsPanel({
             {shareBlob && shareReady ? "Share result" : "Preparing…"}
           </button>
           <button className="md-btn md-btn--lg md-btn--ink flex-1" onClick={onReset}>
-            Play again
+            {resetLabel ?? "Play again"}
           </button>
         </div>
         {onEnterTournament &&
-          (wins >= MIN_ELIGIBLE_WINS ? (
+          (!entryRequiresEligible || wins >= MIN_ELIGIBLE_WINS ? (
             <button
               className="md-btn md-btn--lg flex w-full items-center justify-center gap-2"
               style={{ background: "var(--md-orange)" }}
               onClick={onEnterTournament}
             >
-              {/* Daily is "Open" — tier-less — so no tier badge there. */}
-              {isDaily ? null : <TierBadge wins={wins} />}
-              Enter this team in the {isDaily ? "Daily Tournament" : "Tournament"}
+              {/* Tier badge only on the gated free-play entry (Daily + private are
+                  tier-less / "Open"). */}
+              {entryRequiresEligible && !isDaily ? <TierBadge wins={wins} /> : null}
+              {entryCtaLabel ??
+                `Enter this team in the ${isDaily ? "Daily Tournament" : "Tournament"}`}
             </button>
           ) : (
             <button

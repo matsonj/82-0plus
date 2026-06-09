@@ -4,15 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   GameMode,
-  PublicPlayer,
   SimPick,
   SimResult,
   SimRosterLine,
 } from "@/lib/types";
-import { canFill, type SlotKind } from "@/lib/positions";
-import { SlotMachine } from "@/components/SlotMachine";
-import { PlayerList } from "@/components/PlayerList";
-import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
+import { type SlotKind } from "@/lib/positions";
+import type { LineupEntry } from "@/components/LineupBoard";
+import { LineupDraftBoard } from "@/components/LineupDraftBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { DailyArchive } from "@/components/DailyArchive";
 import { DailySignIn } from "@/components/DailySignIn";
@@ -105,8 +103,6 @@ export default function Home() {
   );
   const [currentDecade, setCurrentDecade] = useState<number | null>(null);
   const [currentTeam, setCurrentTeam] = useState<string | null>(null);
-  const [pending, setPending] = useState<PublicPlayer | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
   const [teamSkips, setTeamSkips] = useState(1);
   const [decadeSkips, setDecadeSkips] = useState(1);
   const [rolling, setRolling] = useState(false);
@@ -137,9 +133,6 @@ export default function Home() {
 
   const draftedCount = lineup.filter(Boolean).length;
   const draftDone = draftedCount === KINDS.length;
-  const draftedIds = lineup
-    .filter(Boolean)
-    .map((e) => (e as LineupEntry).player.entity_id);
 
   const rollRound = useCallback(
     async (opts: { decade?: number; excludeTeam?: string } = {}) => {
@@ -156,8 +149,6 @@ export default function Home() {
       const myId = ++rollSeq.current;
       rollActive.current = true;
       setRolling(true);
-      setPending(null);
-      setSelected(null);
       const decade = opts.decade ?? pickWeightedDecade(decades, usage);
       setCurrentDecade(decade);
       setCurrentTeam(null);
@@ -195,8 +186,6 @@ export default function Home() {
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
-    setPending(null);
-    setSelected(null);
     setTeamSkips(1);
     setDecadeSkips(1);
     setDailySlots([]);
@@ -438,8 +427,6 @@ export default function Home() {
     if (gameType === "daily") {
       const slot = dailySlots[draftedCount];
       if (slot && (currentTeam !== slot.team || currentDecade !== slot.decade)) {
-        setPending(null);
-        setSelected(null);
         setCurrentDecade(slot.decade);
         setCurrentTeam(slot.team);
         setCurrentReceipt(""); // Daily slots aren't server-rolled; no receipt.
@@ -485,93 +472,8 @@ export default function Home() {
     }
   }, []);
 
-  const draftable = useCallback(
-    (p: PublicPlayer) => {
-      if (draftedIds.includes(p.entity_id)) return false;
-      return KINDS.some((kind, i) => lineup[i] === null && canFill(p.positions, kind));
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lineup],
-  );
-
-  const placeAt = (player: PublicPlayer, i: number) => {
-    if (currentTeam === null || currentDecade === null) return;
-    const entry: LineupEntry = { player, team: currentTeam, decade: currentDecade, receipt: currentReceipt };
-    setLineup((prev) => prev.map((s, idx) => (idx === i ? entry : s)));
-    setPending(null);
-    setSelected(null);
-    setCurrentDecade(null);
-    setCurrentTeam(null);
-  };
-
-  const pick = (player: PublicPlayer) => {
-    const eligible = KINDS.map((kind, i) => ({ kind, i }))
-      .filter(({ i }) => lineup[i] === null)
-      .filter(({ kind }) => canFill(player.positions, kind))
-      .map(({ i }) => i);
-    if (eligible.length === 0) return;
-    if (eligible.length === 1) placeAt(player, eligible[0]);
-    else setPending(player);
-  };
-
-  // Slot clicks place the pending pick, or move/swap already-drafted players
-  // between eligible slots. There is no delete — committed picks can be
-  // rearranged but not removed (so you can't re-roll past the five spins).
-  const onSlotClick = (i: number) => {
-    if (pending) {
-      if (lineup[i] === null && canFill(pending.positions, KINDS[i]))
-        placeAt(pending, i);
-      return;
-    }
-    if (selected === null) {
-      if (lineup[i]) setSelected(i);
-      return;
-    }
-    if (i === selected) {
-      setSelected(null);
-      return;
-    }
-    const sel = lineup[selected] as LineupEntry;
-    const target = lineup[i];
-    if (target === null) {
-      if (canFill(sel.player.positions, KINDS[i])) {
-        setLineup((prev) =>
-          prev.map((s, idx) => (idx === i ? sel : idx === selected ? null : s)),
-        );
-        setSelected(null);
-      }
-    } else if (
-      canFill(sel.player.positions, KINDS[i]) &&
-      canFill(target.player.positions, KINDS[selected])
-    ) {
-      setLineup((prev) =>
-        prev.map((s, idx) => (idx === i ? sel : idx === selected ? target : s)),
-      );
-      setSelected(null);
-    }
-  };
-
-  let targets: number[] = [];
-  if (pending) {
-    targets = KINDS.map((kind, i) => ({ kind, i }))
-      .filter(({ i }) => lineup[i] === null)
-      .filter(({ kind }) => canFill(pending.positions, kind))
-      .map(({ i }) => i);
-  } else if (selected !== null) {
-    const sel = lineup[selected] as LineupEntry;
-    targets = KINDS.map((_, i) => i).filter((i) => {
-      if (i === selected) return false;
-      const t = lineup[i];
-      if (t === null) return canFill(sel.player.positions, KINDS[i]);
-      return (
-        canFill(sel.player.positions, KINDS[i]) &&
-        canFill(t.player.positions, KINDS[selected])
-      );
-    });
-  }
-
   const teamSkip = () => {
-    if (teamSkips <= 0 || currentDecade === null || pending || rolling) return;
+    if (teamSkips <= 0 || currentDecade === null || rolling) return;
     setTeamSkips((n) => n - 1);
     rollRound({ decade: currentDecade, excludeTeam: currentTeam ?? undefined });
   };
@@ -583,7 +485,6 @@ export default function Home() {
       decadeSkips <= 0 ||
       currentDecade === null ||
       currentTeam === null ||
-      pending ||
       rolling
     )
       return;
@@ -594,8 +495,6 @@ export default function Home() {
     const myId = ++rollSeq.current;
     rollActive.current = true;
     setRolling(true);
-    setPending(null);
-    setSelected(null);
     // Keep the team set the whole time — only the decade reel should spin. The
     // player list is hidden during the in-flight roll via `rolling`, not by
     // nulling the team (which would make the team reel spin too).
@@ -1029,91 +928,49 @@ export default function Home() {
       {/* ---------------- GAME ---------------- */}
       {phase === "play" && !result && !booting && loaded && (
         <section className="relative z-10 mt-4 flex flex-col gap-5">
-          <div>
-            <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-              Your lineup · {draftedCount}/{KINDS.length}
-            </div>
-            <LineupBoard
-              kinds={KINDS}
-              entries={lineup}
-              targets={targets}
-              selected={selected}
-              onSlotClick={onSlotClick}
-            />
-            <div className="mt-2 text-center font-display text-[11px] text-[var(--md-ink-muted)]">
-              {pending
-                ? "Tap a glowing slot to place him."
-                : selected !== null
-                  ? "Tap a glowing slot to move him (or tap him again to cancel)."
-                  : draftDone
-                    ? "Tap a player, then a slot, to rearrange."
-                    : "Tip: tap a drafted player then a slot to move him."}
-            </div>
-          </div>
-
-          {pending && (
-            <div className="md-card md-card--lift flex flex-col items-center gap-3 p-4">
-              <div className="font-display text-sm">
-                Where does{" "}
-                <span className="font-bold">{pending.player_name}</span> play?
-              </div>
-              <button
-                className="md-btn md-btn--sm md-btn--secondary"
-                onClick={() => setPending(null)}
-              >
-                Cancel pick
-              </button>
-            </div>
-          )}
-
-          {!draftDone && !pending && currentDecade !== null && (
-            <div className="md-card md-card--lift flex flex-col items-center gap-3 p-3 sm:gap-4 sm:p-5">
-              <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                Round {draftedCount + 1} of {KINDS.length}
-              </div>
-              <SlotMachine team={currentTeam} decade={currentDecade} size="lg" />
-              {gameType === "free" && (
+          <LineupDraftBoard
+            kinds={KINDS}
+            lineup={lineup}
+            setLineup={setLineup}
+            source={
+              currentDecade !== null
+                ? { team: currentTeam, decade: currentDecade, receipt: currentReceipt }
+                : null
+            }
+            rolling={rolling}
+            mode={mode}
+            allowRespin={gameType === "free"}
+            onConsumeSource={() => {
+              setCurrentDecade(null);
+              setCurrentTeam(null);
+            }}
+            onNoneEligible={() =>
+              rollRound({
+                decade: currentDecade ?? undefined,
+                excludeTeam: currentTeam ?? undefined,
+              })
+            }
+            controls={({ rolling: r }) =>
+              gameType === "free" ? (
                 <div className="flex flex-wrap justify-center gap-2">
                   <button
                     className="md-btn md-btn--sm md-btn--secondary"
                     onClick={teamSkip}
-                    disabled={teamSkips <= 0 || rolling}
+                    disabled={teamSkips <= 0 || r}
                   >
                     ↻ Team skip ({teamSkips})
                   </button>
                   <button
                     className="md-btn md-btn--sm md-btn--secondary"
                     onClick={decadeSkip}
-                    disabled={decadeSkips <= 0 || rolling || decades.length < 2}
+                    disabled={decadeSkips <= 0 || r || decades.length < 2}
                   >
                     ↻ Decade skip ({decadeSkips})
                   </button>
                 </div>
-              )}
-              <div className="w-full">
-                {currentTeam && !rolling ? (
-                  <PlayerList
-                    team={currentTeam}
-                    decade={currentDecade}
-                    mode={mode}
-                    allowRespin={gameType === "free"}
-                    draftable={draftable}
-                    onPick={pick}
-                    onNoneEligible={() =>
-                      rollRound({
-                        decade: currentDecade ?? undefined,
-                        excludeTeam: currentTeam ?? undefined,
-                      })
-                    }
-                  />
-                ) : (
-                  <div className="py-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
-                    Spinning the reel…
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+              ) : null
+            }
+          />
 
           {draftDone && (
             <div className="flex flex-col items-center gap-3">

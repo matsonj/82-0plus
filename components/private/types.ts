@@ -2,7 +2,7 @@
 // route handlers return (app/api/private-tournament/*). Kept here so every
 // private component shares one source of truth without re-declaring inline.
 
-import type { BracketResult } from "@/lib/types";
+import type { BracketResult, SimResult, SimRosterLine } from "@/lib/types";
 import type { PrivateBoard } from "@/lib/privateBoard";
 import type { PrivateMode, PrivateBoardMode } from "@/lib/privateTournament";
 
@@ -86,7 +86,8 @@ export interface PrivateRegisterResponse {
   mode: PrivateMode;
 }
 
-// POST /partial response (the interstitial reg-season record).
+// POST /partial response (the interstitial reg-season record). `result` + `roster`
+// mirror /api/simulate so the interstitial can render the shared ResultsPanel.
 export interface PrivatePartialResponse {
   entryId: string;
   status: string;
@@ -94,6 +95,8 @@ export interface PrivatePartialResponse {
   regL: number;
   seedNet: number;
   teamBox: unknown;
+  result: SimResult;
+  roster: SimRosterLine[];
 }
 
 // POST /submit response.

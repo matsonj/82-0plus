@@ -163,6 +163,10 @@ export async function POST(req: NextRequest) {
       regL: sim.losses,
       seedNet: sim.seedNet,
       teamBox: sim.teamBox,
+      // Full sim + roster lines so the interstitial can render the SHARED
+      // ResultsPanel (the same post-selection screen the main game uses).
+      result: sim,
+      roster: hydrated.lines,
     });
   } catch (err) {
     console.error("[/api/private-tournament/partial]", err);

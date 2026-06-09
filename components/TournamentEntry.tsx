@@ -11,6 +11,7 @@ import { type SlotKind } from "@/lib/positions";
 import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
+import { CaptainPicker } from "@/components/CaptainPicker";
 import { TournamentResults } from "@/components/TournamentResults";
 import { TournamentHowToPlay } from "@/components/TournamentHowToPlay";
 import {
@@ -486,44 +487,12 @@ export function TournamentEntry({
           <p className="-mt-2 text-[13px] text-[var(--md-ink-muted)]">
             Tap one of your five starters.
           </p>
-          <div className="grid grid-cols-5 gap-1.5">
-            {lineup.map((e, i) => {
-              const entry = e as LineupEntry;
-              const isCap = captainSlot === i;
-              return (
-                <button
-                  key={i}
-                  onClick={() => setCaptainSlot(i)}
-                  className="md-card flex min-h-[80px] flex-col p-1.5 text-left transition-transform"
-                  style={{
-                    background: isCap ? "var(--md-yellow)" : "var(--md-white)",
-                    borderWidth: isCap ? "3px" : "2px",
-                    boxShadow: isCap ? "var(--md-shadow-sm)" : "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  <span
-                    className="self-start border border-[var(--md-ink)] px-1 font-display text-[9px] font-bold"
-                    style={{ background: "var(--md-yellow)" }}
-                  >
-                    {KINDS[i] === "FLEX" ? "FLEX" : KINDS[i]}
-                  </span>
-                  <span className="mt-1 font-display text-[10px] font-bold leading-tight break-words">
-                    {entry.player.player_name}
-                  </span>
-                  <span className="mt-auto font-display text-[9px] text-[var(--md-orange-deep)]">
-                    {entry.team} &rsquo;
-                    {String(entry.player.best_season).slice(2)}
-                  </span>
-                  {isCap && (
-                    <span className="font-display text-[9px] font-bold">
-                      ★ CAPTAIN
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <CaptainPicker
+            kinds={KINDS}
+            entries={lineup}
+            value={captainSlot}
+            onChange={setCaptainSlot}
+          />
 
           {/* The name/login + team-name forms appear only AFTER a captain is
               picked — showing them up-front confused first-time players. */}

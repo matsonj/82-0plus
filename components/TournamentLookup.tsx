@@ -415,6 +415,46 @@ export function TournamentLookup({
     }
   }, []);
 
+  // Private-tab account login ("Already joined one?"). Authenticates DIRECTLY
+  // against /api/private-tournament/my (NOT /api/tournament/lookup), so an
+  // account with only private entries — and zero Daily/Ranked/Classic teams —
+  // still reaches its private list. On success: remember the account, populate
+  // the private rows, and switch to the list view (Private tab). A 401 means
+  // bad name/PIN; any other failure is a generic retry message. An authenticated
+  // account with no private tournaments is NOT an error — it lands on the list
+  // with an empty `privateRows`, showing the friendly empty state.
+  const submitPrivateLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/private-tournament/my", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, pin }),
+      });
+      if (!res.ok) {
+        setError(
+          res.status === 401
+            ? "No account found for that name and PIN."
+            : "Couldn't load your private tournaments right now. Try again.",
+        );
+        return;
+      }
+      const data = (await res.json()) as { tournaments: MyPrivateRow[] };
+      saveUser({ username: name, pin }); // stay logged in
+      setPrivateRows(data.tournaments ?? []);
+      setTab("private");
+      setPage(0);
+      setView("list");
+    } catch {
+      setError("Couldn't load your private tournaments right now. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Join a private tournament by its NAME + PIN. Two-step: (1) verify the
   // tournament's name+PIN via /lookup to resolve a tournamentId (a generic 404
   // covers both "no such name" and "wrong PIN"); (2) reserve a slot for the
@@ -516,12 +556,17 @@ export function TournamentLookup({
   }
 
   // ---- Teams list view. ----
-  if (view === "list" && lookup) {
+  // Rendered when a generic lookup succeeded (`lookup` set) OR when a Private-tab
+  // account login succeeded for an account with no Daily/Ranked/Classic teams
+  // (`lookup` null but `privateRows` populated). The Private tab reads from
+  // `privateRows`, so it never needs `lookup`; the other tabs read from
+  // `lookup.teams`.
+  if (view === "list" && (lookup || privateRows !== null)) {
     // Filter the existing team list by the active mode tab (daily/hoopiq/classic).
     const filtered =
       tab === "private"
         ? []
-        : lookup.teams.filter((t) => t.mode === (tab as TournamentMode));
+        : (lookup?.teams ?? []).filter((t) => t.mode === (tab as TournamentMode));
     const pageCount = Math.max(1, Math.ceil(filtered.length / TEAMS_PER_PAGE));
     const safePage = Math.min(page, pageCount - 1);
     const shown = filtered.slice(
@@ -531,7 +576,9 @@ export function TournamentLookup({
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-4">
         <div className="flex items-end justify-between gap-3">
-          <div className="font-display text-2xl font-bold">{lookup.name}</div>
+          <div className="font-display text-2xl font-bold">
+            {lookup?.name ?? name}
+          </div>
           <button
             type="button"
             className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
@@ -817,7 +864,10 @@ export function TournamentLookup({
               </button>
             </form>
 
-            <form onSubmit={submit} className="md-card flex flex-col gap-3 p-5">
+            <form
+              onSubmit={submitPrivateLogin}
+              className="md-card flex flex-col gap-3 p-5"
+            >
               <div className="font-display text-sm font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
                 Already joined one?
               </div>
