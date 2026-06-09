@@ -169,6 +169,24 @@ export function PrivateTournamentLobby({
       {submitted ? (
         <div className="md-card flex flex-col items-center gap-2 p-4 text-center">
           <div className="md-capsule md-capsule--teal">Your team is in</div>
+          {you?.regW != null && you?.regL != null && (
+            <div className="font-display text-sm text-[var(--md-ink-muted)]">
+              Regular season: {you.regW}–{you.regL}
+              {you.seedNet != null && (
+                <>
+                  {" · "}
+                  <span
+                    style={{
+                      color: you.seedNet >= 0 ? "var(--md-teal)" : "var(--md-coral)",
+                    }}
+                  >
+                    {you.seedNet >= 0 ? "+" : "−"}
+                    {Math.abs(you.seedNet).toFixed(1)} net
+                  </span>
+                </>
+              )}
+            </div>
+          )}
           {you?.provisionalRecordW != null && you?.provisionalRecordL != null && (
             <div className="font-display text-sm text-[var(--md-ink-muted)]">
               Provisional bracket: {you.provisionalRecordW}–{you.provisionalRecordL}

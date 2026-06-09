@@ -11,6 +11,11 @@ export interface PrivateYou {
   entryId: string;
   status: string;
   teamId: string;
+  // Regular-season standing of the five (seedNet is the no-buff net rating, i.e.
+  // the reg-season scoring margin shown on the interstitial).
+  regW: number | null;
+  regL: number | null;
+  seedNet: number | null;
   provisionalRecordW: number | null;
   provisionalRecordL: number | null;
   provisionalStatus: string | null;
