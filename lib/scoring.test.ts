@@ -105,6 +105,18 @@ describe("simulateRoster", () => {
     expect(stamp(3).wins).toBeLessThan(clean.wins);
   });
 
+  it("a proven FT shooter with a cold low-volume 3P% is NOT a non-shooter", () => {
+    // The Wilkins/Majerle case: real FT touch (≥ FG3_SHOOTER_FT_FLOOR) but a poor
+    // 3P% on few attempts. FT touch spaces the floor, so the 3pt flag is exempt.
+    const shooter = p({ gq: 0.7, fta: 6, ftm: 5, fg3a: 3, fg3m: 0.7, fga: 16, fgm: 8, ast: 3, reb: 6 }); // FT .833, 3P .233
+    const five = Array.from({ length: 5 }, () => shooter);
+    expect(simulateRoster(five).nonShooters).toBe(0);
+    expect(simulateRoster(five).outsidePen).toBe(0);
+    // …but a poor 3pt shooter who ALSO lacks FT touch is still a non-shooter.
+    const brickBadFt = p({ gq: 0.7, fta: 6, ftm: 3.5, fg3a: 3, fg3m: 0.7, fga: 16, fgm: 8 }); // FT .583
+    expect(simulateRoster(Array.from({ length: 5 }, () => brickBadFt)).nonShooters).toBe(5);
+  });
+
   it("a great FT shooter who never shoots threes is NOT a non-shooter (era-fair)", () => {
     // 0 three-point attempts (e.g. pre-1980), strong FT% → not flagged.
     const oldStars = Array.from({ length: 5 }, () =>
@@ -223,6 +235,21 @@ describe("simulateRoster", () => {
     const weakIso = balancedRoster(0.55).map((x) => ({ ...x, ast: 0.3 }));
     const weakPassing = simulateRoster(balancedRoster(0.55));
     expect(simulateRoster(weakIso).wins).toBeLessThan(weakPassing.wins);
+  });
+
+  it("absolute cap: construction can't subtract more than MAX_FIT_PENALTY, even sub-elite", () => {
+    // Sub-elite talent (baseNet below the 60-win net, so the TALENT floor does not
+    // apply), maximally penalized: chuckers, no shooters, no guard. The absolute
+    // Team-fit cap still bounds the damage at MAX_FIT_PENALTY.
+    const net60 = (60 - C.BASE_WINS) / C.WINS_PER_NET;
+    const wrecked = balancedRoster(0.55).map((x) => ({
+      ...x, ast: 0.3, fga: 28, fta: 9, ftm: 4, tov: 4, fg3a: 0, fg3m: 0, reb: 11, blk: 1.5,
+    }));
+    const r = simulateRoster(wrecked);
+    expect(r.baseNet).toBeGreaterThan(0); // real (sub-elite) talent…
+    expect(r.baseNet).toBeLessThan(net60); // …below the elite-floor threshold
+    expect(r.usagePen + r.outsidePen + r.ballhogPen + r.balancePen).toBeGreaterThan(C.MAX_FIT_PENALTY);
+    expect(r.teamFit).toBeCloseTo(-C.MAX_FIT_PENALTY, 1); // capped, not −40+
   });
 
   it("teamFit collapses the construction factors (= net − talent − defense)", () => {

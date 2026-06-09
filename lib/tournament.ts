@@ -17,7 +17,7 @@
 // game outcomes, never the seed line.
 // ============================================================================
 
-import type { ScoringPlayer } from "./scoring";
+import { simulateRoster, type ScoringPlayer } from "./scoring";
 import type {
   BracketPlayer,
   BracketResult,
@@ -86,6 +86,9 @@ export const TOURNAMENT_CONFIG = {
   // sixth-man multiplier × (game-1). LEAGUE_AVG_EXP centers the age factor.
   FATIGUE_PER_GAME: 0.6,
   LEAGUE_AVG_EXP: 6,
+  // OLDER teams decay faster: the above-average half of the age factor is steepened
+  // by this multiplier (young teams' buff is unchanged). 4/3 ⇒ ~33% more severe.
+  AGE_OLD_FATIGUE_MULT: 4 / 3,
   // A bench player always exists in this design, so the slope is always halved;
   // the knob stays explicit for tuning / to document the assumption.
   SIXTH_MAN_FATIGUE_MULT: 0.5,
@@ -109,6 +112,17 @@ export const TOURNAMENT_CONFIG = {
   // Widened from ±1.5 to ±3.5 so the higher seed doesn't always win — a hot
   // night can steal games (and occasionally a series).
   RANDOM_FACTOR_MAX: 3.5,
+
+  // Displayed box score: the game's total points come from the two teams' actual
+  // offensive output (each five's reg-season team PTS, summed) knocked down for
+  // playoff defense, then split by the net margin — not a flat ~100 base. A small
+  // seeded per-game jitter keeps games in a series from showing identical totals.
+  PLAYOFF_DEFENSE_PCT: 0.1, // shave 10% off combined scoring for playoff defense
+  SCORE_JITTER_PCT: 0.04, // ± per-game wobble on the combined total
+  // Believable-range guardrails on the combined two-team total, so a degenerate
+  // roster (or a synthetic test team) still yields a sane box score.
+  MIN_GAME_TOTAL: 192,
+  MAX_GAME_TOTAL: 258,
 } as const;
 
 export type TournamentConfig = typeof TOURNAMENT_CONFIG;
@@ -299,12 +313,15 @@ export function gameScoreBuff(
 // ---------------------------------------------------------------------------
 
 /** Age factor scaling fatigue: 1 at LEAGUE_AVG_EXP, rising for older teams (they
- *  decay faster across a series), falling for younger ones. Bounded [-0.4, 0.8]. */
+ *  decay faster across a series), falling for younger ones. The young side is
+ *  bounded at -0.4; the OLD side (above average) is steepened by AGE_OLD_FATIGUE_MULT
+ *  so older teams decay ~33% harder, then bounded at 0.8 × that multiplier. */
 export function ageFactor(
   team: TournamentTeam,
   cfg: TournamentConfig = TOURNAMENT_CONFIG,
 ): number {
-  return 1 + clamp((team.ageAtPeak - cfg.LEAGUE_AVG_EXP) / 10, -0.4, 0.8);
+  const dev = clamp((team.ageAtPeak - cfg.LEAGUE_AVG_EXP) / 10, -0.4, 0.8);
+  return 1 + (dev > 0 ? dev * cfg.AGE_OLD_FATIGUE_MULT : dev);
 }
 
 /** Cumulative fatigue (a POSITIVE amount that is SUBTRACTED) at game `gameNo`
@@ -448,6 +465,16 @@ function playSeries(
   const games: GameResult[] = [];
   let scoreHi = 0, scoreLo = 0;
 
+  // Each five's reg-season team PTS (the same figure shown on the result card)
+  // drives the displayed box score: the two summed and shaved for playoff defense
+  // give the game's total points, split by the per-game net margin below.
+  const teamPts: Record<string, number> = {
+    [hi.id]: simulateRoster(hi.starters).teamBox.pts,
+    [lo.id]: simulateRoster(lo.starters).teamBox.pts,
+  };
+  const combinedBase =
+    (teamPts[hi.id] + teamPts[lo.id]) * (1 - cfg.PLAYOFF_DEFENSE_PCT);
+
   for (let g = 1; g <= bestOf && scoreHi < clinch && scoreLo < clinch; g++) {
     const homeIsHi = owners[g - 1] === "hi";
     const home = homeIsHi ? hi : lo;
@@ -496,14 +523,20 @@ function playSeries(
     if (winnerId === hi.id) scoreHi++; else scoreLo++;
 
     const margin = homeBd.adj - awayBd.adj; // positive ⇒ home won
-    // Arcade box score: a ~95–105 base, split by half the (net-rating) margin,
-    // rounded and nudged so the winner is always strictly ahead (never a tie).
+    // Box score: the game total = the two teams' combined reg-season PTS minus
+    // playoff defense (constant per series), wobbled a little per game, then split
+    // by half the net margin and nudged so the winner is always strictly ahead.
     const scoreRng = mulberry32(
       hashSeed(`${seedKey}:${round}:${seriesIdx}:${g}:score`),
     );
-    const base = 95 + Math.round(scoreRng() * 10); // 95..105
-    let homeScore = Math.round(base + margin / 2);
-    let awayScore = Math.round(base - margin / 2);
+    const total = clamp(
+      combinedBase * (1 + (scoreRng() * 2 - 1) * cfg.SCORE_JITTER_PCT),
+      cfg.MIN_GAME_TOTAL,
+      cfg.MAX_GAME_TOTAL,
+    );
+    const half = total / 2;
+    let homeScore = Math.round(half + margin / 2);
+    let awayScore = Math.round(half - margin / 2);
     if (homeWon && homeScore <= awayScore) homeScore = awayScore + 1;
     else if (!homeWon && awayScore <= homeScore) awayScore = homeScore + 1;
 

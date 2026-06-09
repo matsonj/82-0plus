@@ -42,9 +42,10 @@ export interface ScoringPlayer {
  *                    net than the last — stacking shooters can't be cruised through.
  *     • outside    — floor spacing by shooting QUALITY, not era-sensitive volume:
  *                    a "non-shooter" is FT% ≤ 65% (era-neutral touch tell) OR a
- *                    genuine bad 3pt shooter (shoots 3s and hits < 30%). One is
- *                    fine; each non-shooter beyond the first taxes the team —
- *                    you can't stack bad-shooting bigs and clog the paint.
+ *                    genuine bad 3pt shooter (shoots 3s and hits < 30%) who ALSO
+ *                    lacks FT touch — a proven FT shooter spaces the floor, so a
+ *                    cold low-volume 3P stretch doesn't flag him. One is fine;
+ *                    each beyond the first taxes the team (clogged paint).
  *     • ball-hog   — winning basketball moves the ball: if too few of the team's
  *                    made shots are assisted (assisted-FG% below target), a tax
  *                    hits iso-heavy stat accumulators.
@@ -119,6 +120,12 @@ export const SCORING_CONFIG = {
   FLOOR_MIN_WINS: 60, // net at this win total is the floor's base for elite talent
   FLOOR_TALENT_SHARE: 0.5, // each net point of talent past the 60-win mark lifts the floor by this
   FLOOR_MAX_WINS: 79, // the floor can never exceed the top of A tier (no floored AA/S)
+  // Absolute cap on the construction ("Team fit") penalty, in net-rating points,
+  // for ANY team. The talent-scaled floor above only rescues ELITE talent; this
+  // backstop keeps a sub-elite-but-real roster (recognizable stars who happen to
+  // fit poorly) from being cratered purely by construction. Penalties still bite
+  // hard — they just can't subtract more than this much net.
+  MAX_FIT_PENALTY: 15,
 
   // Fit targets.
   POSS_BUDGET_PER_SLOT: 22, // box-scale budget: possessions (fga + 0.44·fta + tov) one
@@ -136,6 +143,8 @@ export const SCORING_CONFIG = {
   FT_LIABILITY_MAX: 0.65, // FT% at/below this → non-shooter (era-neutral touch tell)
   FG3_LIABILITY_MAX: 0.3, // 3P% below this → non-shooter (only if they shoot enough 3s)
   FG3_MIN_ATTEMPTS: 1.0, // 3PA/game needed before 3P% is judged (avoids era false-flags)
+  FG3_SHOOTER_FT_FLOOR: 0.72, // FT% at/above this proves real shooting touch, so a cold
+  //   low-volume 3P% doesn't brand a good shooter (Wilkins/Majerle) a non-shooter.
 } as const;
 
 export type ScoringConfig = typeof SCORING_CONFIG;
@@ -201,9 +210,18 @@ export function simulateRoster(
   // era-neutral touch tell; a bad 3P% only counts if the player actually shoots
   // 3s (so old-era players with 0 attempts aren't false-flagged). One non-shooter
   // is fine; each one beyond the first taxes the team (paint gets clogged).
-  const isNonShooter = (p: ScoringPlayer) =>
-    (p.fta >= 1 && p.ftm / p.fta <= cfg.FT_LIABILITY_MAX) ||
-    (p.fg3a >= cfg.FG3_MIN_ATTEMPTS && p.fg3m / p.fg3a < cfg.FG3_LIABILITY_MAX);
+  const isNonShooter = (p: ScoringPlayer) => {
+    const ftPct = p.fta >= 1 ? p.ftm / p.fta : 1; // assume touch when there's no FT data
+    return (
+      ftPct <= cfg.FT_LIABILITY_MAX ||
+      // A genuine bad 3pt shooter — BUT a proven FT shooter has the touch to space
+      // the floor, so good FT% exempts the 3pt-liability flag. A low-volume cold 3P
+      // stretch shouldn't brand a real shooter (Wilkins/Majerle) a paint-clogger.
+      (p.fg3a >= cfg.FG3_MIN_ATTEMPTS &&
+        p.fg3m / p.fg3a < cfg.FG3_LIABILITY_MAX &&
+        ftPct < cfg.FG3_SHOOTER_FT_FLOOR)
+    );
+  };
   const nonShooters = roster.reduce((c, p) => c + (isNonShooter(p) ? 1 : 0), 0);
   const outsidePen =
     nonShooters >= 3
@@ -288,7 +306,11 @@ export function simulateRoster(
           netFor(cfg.FLOOR_MAX_WINS),
         )
       : -Infinity;
-  const netRating = Math.max(rawNet, netFloor);
+  // Absolute backstop (applies to EVERY team, not just elite talent): the
+  // construction penalties can subtract at most MAX_FIT_PENALTY net. defBuff is a
+  // talent/defense credit, not construction, so it sits outside the cap.
+  const fitFloor = baseNet + defBuff - cfg.MAX_FIT_PENALTY;
+  const netRating = Math.max(rawNet, netFloor, fitFloor);
   // Everything that isn't talent or the defensive margin buff, as one number — the
   // "Team fit" line shown on the result (negative when construction hurt the team,
   // positive when synergy + good fit helped). Reflects the floor.
