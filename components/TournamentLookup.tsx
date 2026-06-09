@@ -334,7 +334,13 @@ export function TournamentLookup({
   };
 
   // Run a lookup for explicit credentials. `silent` (used by auto-login from a
-  // saved session) suppresses the error and clears stale creds instead.
+  // saved session) suppresses the error message. NOTE: a non-2xx here is NOT an
+  // auth failure — the legacy lookup returns no-match for a valid account that
+  // simply has no Daily/Ranked/Classic teams (e.g. a private-only account). So
+  // the silent path must NEVER clear the saved user; doing so would log out a
+  // valid private-only account (and kill the GlobalHeader notification dot,
+  // which polls with the saved account). Only an explicit "Log out" or a real
+  // private-auth 401 clears the session.
   const runLookup = useCallback(
     async (uname: string, upin: string, silent = false) => {
       setSubmitting(true);
@@ -346,9 +352,9 @@ export function TournamentLookup({
           body: JSON.stringify({ name: uname, pin: upin }),
         });
         if (!res.ok) {
-          // Any non-2xx (incl. no-match) → a single generic message.
-          if (silent) clearUser();
-          else setError("No team found for that name and PIN.");
+          // Any non-2xx (incl. no-match) → a single generic message. Keep the
+          // saved session intact on the silent (auto-login) path.
+          if (!silent) setError("No team found for that name and PIN.");
           return;
         }
         const data = (await res.json()) as TournamentLookupResponse;
@@ -371,8 +377,55 @@ export function TournamentLookup({
     void runLookup(name, pin);
   };
 
+  // Fetch the user's full private-tournament list (newest-first, incl. viewed-
+  // completed) via /my. Re-authenticates with name+PIN. When `boot` is set (the
+  // saved-session auto-login landing on the Private tab), a successful auth also
+  // switches to the Private list view so a private-only account lands directly
+  // on its private feed instead of the logged-out private landing. A 401 there
+  // is a genuine auth failure (stale/bad saved creds) and clears the session;
+  // any other failure leaves the saved user intact and just shows an empty list.
+  const loadPrivate = useCallback(
+    async (uname: string, upin: string, boot = false) => {
+      setPrivateLoading(true);
+      try {
+        const res = await fetch("/api/private-tournament/my", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: uname, pin: upin }),
+        });
+        if (!res.ok) {
+          // A 401 is a real auth failure: clear the stale saved session so the
+          // boot path falls back to the login/landing instead of looping.
+          if (res.status === 401) clearUser();
+          setPrivateRows([]);
+          return;
+        }
+        const data = (await res.json()) as { tournaments: MyPrivateRow[] };
+        saveUser({ username: uname, pin: upin }); // stay logged in
+        setPrivateRows(data.tournaments ?? []);
+        if (boot) {
+          setTab("private");
+          setPage(0);
+          setView("list");
+        }
+      } catch {
+        setPrivateRows([]);
+      } finally {
+        setPrivateLoading(false);
+      }
+    },
+    [],
+  );
+
   // Auto-login from a saved session: jump straight to the teams list (showing a
   // loader, never the login form, while it resolves).
+  //
+  // When the active tab is `private` (e.g. arriving at /tournament?tab=private),
+  // authenticate via the private feed (/api/private-tournament/my) instead of
+  // the legacy team lookup. A private-only account has no Daily/Ranked/Classic
+  // teams, so the legacy lookup would return no-match — which must not be
+  // treated as a logout. Routing the private boot through loadPrivate lands the
+  // account on its private list and keeps the saved user (and header dot) alive.
   useEffect(() => {
     const saved = getSavedUser();
     if (!saved) {
@@ -381,10 +434,12 @@ export function TournamentLookup({
     }
     setName(saved.username);
     setPin(saved.pin);
-    runLookup(saved.username, saved.pin, true).finally(() =>
-      setBootingSession(false),
-    );
-  }, [runLookup]);
+    const boot =
+      initialTab === "private"
+        ? loadPrivate(saved.username, saved.pin, true)
+        : runLookup(saved.username, saved.pin, true);
+    boot.finally(() => setBootingSession(false));
+  }, [runLookup, loadPrivate, initialTab]);
 
   const logOut = () => {
     clearUser();
@@ -393,29 +448,6 @@ export function TournamentLookup({
     setPrivateRows(null);
     resetToForm();
   };
-
-  // Fetch the user's full private-tournament list (newest-first, incl. viewed-
-  // completed) via /my. Re-authenticates with name+PIN.
-  const loadPrivate = useCallback(async (uname: string, upin: string) => {
-    setPrivateLoading(true);
-    try {
-      const res = await fetch("/api/private-tournament/my", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: uname, pin: upin }),
-      });
-      if (!res.ok) {
-        setPrivateRows([]);
-        return;
-      }
-      const data = (await res.json()) as { tournaments: MyPrivateRow[] };
-      setPrivateRows(data.tournaments ?? []);
-    } catch {
-      setPrivateRows([]);
-    } finally {
-      setPrivateLoading(false);
-    }
-  }, []);
 
   // Private-tab account login ("Already joined one?"). Authenticates DIRECTLY
   // against /api/private-tournament/my (NOT /api/tournament/lookup), so an
@@ -614,8 +646,10 @@ export function TournamentLookup({
           ))}
         </div>
 
-        {/* Clear the mode filter to show every (non-private) team. */}
-        {tab !== "all" && tab !== "private" && (
+        {/* Clear the mode filter to show every (non-private) team. Shown on the
+            Private tab too, so it reads as just another selected filter with a
+            consistent way back to the unfiltered "all" list. */}
+        {tab !== "all" && (
           <button
             type="button"
             onClick={() => {

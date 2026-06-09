@@ -52,6 +52,7 @@ export function TournamentEntry({
   mode,
   dailyBench = null,
   dailyDate = null,
+  privateConfig = null,
   onBack,
 }: {
   initialLineup: (LineupEntry | null)[];
@@ -59,11 +60,25 @@ export function TournamentEntry({
   // For daily mode: the FIXED bench slot (team+decade) the sixth man is drafted
   // from — no rolling, no team-skip, no receipt (the daily board is the
   // provenance). Null/omitted for classic/hoopiq, which roll the bench.
+  // Private mode ALSO passes a fixed bench here (board.benchSlot).
   dailyBench?: { team: string; decade: number } | null;
   dailyDate?: string | null; // daily board date (for the share-card mode label)
+  // For PRIVATE tournaments: the known account + tournament + a submit callback.
+  // When set, the bench is fixed (like daily), the account is known (no name/PIN
+  // form), and submit() posts to the private-tournament endpoint and calls
+  // onSubmitted() instead of rendering TournamentResults. Null for the main game.
+  privateConfig?: {
+    tournamentId: string;
+    name: string;
+    pin: string;
+    onSubmitted: () => void;
+  } | null;
   onBack: () => void;
 }) {
   const isDaily = mode === "daily";
+  const isPrivate = !!privateConfig;
+  // The bench is a FIXED slot (no roll / team-skip) for both daily and private.
+  const benchIsFixed = isDaily || isPrivate;
   // Stat visibility mirrors the main game: daily hides stats like Ranked.
   const listMode: GameMode = mode === "classic" ? "classic" : "hoopiq";
 
@@ -124,13 +139,15 @@ export function TournamentEntry({
       setLoggedIn(true);
     }
     try {
-      if (!localStorage.getItem(HOWTO_KEY)) {
+      // Private skips the first-visit Tournament Edition explainer.
+      if (!privateConfig && !localStorage.getItem(HOWTO_KEY)) {
         setShowHowTo(true);
         localStorage.setItem(HOWTO_KEY, "1");
       }
     } catch {
       /* localStorage unavailable */
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const logOut = () => {
@@ -140,9 +157,10 @@ export function TournamentEntry({
     setPin("");
   };
 
-  // ----- load decades on mount (classic/hoopiq only — daily has fixed slots) -----
+  // ----- load decades on mount (classic/hoopiq only — daily & private have
+  // fixed bench slots, so no league roll is needed) -----
   useEffect(() => {
-    if (isDaily) {
+    if (benchIsFixed) {
       setBooting(false);
       return;
     }
@@ -168,7 +186,7 @@ export function TournamentEntry({
     return () => {
       active = false;
     };
-  }, [isDaily]);
+  }, [benchIsFixed]);
 
   // Roll a team for the bench round. Excludes every team already on the roster
   // and down-weights eras the five already cover.
@@ -219,21 +237,21 @@ export function TournamentEntry({
 
   // Auto-roll the bench round until a sixth man is chosen (classic/hoopiq only).
   useEffect(() => {
-    if (isDaily) return; // daily uses the fixed bench slot, not a roll
+    if (benchIsFixed) return; // daily & private use a fixed bench slot, not a roll
     if (booting || decades.length === 0 || result) return;
     if (step !== "sixth") return;
     if (currentDecade !== null || rollActive.current) return;
     rollRound({});
-  }, [isDaily, booting, decades, result, step, currentDecade, rollRound]);
+  }, [benchIsFixed, booting, decades, result, step, currentDecade, rollRound]);
 
-  // Daily: pin the bench round to the day's fixed bench slot (no roll). No
-  // receipt — the daily board is the provenance, verified server-side on submit.
+  // Daily/private: pin the bench round to the fixed bench slot (no roll). No
+  // receipt — the board is the provenance, verified server-side on submit.
   useEffect(() => {
-    if (!isDaily || !dailyBench || result) return;
+    if (!benchIsFixed || !dailyBench || result) return;
     if (step !== "sixth" || currentDecade !== null) return;
     setCurrentTeam(dailyBench.team);
     setCurrentDecade(dailyBench.decade);
-  }, [isDaily, dailyBench, result, step, currentDecade]);
+  }, [benchIsFixed, dailyBench, result, step, currentDecade]);
 
   const draftable = useCallback(
     (p: PublicPlayer) => !usedIds.includes(p.entity_id),
@@ -263,19 +281,72 @@ export function TournamentEntry({
   const usernameCheck = validateName(username);
   const teamNameCheck = validateTeamName(teamName);
   const pinOk = validatePin(pin);
-  const canSubmit =
-    sixth !== null &&
-    captainSlot !== null &&
-    usernameCheck.ok &&
-    teamNameCheck.ok &&
-    pinOk &&
-    !submitting;
+  const canSubmit = isPrivate
+    ? sixth !== null &&
+      captainSlot !== null &&
+      teamNameCheck.ok &&
+      !submitting
+    : sixth !== null &&
+      captainSlot !== null &&
+      usernameCheck.ok &&
+      teamNameCheck.ok &&
+      pinOk &&
+      !submitting;
 
   const submit = async () => {
     if (!canSubmit || captainSlot === null || !sixth) return;
     setSubmitting(true);
     setSubmitError(null);
     setNameTaken(false);
+
+    // ---- Private tournament submit: no receipts; posts to the private endpoint
+    // and hands control back via onSubmitted() (no TournamentResults render). ----
+    if (privateConfig) {
+      try {
+        const roster = lineup
+          .map((e, i) =>
+            e
+              ? {
+                  entity_id: e.player.entity_id,
+                  team: e.team,
+                  decade: e.decade,
+                  slot: i,
+                }
+              : null,
+          )
+          .filter((p): p is NonNullable<typeof p> => p !== null);
+        const res = await fetch("/api/private-tournament/submit", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: privateConfig.name,
+            pin: privateConfig.pin,
+            tournamentId: privateConfig.tournamentId,
+            roster,
+            captainSlot,
+            sixthPick: {
+              entity_id: sixth.player.entity_id,
+              team: sixth.team,
+              decade: sixth.decade,
+            },
+            teamName,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setSubmitError(data?.error ?? "Couldn't submit your team.");
+          return;
+        }
+        privateConfig.onSubmitted();
+        return;
+      } catch {
+        setSubmitError("Couldn't submit your team right now. Try again.");
+        return;
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
     try {
       // Each pick carries its signed roll receipt (server verifies provenance).
       const roster = lineup
@@ -391,8 +462,17 @@ export function TournamentEntry({
                 : undefined
             }
           >
-            {mode === "daily" ? "Daily" : mode === "hoopiq" ? "Ranked" : "Classic"}{" "}
-            Tournament
+            {isPrivate
+              ? mode === "hoopiq"
+                ? "Private · Ranked"
+                : "Private · Classic"
+              : `${
+                  mode === "daily"
+                    ? "Daily"
+                    : mode === "hoopiq"
+                      ? "Ranked"
+                      : "Classic"
+                } Tournament`}
           </span>
         </div>
         <LineupBoard
@@ -432,13 +512,15 @@ export function TournamentEntry({
           <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
             {isDaily
               ? "Draft your Sixth Man · today's bench slot"
-              : "Draft your Sixth Man · any position"}
+              : benchIsFixed
+                ? "Draft your Sixth Man · tournament bench slot"
+                : "Draft your Sixth Man · any position"}
           </div>
           {currentDecade !== null && (
             <SlotMachine team={currentTeam} decade={currentDecade} size="lg" />
           )}
-          {/* Daily's bench is a fixed slot — no team-skip. */}
-          {!isDaily && (
+          {/* Daily & private benches are a fixed slot — no team-skip. */}
+          {!benchIsFixed && (
             <div className="flex flex-wrap justify-center gap-2">
               <button
                 className="md-btn md-btn--sm md-btn--secondary"
@@ -455,7 +537,7 @@ export function TournamentEntry({
                 team={currentTeam}
                 decade={currentDecade}
                 mode={listMode}
-                allowRespin={!isDaily}
+                allowRespin={!benchIsFixed}
                 draftable={draftable}
                 onPick={pickSixth}
                 onNoneEligible={() =>
@@ -500,7 +582,18 @@ export function TournamentEntry({
           <div className="border-t-2 border-[var(--md-ink)] pt-4">
             <div className="font-display text-xl font-bold">Claim your team</div>
             <div className="mt-3 flex flex-col gap-3">
-              {loggedIn ? (
+              {isPrivate ? (
+                // Private: the account is already known (registered for the
+                // tournament) — no name/PIN form, no log-out.
+                <div className="flex items-center gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
+                  <span className="font-display text-[13px]">
+                    Playing as{" "}
+                    <strong className="text-[var(--md-orange-deep)]">
+                      {privateConfig.name}
+                    </strong>
+                  </span>
+                </div>
+              ) : loggedIn ? (
                 <div className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
                   <span className="font-display text-[13px]">
                     Playing as{" "}
@@ -624,7 +717,13 @@ export function TournamentEntry({
                 disabled={!canSubmit}
                 onClick={submit}
               >
-                {submitting ? "Running…" : "Enter the tournament"}
+                {submitting
+                  ? isPrivate
+                    ? "Submitting…"
+                    : "Running…"
+                  : isPrivate
+                    ? "Submit team"
+                    : "Enter the tournament"}
               </button>
             )}
             <button className="md-btn md-btn--lg md-btn--secondary" onClick={onBack}>

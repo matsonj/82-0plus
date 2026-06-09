@@ -9,15 +9,12 @@ import type {
   SimRosterLine,
 } from "@/lib/types";
 import { type SlotKind } from "@/lib/positions";
-import { SlotMachine } from "@/components/SlotMachine";
-import { PlayerList } from "@/components/PlayerList";
-import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
+import { type LineupEntry } from "@/components/LineupBoard";
 import { LineupDraftBoard } from "@/components/LineupDraftBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
-import { CaptainPicker } from "@/components/CaptainPicker";
-import { validateTeamName, NAME_MAX_LEN } from "@/lib/tournamentValidation";
+import { TournamentEntry } from "@/components/TournamentEntry";
 import { SITE_URL } from "@/lib/site";
-import type { PrivateBoard, PrivateSlot } from "@/lib/privateBoard";
+import type { PrivateBoard } from "@/lib/privateBoard";
 import type { PrivateMode } from "@/lib/privateTournament";
 import {
   makeDraftKey,
@@ -27,10 +24,7 @@ import {
   type PrivateDraftData,
   type DraftPick,
 } from "@/lib/privateDraftStorage";
-import type {
-  PrivatePartialResponse,
-  PrivateSubmitResponse,
-} from "@/components/private/types";
+import type { PrivatePartialResponse } from "@/components/private/types";
 
 // The five lineup positions, board order [G,FLEX,W,FLEX,B].
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
@@ -44,7 +38,10 @@ type Step = "draft" | "interstitial" | "finalize" | "done";
 //     pending to lose on refresh);
 //   • the interstitial → <ResultsPanel> (the same post-selection screen the main
 //     game shows), with an "Add sixth man & captain" button instead of "Enter";
-//   • the captain grid → <CaptainPicker> (shared with TournamentEntry).
+//   • the "add sixth man + captain + submit" finalize → <TournamentEntry> with a
+//     privateConfig (the EXACT same component the main game's tournament entry
+//     uses, so private behaves identically — including letting you change your
+//     sixth man).
 // The board's five starter slots are a fixed REVEAL ORDER; because lockOnPick
 // commits each pick in order, the next reveal is simply board.slots[placedCount].
 
@@ -78,9 +75,6 @@ export function PrivateTournamentDraft({
     null, null, null, null, null,
   ]);
   const [step, setStep] = useState<Step>("draft");
-  const [captainSlot, setCaptainSlot] = useState<number | null>(null);
-  const [sixth, setSixth] = useState<LineupEntry | null>(null);
-  const [teamName, setTeamName] = useState("");
 
   // The interstitial's full season result (from /partial) so we can render the
   // shared ResultsPanel.
@@ -90,8 +84,6 @@ export function PrivateTournamentDraft({
   } | null>(null);
   const [savingPartial, setSavingPartial] = useState(false);
   const [partialError, setPartialError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Don't persist before the initial IndexedDB load resolves.
   const hydrated = useRef(false);
@@ -105,12 +97,12 @@ export function PrivateTournamentDraft({
         if (active) hydrated.current = true;
         return;
       }
-      // We persisted only ids/team/decade; re-fetch each involved roster to recover
-      // the full PublicPlayer the board card + captain grid need.
+      // We persisted only ids/team/decade for the five; re-fetch each involved
+      // roster to recover the full PublicPlayer the board card needs. (The sixth
+      // man / captain / team name are owned by TournamentEntry now and not
+      // persisted — a resume re-enters at the draft and re-runs /partial.)
       const combos = new Map<string, { team: string; decade: number }>();
       for (const p of saved.picks) combos.set(`${p.team}|${p.decade}`, p);
-      if (saved.sixthPick)
-        combos.set(`${saved.sixthPick.team}|${saved.sixthPick.decade}`, saved.sixthPick);
       const rosters = new Map<string, PublicPlayer[]>();
       await Promise.all(
         [...combos.values()].map(async (c) => {
@@ -151,24 +143,10 @@ export function PrivateTournamentDraft({
         }
       }
       setLineup(next);
-      setCaptainSlot(saved.captainSlot);
-      setTeamName(saved.teamName);
-      if (saved.sixthPick) {
-        setSixth({
-          player: findPlayer(
-            saved.sixthPick.entity_id,
-            saved.sixthPick.team,
-            saved.sixthPick.decade,
-          ),
-          team: saved.sixthPick.team,
-          decade: saved.sixthPick.decade,
-          receipt: "",
-        });
-      }
-      // The interstitial result isn't persisted, so resume to the draft (the board
-      // is fully placed → the "See your record" button re-runs /partial). Finalize
-      // restores directly (it needs only lineup + sixth + captain).
-      setStep(saved.step === "interstitial" ? "draft" : saved.step);
+      // The interstitial result + sixth/captain/team name aren't persisted, so a
+      // resume always lands on the DRAFT (the board is fully placed → the "See
+      // your record" button re-runs /partial → finalize via TournamentEntry).
+      setStep("draft");
       hydrated.current = true;
     })();
     return () => {
@@ -195,17 +173,17 @@ export function PrivateTournamentDraft({
           : null,
       )
       .filter((p): p is DraftPick => p !== null);
+    // Only the five picks persist now; the sixth/captain/team name are owned by
+    // TournamentEntry at finalize and aren't resumed (kept null/empty here).
     const data: PrivateDraftData = {
       picks,
-      captainSlot,
-      sixthPick: sixth
-        ? { entity_id: sixth.player.entity_id, team: sixth.team, decade: sixth.decade }
-        : null,
-      teamName,
+      captainSlot: null,
+      sixthPick: null,
+      teamName: "",
       step: step === "done" ? "finalize" : step,
     };
     void savePrivateDraft(draftKey, data);
-  }, [lineup, captainSlot, sixth, teamName, step, draftKey, board.slots]);
+  }, [lineup, step, draftKey, board.slots]);
 
   const placedCount = lineup.filter(Boolean).length;
   const allPlaced = placedCount === KINDS.length;
@@ -226,13 +204,13 @@ export function PrivateTournamentDraft({
       const res = await fetch("/api/private-tournament/partial", {
         method: "POST",
         headers: { "content-type": "application/json" },
+        // The captain + team name are chosen later (in TournamentEntry's
+        // finalize); /partial only needs the five to compute the season record.
         body: JSON.stringify({
           name,
           pin,
           tournamentId,
           roster,
-          captainSlot: captainSlot ?? undefined,
-          teamName: teamName || undefined,
         }),
       });
       if (!res.ok) {
@@ -248,61 +226,15 @@ export function PrivateTournamentDraft({
     } finally {
       setSavingPartial(false);
     }
-  }, [lineup, captainSlot, teamName, name, pin, tournamentId]);
+  }, [lineup, name, pin, tournamentId]);
 
-  // ---- Submit: the full six + captain + team name. ----
-  const teamNameCheck = validateTeamName(teamName);
-  const canSubmit =
-    sixth !== null && captainSlot !== null && teamNameCheck.ok && !submitting;
-
-  const submit = async () => {
-    if (!canSubmit || captainSlot === null || !sixth) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const roster = lineup
-        .map((e, i) =>
-          e ? { entity_id: e.player.entity_id, team: e.team, decade: e.decade, slot: i } : null,
-        )
-        .filter((p): p is { entity_id: string; team: string; decade: number; slot: number } => p !== null);
-      const res = await fetch("/api/private-tournament/submit", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name,
-          pin,
-          tournamentId,
-          roster,
-          captainSlot,
-          sixthPick: {
-            entity_id: sixth.player.entity_id,
-            team: sixth.team,
-            decade: sixth.decade,
-          },
-          teamName,
-        }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setSubmitError(d?.error ?? "Couldn't submit your team.");
-        return;
-      }
-      (await res.json()) as PrivateSubmitResponse;
-      await clearPrivateDraft(draftKey);
-      setStep("done");
-      onComplete();
-    } catch {
-      setSubmitError("Couldn't submit your team right now. Try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const usedIds = [
-    ...lineup.filter(Boolean).map((e) => (e as LineupEntry).player.entity_id),
-    ...(sixth ? [sixth.player.entity_id] : []),
-  ];
-  const benchDraftable = (p: PublicPlayer) => !usedIds.includes(p.entity_id);
+  // ---- Finalize submitted: TournamentEntry posted to the private submit
+  // endpoint; clear the draft + advance to "done", then notify the parent. ----
+  const handleSubmitted = useCallback(async () => {
+    await clearPrivateDraft(draftKey);
+    setStep("done");
+    onComplete();
+  }, [draftKey, onComplete]);
 
   // ===================== render =====================
 
@@ -339,127 +271,30 @@ export function PrivateTournamentDraft({
     );
   }
 
-  // ---- FINALIZE: sixth man (fixed bench) + captain + team name + submit. ----
+  // ---- FINALIZE: add sixth man + captain + team name + submit. This now REUSES
+  // the main game's <TournamentEntry> (with a privateConfig) so private behaves
+  // identically — including letting you change your sixth man. The five starters
+  // are fully placed by the time we reach finalize. ----
   if (step === "finalize") {
-    const bench: PrivateSlot = board.benchSlot;
     return (
-      <div className="flex flex-col gap-5">
-        <div>
-          <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Your starting five
-          </div>
-          <LineupBoard
-            kinds={KINDS}
-            entries={lineup}
-            targets={[]}
-            selected={null}
-            onSlotClick={() => {}}
-          />
-        </div>
-
-        {/* Sixth man — from the board's fixed bench slot. */}
-        <div className="md-card md-card--lift flex flex-col items-center gap-4 p-4 sm:p-5">
-          <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Draft your Sixth Man · bench slot
-          </div>
-          <SlotMachine team={bench.team} decade={bench.decade} size="lg" />
-          {sixth ? (
-            <div className="md-card flex w-full items-center justify-between gap-2 p-2">
-              <div className="flex flex-col">
-                <span className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Sixth Man
-                </span>
-                <span className="font-display text-sm font-bold">
-                  {sixth.player.player_name}
-                </span>
-                <span className="font-display text-[11px] text-[var(--md-orange-deep)]">
-                  {sixth.team} &rsquo;{String(sixth.player.best_season).slice(2)}
-                </span>
-              </div>
-              <button
-                className="md-btn md-btn--sm md-btn--secondary"
-                onClick={() => setSixth(null)}
-              >
-                Change
-              </button>
-            </div>
-          ) : (
-            <div className="w-full">
-              <PlayerList
-                team={bench.team}
-                decade={bench.decade}
-                mode={gameMode}
-                allowRespin={false}
-                draftable={benchDraftable}
-                onPick={(p) =>
-                  setSixth({ player: p, team: bench.team, decade: bench.decade, receipt: "" })
-                }
-                onNoneEligible={() => {}}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Captain. */}
-        <div className="md-card md-card--lift flex flex-col gap-4 p-4 sm:p-5">
-          <div className="font-display text-xl font-bold">Pick your captain</div>
-          <p className="-mt-2 text-[13px] text-[var(--md-ink-muted)]">
-            Tap one of your five starters.
-          </p>
-          <CaptainPicker
-            kinds={KINDS}
-            entries={lineup}
-            value={captainSlot}
-            onChange={setCaptainSlot}
-          />
-
-          <label className="flex flex-col gap-1">
-            <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-              ✎ Team name
-            </span>
-            <input
-              className="md-input md-input--name"
-              value={teamName}
-              maxLength={NAME_MAX_LEN}
-              autoCapitalize="characters"
-              onChange={(e) =>
-                setTeamName(
-                  e.target.value.toUpperCase().replace(/[’`]/g, "'").replace(/[^A-Z ']/g, ""),
-                )
-              }
-              placeholder="DREAMTEAM"
-              style={{ background: "var(--md-paper-2)", boxShadow: "var(--md-shadow-md)" }}
-            />
-            <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-              {teamName.length > 0 && !teamNameCheck.ok
-                ? teamNameCheck.reason
-                : "This team's name · letters, spaces & ' · 16 max"}
-            </span>
-          </label>
-
-          {submitError && (
-            <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
-              {submitError}
-            </div>
-          )}
-
-          <div className="flex flex-wrap justify-center gap-2">
-            <button className="md-btn md-btn--lg md-btn--teal" disabled={!canSubmit} onClick={submit}>
-              {submitting ? "Submitting…" : "Submit team"}
-            </button>
-            <button
-              className="md-btn md-btn--lg md-btn--secondary"
-              onClick={() => (partial ? setStep("interstitial") : setStep("draft"))}
-            >
-              Back
-            </button>
-          </div>
-        </div>
-      </div>
+      <TournamentEntry
+        initialLineup={lineup}
+        mode={mode}
+        dailyBench={board.benchSlot}
+        privateConfig={{
+          tournamentId,
+          name,
+          pin,
+          onSubmitted: handleSubmitted,
+        }}
+        onBack={() => setStep("interstitial")}
+      />
     );
   }
 
-  // ---- DRAFT: the shared draft engine, board-reveal sourced, lock-on-pick. ----
+  // ---- DRAFT: the shared draft engine, board-reveal sourced. Same slot-choice
+  // ("where does he play?" + glowing slots) as the main game; no Cancel, so a
+  // chosen player can't be swapped for a different one (rearrange-only). ----
   return (
     <div className="flex flex-col gap-5">
       <LineupDraftBoard
@@ -468,7 +303,7 @@ export function PrivateTournamentDraft({
         setLineup={setLineup}
         source={reveal ? { team: reveal.team, decade: reveal.decade, receipt: "" } : null}
         mode={gameMode}
-        lockOnPick
+        allowCancelPending={false}
         allowRespin={false}
         onConsumeSource={() => {}}
         headerLabel="Your starting five"

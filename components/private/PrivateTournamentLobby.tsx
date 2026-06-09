@@ -111,21 +111,23 @@ export function PrivateTournamentLobby({
     }
   };
 
-  // ---- Active draft. ----
+  // ---- Active draft. ---- (mobile width, matching the rest of the app)
   if (session) {
     return (
-      <PrivateTournamentDraft
-        tournamentId={data.tournamentId}
-        entryId={session.entryId}
-        board={session.board}
-        mode={session.mode}
-        name={name}
-        pin={pin}
-        onComplete={() => {
-          setSession(null);
-          onRefresh();
-        }}
-      />
+      <div className="mx-auto w-full max-w-lg">
+        <PrivateTournamentDraft
+          tournamentId={data.tournamentId}
+          entryId={session.entryId}
+          board={session.board}
+          mode={session.mode}
+          name={name}
+          pin={pin}
+          onComplete={() => {
+            setSession(null);
+            onRefresh();
+          }}
+        />
+      </div>
     );
   }
 

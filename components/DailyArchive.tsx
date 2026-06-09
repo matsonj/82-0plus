@@ -38,7 +38,7 @@ export function DailyArchive({
   if (dates.length === 0) return null;
 
   return (
-    <div className="mt-4 w-full max-w-md">
+    <div className="mt-3 w-full max-w-md">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

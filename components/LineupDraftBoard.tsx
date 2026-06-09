@@ -29,7 +29,7 @@ export function LineupDraftBoard({
   rolling = false,
   mode,
   allowRespin = false,
-  lockOnPick = false,
+  allowCancelPending = true,
   onConsumeSource,
   onNoneEligible,
   headerLabel = "Your lineup",
@@ -48,12 +48,13 @@ export function LineupDraftBoard({
   rolling?: boolean;
   mode: GameMode;
   allowRespin?: boolean;
-  // When true (private tournaments), a tapped player COMMITS immediately into his
-  // first eligible slot — no cancelable "pending" window, no re-pick. The plan
-  // locks each chosen player; he can only be rearranged afterward. When false
-  // (main game), picking is exploratory: multi-slot picks wait as `pending` and
-  // can be canceled.
-  lockOnPick?: boolean;
+  // Whether a mid-placement pick can be CANCELED. Default true (main game): you
+  // can back out of a just-tapped player and choose a different one. Private
+  // tournaments pass false — the slot-choice (the "where does he play?" step with
+  // glowing eligible slots) still appears exactly like the main game, but there's
+  // no Cancel, so a chosen player can't be swapped for a different one (he can
+  // still be rearranged between legal slots after placing).
+  allowCancelPending?: boolean;
   // Called after a player drafted FROM the source is placed (not on rearrange), so
   // the parent advances to the next source.
   onConsumeSource: () => void;
@@ -100,10 +101,9 @@ export function LineupDraftBoard({
     onConsumeSource();
   };
 
-  // Pick from the source. lockOnPick (private): commit immediately into the first
-  // eligible slot — no cancelable pending, no re-pick (rearrange covers position
-  // choice). Otherwise (main game): auto-place only when one slot fits, else stash
-  // the pick as `pending` so the user chooses the slot (and may cancel).
+  // Pick from the source: auto-place if exactly one open slot fits, else stash the
+  // pick as `pending` so the user chooses the slot (glowing eligible slots). Same
+  // for every mode — private just hides the Cancel affordance (allowCancelPending).
   const pick = (player: PublicPlayer) => {
     const eligible = kinds
       .map((kind, i) => ({ kind, i }))
@@ -111,7 +111,7 @@ export function LineupDraftBoard({
       .filter(({ kind }) => canFill(player.positions, kind))
       .map(({ i }) => i);
     if (eligible.length === 0) return;
-    if (eligible.length === 1 || lockOnPick) placeAt(player, eligible[0]);
+    if (eligible.length === 1) placeAt(player, eligible[0]);
     else setPending(player);
   };
 
@@ -213,12 +213,17 @@ export function LineupDraftBoard({
           <div className="font-display text-sm">
             Where does <span className="font-bold">{pending.player_name}</span> play?
           </div>
-          <button
-            className="md-btn md-btn--sm md-btn--secondary"
-            onClick={() => setPending(null)}
-          >
-            Cancel pick
-          </button>
+          <div className="font-display text-[11px] text-[var(--md-ink-muted)]">
+            Tap a glowing slot above.
+          </div>
+          {allowCancelPending && (
+            <button
+              className="md-btn md-btn--sm md-btn--secondary"
+              onClick={() => setPending(null)}
+            >
+              Cancel pick
+            </button>
+          )}
         </div>
       )}
 

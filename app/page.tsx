@@ -697,8 +697,8 @@ export default function Home() {
       {/* ---------------- MENU ---------------- */}
       {phase === "menu" && (
         <section className="relative z-10 flex flex-col items-center text-center">
-          <div className="md-capsule mb-4 max-w-full text-center">
-            Can you go 82-0?
+          <div className="mb-4 font-display text-xs font-bold uppercase tracking-[0.18em] text-[var(--md-ink-muted)]">
+            A daily basketball draft puzzle
           </div>
           <h1
             className="font-display font-bold tracking-tight"
@@ -759,26 +759,8 @@ export default function Home() {
             </button>
           )}
 
-          {/* Private tournaments — invite-only brackets you host or join by link. */}
-          <Link
-            href="/tournament?tab=private"
-            className="md-card md-card--lift mt-4 flex w-full max-w-md items-center justify-between gap-3 p-4 text-left transition-transform hover:-translate-y-0.5"
-            style={{ background: "var(--md-sky)" }}
-          >
-            <div>
-              <div className="font-display text-lg font-bold">
-                Private Tournament
-              </div>
-              <p className="mt-0.5 text-[13px] text-[var(--md-ink)]">
-                Host a bracket for your friends, or join one by link.
-              </p>
-            </div>
-            <span className="text-2xl" aria-hidden>
-              🏆
-            </span>
-          </Link>
-
-          {/* Replay any of the last ~30 daily challenges. */}
+          {/* Replay any of the last ~30 daily challenges — the daily archive sits
+              directly beneath today's card. */}
           {today && (
             <DailyArchive
               today={today}
@@ -807,7 +789,26 @@ export default function Home() {
             </div>
           )}
 
-          <div className="mt-6 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+          {/* Private tournaments — invite-only brackets you host or join by link. */}
+          <Link
+            href="/tournament?tab=private"
+            className="md-card md-card--lift mt-8 flex w-full max-w-md items-center justify-between gap-3 p-4 text-left transition-transform hover:-translate-y-0.5"
+            style={{ background: "var(--md-sky)" }}
+          >
+            <div>
+              <div className="font-display text-lg font-bold">
+                Private Tournament
+              </div>
+              <p className="mt-0.5 text-[13px] text-[var(--md-ink)]">
+                Host a bracket for your friends, or join one by link.
+              </p>
+            </div>
+            <span className="text-2xl" aria-hidden>
+              🏆
+            </span>
+          </Link>
+
+          <div className="mt-8 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
             or free play
           </div>
           <div className="mt-3 grid w-full max-w-md gap-3 sm:grid-cols-2">

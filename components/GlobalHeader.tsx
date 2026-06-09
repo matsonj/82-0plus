@@ -106,29 +106,33 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
           </Link>
         )}
 
-        {/* The indicator always renders; the badge only appears when there's
-            something to attend to (no saved account ⇒ no badge). A quiet
+        {/* The indicator always renders. State is carried by the glyph's color,
+            not a separate dot: a calm muted asterisk when there's nothing to
+            attend to, a bold coral asterisk that pops when there is. A quiet
             bordered icon button — not a filled pill — so the header stays calm. */}
         <div className="relative">
           <button
             type="button"
-            aria-label="Private tournament alerts"
+            aria-label={
+              any
+                ? "Private tournament alerts (new activity)"
+                : "Private tournament alerts"
+            }
             onClick={() => setOpen((o) => !o)}
-            className="relative flex h-8 w-8 items-center justify-center border-2 border-[var(--md-ink)] bg-[var(--md-white)] text-sm transition-transform hover:-translate-y-0.5"
+            className="relative flex h-8 w-8 items-center justify-center border-2 border-[var(--md-ink)] bg-[var(--md-white)] transition-transform hover:-translate-y-0.5"
             style={{ cursor: "pointer" }}
           >
-            <span aria-hidden>🔔</span>
-            {any && (
-              <span
-                aria-hidden
-                className="absolute -right-1 -top-1 border-2 border-[var(--md-ink)]"
-                style={{
-                  background: "var(--md-coral)",
-                  width: 10,
-                  height: 10,
-                }}
-              />
-            )}
+            <span
+              aria-hidden
+              className="font-display leading-none transition-colors"
+              style={{
+                fontSize: 18,
+                fontWeight: any ? 700 : 400,
+                color: any ? "var(--md-coral)" : "var(--md-ink-muted)",
+              }}
+            >
+              ✶
+            </span>
           </button>
 
           {open && (
