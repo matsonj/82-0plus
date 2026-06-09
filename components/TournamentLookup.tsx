@@ -99,7 +99,7 @@ function TeamRow({
 
         <div className="flex items-center gap-2">
           {/* Daily is "Open" — tier-less — so no tier badge for daily teams. */}
-          {team.mode !== "daily" && <TierBadge seedNet={team.seedNet} />}
+          {team.mode !== "daily" && <TierBadge seedNet={team.seedNet} size="capsule" />}
           {team.mode === "daily" ? (
             <span className="md-capsule md-capsule--sky">Daily</span>
           ) : team.mode === "hoopiq" ? (
