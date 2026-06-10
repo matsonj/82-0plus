@@ -688,21 +688,23 @@ export default function Home() {
   const shareDaily = async () => {
     const u = getSavedUser();
     if (!u || !today) return;
-    let token = dailyShareToken;
-    if (!token) {
-      try {
-        const res = await fetch("/api/daily/share", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: u.username, pin: u.pin, date: today }),
-        });
-        if (res.ok) {
-          const j = await res.json();
-          if (typeof j?.share === "string") token = j.share;
-        }
-      } catch {
-        /* fall back to the bare day link below */
+    // Always mint a fresh token for TODAY. The cached `dailyShareToken` is keyed to
+    // whatever date last completed/flushed (a self-heal flush can set it to an
+    // ARCHIVED date), and /d/today?s=<other-date-token> is rejected by the landing
+    // page — dropping the signed head-to-head result from the shared link.
+    let token: string | null = null;
+    try {
+      const res = await fetch("/api/daily/share", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: u.username, pin: u.pin, date: today }),
+      });
+      if (res.ok) {
+        const j = await res.json();
+        if (typeof j?.share === "string") token = j.share;
       }
+    } catch {
+      /* fall back to the bare day link below */
     }
     const url = `${SITE_URL}/d/${today}${token ? `?s=${encodeURIComponent(token)}` : ""}`;
     const rec = todayResult ? `${todayResult.wins}-${todayResult.losses}` : "";

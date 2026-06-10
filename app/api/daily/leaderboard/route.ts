@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { authenticate, getDailyLeaderboard } from "@/lib/dailyResults";
+import {
+  authenticate,
+  getDailyResult,
+  getDailyLeaderboard,
+} from "@/lib/dailyResults";
 import { isPlayableDailyDate } from "@/lib/dailyDate";
 
 export const runtime = "nodejs";
@@ -21,6 +25,17 @@ export async function POST(req: NextRequest) {
     const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
     if (!auth.ok) {
       return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
+    }
+    // Each leaderboard row carries its roster, so withhold the whole board until the
+    // viewer has played that day — otherwise any account could read everyone's picks
+    // before drafting. The UI only opens this post-result; this is the boundary.
+    const played = await getDailyResult(auth.userId, date);
+    if (!played) {
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "Play this daily before viewing the leaderboard." },
+        { status: 403 },
+      );
     }
     const leaderboard = await getDailyLeaderboard(auth.userId, date);
     return jsonWithSessionHint(sessionHint, { leaderboard });

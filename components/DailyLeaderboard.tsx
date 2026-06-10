@@ -15,6 +15,7 @@ function label(date: string): string {
 }
 
 interface LeaderEntry {
+  id: string;
   rank: number;
   name: string;
   wins: number;
@@ -51,7 +52,9 @@ export function DailyLeaderboard({
 }) {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [failed, setFailed] = useState(false);
-  const [openRank, setOpenRank] = useState<number | null>(null);
+  // Keyed by the row's account id, not rank — ties share a rank, so rank would
+  // expand/collapse every tied row at once.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -132,11 +135,11 @@ export function DailyLeaderboard({
               <Row header />
               {data.top.map((e) => (
                 <Row
-                  key={e.rank + e.name}
+                  key={e.id}
                   entry={e}
-                  open={openRank === e.rank}
+                  open={openId === e.id}
                   onToggle={() =>
-                    setOpenRank((r) => (r === e.rank ? null : e.rank))
+                    setOpenId((cur) => (cur === e.id ? null : e.id))
                   }
                   compareKeys={e.isYou ? undefined : myKeys}
                 />
@@ -148,11 +151,11 @@ export function DailyLeaderboard({
               )}
               {data.around.map((e) => (
                 <Row
-                  key={e.rank + e.name}
+                  key={e.id}
                   entry={e}
-                  open={openRank === e.rank}
+                  open={openId === e.id}
                   onToggle={() =>
-                    setOpenRank((r) => (r === e.rank ? null : e.rank))
+                    setOpenId((cur) => (cur === e.id ? null : e.id))
                   }
                   compareKeys={e.isYou ? undefined : myKeys}
                 />

@@ -250,6 +250,7 @@ export async function getDailyRank(
 /** One row on the daily leaderboard — a player's standing plus their roster, so the
  *  client can expand a row into the head-to-head roster diff with no extra fetch. */
 export interface DailyLeaderEntry {
+  id: string; // the account id — a stable, unique row key (ties share a rank, so rank isn't unique)
   rank: number; // 1-based; ties share a rank (RANK())
   name: string;
   wins: number;
@@ -283,6 +284,7 @@ export async function getDailyLeaderboard(
 ): Promise<DailyLeaderboardData> {
   await ensureSchema();
   const rows = await queryRW<{
+    user_id: string;
     rank: number;
     total: number;
     name: string;
@@ -302,7 +304,7 @@ export async function getDailyLeaderboard(
         WHERE d.daily_date = $2
      ),
      me AS (SELECT rank FROM ranked WHERE user_id = $1)
-     SELECT r.rank, r.total, r.name, r.wins, r.losses, r.margin, r.perfect,
+     SELECT r.user_id, r.rank, r.total, r.name, r.wins, r.losses, r.margin, r.perfect,
             (r.user_id = $1) AS is_you, r.roster_json
        FROM ranked r
       WHERE r.rank <= $3
@@ -312,6 +314,7 @@ export async function getDailyLeaderboard(
   );
 
   const entries: DailyLeaderEntry[] = rows.map((r) => ({
+    id: r.user_id,
     rank: Number(r.rank),
     name: r.name,
     wins: r.wins,
