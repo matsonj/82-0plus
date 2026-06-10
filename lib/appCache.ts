@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { queryRW, type QueryParam } from "./tournamentDb";
 
 // ── Self-managed derived-data cache (`app_cache` database) ───────────────────
@@ -280,6 +281,9 @@ declare global {
   // built_at (ms) this process has reconciled its warm caches with.
   // eslint-disable-next-line no-var
   var __app_cache_seen_built_at__: number | undefined;
+  // guards against concurrent freshness checks within a process.
+  // eslint-disable-next-line no-var
+  var __app_cache_check_inflight__: boolean | undefined;
 }
 
 /** Single-flight wrapper around buildAll (per process). Cross-instance dupes are
@@ -310,22 +314,43 @@ const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1h
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 
 /**
+ * Schedule the gated cache reconcile to run AFTER the response. Uses Next's
+ * `after()` so the serverless runtime keeps the instance alive (via waitUntil)
+ * until it settles — a bare floated promise can be dropped on shutdown. Outside a
+ * request scope (scripts/tests/board-gen) `after()` throws; there we just run it
+ * detached, since those processes aren't frozen after a response.
+ *
+ * Safe to call on every request: refreshCacheIfStale() is gated + single-flight,
+ * so the scheduled callback no-ops unless a check is actually due.
+ */
+export function scheduleCacheRefresh(): void {
+  try {
+    after(() => refreshCacheIfStale());
+  } catch {
+    void refreshCacheIfStale();
+  }
+}
+
+/**
  * Lazy stale-while-revalidate refresh — the cache's self-healing mechanism.
- * Cheap, gated to once/hour per process, and NON-blocking for the caller
- * (schedule it via `after()`): callers serve the current snapshot and this
- * rebuilds in the background only when the source actually changed or the cache
- * is missing/old. NEVER call it on the synchronous read path — the rebuild is
- * multi-second.
+ * Reconciles warm globals and rebuilds when the source changed/aged. Gated to
+ * once/hour per process and single-flight. NEVER call it on the synchronous read
+ * path (the rebuild is multi-second) — go through scheduleCacheRefresh().
+ *
+ * The throttle timestamp is set only on SUCCESSFUL completion, so a run cut short
+ * (e.g. an after()/floated promise killed on shutdown, or a rebuild past
+ * maxDuration) doesn't consume the hour-long window — the next request retries.
  */
 export async function refreshCacheIfStale(): Promise<void> {
   const now = Date.now();
+  if (globalThis.__app_cache_check_inflight__) return;
   if (
     globalThis.__app_cache_last_check__ &&
     now - globalThis.__app_cache_last_check__ < CHECK_INTERVAL_MS
   ) {
     return;
   }
-  globalThis.__app_cache_last_check__ = now;
+  globalThis.__app_cache_check_inflight__ = true;
   try {
     const meta = await queryRW<{ built_at: Date; source_fp: string }>(
       `SELECT built_at, source_fp FROM ${ACDB}.cache_meta WHERE cache_key = 'global' LIMIT 1`,
@@ -333,27 +358,31 @@ export async function refreshCacheIfStale(): Promise<void> {
     const row = meta[0];
     if (!row) {
       await runBuild(); // never built → build it
-      return;
+    } else {
+      // Warm-cache reconciliation: if the build we're looking at differs from the
+      // one our warm globals were loaded against, drop them so they reload fresh.
+      // This fires on the FIRST observation too (seen === undefined): a process can
+      // warm __player_index__ etc. from an older build BEFORE its first check, so
+      // adopting a build without clearing would pin that stale data. Equality holds
+      // after our own build (we recorded its exact built_at), so no needless reload.
+      const builtAtMs = new Date(row.built_at).getTime();
+      if (globalThis.__app_cache_seen_built_at__ !== builtAtMs) {
+        globalThis.__app_cache_seen_built_at__ = builtAtMs;
+        invalidateWarmCaches();
+      }
+      const ageMs = now - builtAtMs;
+      const fp = await sourceFingerprint();
+      if (fp !== row.source_fp || ageMs > MAX_AGE_MS) {
+        await runBuild();
+      }
     }
-    // Warm-cache reconciliation: if the build we're looking at differs from the
-    // one our warm globals were loaded against, drop them so they reload fresh.
-    // This fires on the FIRST observation too (seen === undefined): a process can
-    // warm __player_index__ etc. from an older build BEFORE its first check, so
-    // adopting a build without clearing would pin that stale data. Equality holds
-    // after our own build (we recorded its exact built_at), so no needless reload.
-    const builtAtMs = new Date(row.built_at).getTime();
-    if (globalThis.__app_cache_seen_built_at__ !== builtAtMs) {
-      globalThis.__app_cache_seen_built_at__ = builtAtMs;
-      invalidateWarmCaches();
-    }
-    const ageMs = now - builtAtMs;
-    const fp = await sourceFingerprint();
-    if (fp !== row.source_fp || ageMs > MAX_AGE_MS) {
-      await runBuild();
-    }
+    globalThis.__app_cache_last_check__ = Date.now(); // gate set only after success
   } catch (err) {
-    // cache_meta / app_cache missing → first build
+    // cache_meta / app_cache missing → first build. Leave last_check unset so a
+    // transient failure retries soon (the single-flight guard prevents a storm).
     console.error("[app_cache] freshness check failed; rebuilding", err);
     await runBuild().catch(() => {});
+  } finally {
+    globalThis.__app_cache_check_inflight__ = false;
   }
 }

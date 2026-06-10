@@ -1,5 +1,5 @@
 import { query, type QueryOptions } from "./motherduck";
-import { ACDB, readCache, isCacheReady, refreshCacheIfStale } from "./appCache";
+import { ACDB, readCache, isCacheReady, scheduleCacheRefresh } from "./appCache";
 import { eligiblePositions, positionRank } from "./positions";
 import type { GameMode, PublicPlayer, SimPick, SimRosterLine } from "./types";
 import type { ScoringPlayer } from "./scoring";
@@ -160,14 +160,15 @@ declare global {
  * live against the view if the cache is missing or empty.
  *
  * Nearly every route except /api/player funnels through here, so this is also
- * where the cache reconciles: a gated (≤1×/hour/process), non-blocking
- * refreshCacheIfStale() drops stale warm globals + rebuilds when the source
- * changed — so any route process self-heals, not just ones that hit /api/player.
+ * where the cache reconciles: scheduleCacheRefresh() registers a gated
+ * (≤1×/hour/process), non-blocking check via after() that drops stale warm
+ * globals + rebuilds when the source changed — so any route process self-heals,
+ * not just ones that hit /api/player.
  */
 export function getPlayerIndex(
   options: QueryOptions = {},
 ): Promise<IndexedPlayer[]> {
-  void refreshCacheIfStale();
+  scheduleCacheRefresh();
   if (!globalThis.__player_index__) {
     globalThis.__player_index__ = (async () => {
       try {

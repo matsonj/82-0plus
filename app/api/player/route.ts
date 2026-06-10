@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getPlayerSeasonHistory } from "@/lib/queries";
-import { refreshCacheIfStale } from "@/lib/appCache";
+import { scheduleCacheRefresh } from "@/lib/appCache";
 
 export const runtime = "nodejs";
 
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   }
   try {
     const seasons = await getPlayerSeasonHistory(id);
-    after(() => refreshCacheIfStale()); // background, runs only on a cache MISS
+    scheduleCacheRefresh(); // background (after()), runs only on a cache MISS
     return NextResponse.json(
       { seasons },
       {
