@@ -14,6 +14,7 @@ import { LineupDraftBoard } from "@/components/LineupDraftBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { DailyArchive } from "@/components/DailyArchive";
 import { DailyTimeline } from "@/components/DailyTimeline";
+import { DailyLeaderboard } from "@/components/DailyLeaderboard";
 import { DailySignIn } from "@/components/DailySignIn";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { TournamentEntry } from "@/components/TournamentEntry";
@@ -86,7 +87,10 @@ export default function Home() {
   // The daily tournament's fixed 6th-man slot (team+decade); null on sparse days.
   const [dailyBench, setDailyBench] = useState<{ team: string; decade: number } | null>(null);
   const [dailyDate, setDailyDate] = useState<string>("");
-  const [today, setToday] = useState<string>("");
+  // Seeded synchronously (pacificDate is deterministic via Intl) so the 7-day strip
+  // renders on first paint instead of popping in after an effect; the visibility
+  // effect still re-keys it on midnight rollover.
+  const [today, setToday] = useState<string>(() => pacificDate());
   const [dailyResult, setDailyResult] = useState<
     { wins: number; losses: number; margin?: number; perfect: boolean } | null
   >(null);
@@ -132,6 +136,12 @@ export default function Home() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   // Today's standing among everyone who played it (null until played / loaded).
   const [dailyRank, setDailyRank] = useState<{ rank: number; total: number } | null>(null);
+  // Whether today's completion has resolved (results fetched, or no account to
+  // fetch for). Until then we hold a stable placeholder so the daily block can't
+  // flash "Play" and then flip to your result once the fetch lands.
+  const [dailyLoaded, setDailyLoaded] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const attemptedDaily = useRef<string | undefined>(undefined);
   // Server-signed token for the current daily result's share link (unforgeable).
   const [dailyShareToken, setDailyShareToken] = useState<string | null>(null);
@@ -333,7 +343,11 @@ export default function Home() {
   // finished day can't show "Play" just because a local cache was cleared.
   const refreshDailyResults = useCallback(async () => {
     const u = getSavedUser();
-    if (!u) return;
+    // No account → nothing to fetch; today's state is resolved (unplayed) at once.
+    if (!u) {
+      setDailyLoaded(true);
+      return;
+    }
     try {
       const res = await fetch("/api/daily/results", {
         method: "POST",
@@ -353,6 +367,8 @@ export default function Home() {
       setDailyRank(todayRank ?? null);
     } catch {
       /* leave prior state; the per-date playDaily check still fails closed */
+    } finally {
+      setDailyLoaded(true);
     }
   }, []);
 
@@ -373,7 +389,10 @@ export default function Home() {
   // can never strand a result. Other accounts' locks are left for their owners.
   useEffect(() => {
     const u = getSavedUser();
-    if (!u) return;
+    if (!u) {
+      setDailyLoaded(true); // signed out → today's state is resolved immediately
+      return;
+    }
     (async () => {
       // Flush any stranded saves FIRST so the subsequent results pull reflects them.
       await Promise.all(
@@ -663,9 +682,62 @@ export default function Home() {
   // there is one, otherwise whatever the server says this account already did.
   const todayResult = dailyResult ?? (today ? dailyDone[today] : undefined) ?? null;
 
+  // Build (or reuse) today's signed share link and copy it / open the share sheet.
+  // The token (server-signed, unforgeable) is reused if we just completed today;
+  // otherwise we mint one for the stored result via /api/daily/share.
+  const shareDaily = async () => {
+    const u = getSavedUser();
+    if (!u || !today) return;
+    let token = dailyShareToken;
+    if (!token) {
+      try {
+        const res = await fetch("/api/daily/share", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: u.username, pin: u.pin, date: today }),
+        });
+        if (res.ok) {
+          const j = await res.json();
+          if (typeof j?.share === "string") token = j.share;
+        }
+      } catch {
+        /* fall back to the bare day link below */
+      }
+    }
+    const url = `${SITE_URL}/d/${today}${token ? `?s=${encodeURIComponent(token)}` : ""}`;
+    const rec = todayResult ? `${todayResult.wins}-${todayResult.losses}` : "";
+    const text = `82-0+ 🏀 Daily${rec ? ` ${rec}` : ""}${
+      todayResult?.perfect ? " (perfect!)" : ""
+    } — same five rolls, beat my record:`;
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ text, url });
+      } else {
+        await navigator.clipboard.writeText(`${text}\n${url}`);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
+      }
+    } catch {
+      /* user dismissed the share sheet, or clipboard denied — no-op */
+    }
+  };
+
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
       {showHowTo && <HowToPlay onClose={() => setShowHowTo(false)} />}
+
+      {leaderboardOpen &&
+        today &&
+        (() => {
+          const u = getSavedUser();
+          return u ? (
+            <DailyLeaderboard
+              date={today}
+              user={u}
+              onClose={() => setLeaderboardOpen(false)}
+            />
+          ) : null;
+        })()}
       {showDailySignIn && (
         <DailySignIn
           onCancel={() => setShowDailySignIn(false)}
@@ -733,7 +805,14 @@ export default function Home() {
               </span>
             </div>
 
-            {todayResult ? (
+            {!dailyLoaded ? (
+              // Stable placeholder until today's completion resolves, so the block
+              // can't flash "Play" and then flip to your result once the fetch lands.
+              <div className="mt-3" aria-hidden>
+                <div className="h-4 w-44 bg-[var(--md-paper-3)]" />
+                <div className="mt-3 h-[52px] w-full border-2 border-[var(--md-paper-3)] bg-[var(--md-paper-2)]" />
+              </div>
+            ) : todayResult ? (
               <>
                 <div className="mt-3 font-display text-[12px] font-bold uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">
                   Today&rsquo;s result
@@ -743,12 +822,21 @@ export default function Home() {
                     {todayResult.wins}&ndash;{todayResult.losses}
                   </span>
                   {dailyRank ? (
-                    <span className="text-[15px]">
-                      Rank <strong>#{dailyRank.rank}</strong>{" "}
-                      <span className="text-[var(--md-ink-muted)]">
-                        of {dailyRank.total} today
+                    <button
+                      type="button"
+                      onClick={() => setLeaderboardOpen(true)}
+                      className="group inline-flex items-center gap-1 text-[15px]"
+                    >
+                      <span className="border-b-2 border-[var(--md-ink)] pb-px group-hover:border-[var(--md-blue)] group-hover:text-[var(--md-blue)]">
+                        Rank <strong>#{dailyRank.rank}</strong>{" "}
+                        <span className="text-[var(--md-ink-muted)] group-hover:text-[var(--md-blue)]">
+                          of {dailyRank.total}
+                        </span>
                       </span>
-                    </span>
+                      <span className="font-bold" aria-hidden>
+                        →
+                      </span>
+                    </button>
                   ) : typeof todayResult.margin === "number" ? (
                     <span className="text-[15px] text-[var(--md-ink-muted)]">
                       Net rating {todayResult.margin >= 0 ? "+" : ""}
@@ -764,18 +852,21 @@ export default function Home() {
                 <div className="mt-1 font-display text-[12px] text-[var(--md-ink-muted)]">
                   Next challenge in <Countdown />
                 </div>
-                <button
-                  className="md-card md-card--lift mt-5 flex w-full items-center justify-between gap-3 p-4 text-left transition-transform hover:-translate-y-0.5"
-                  style={{ background: "var(--md-white)" }}
-                  onClick={() => playDaily()}
-                >
-                  <span className="font-display text-[17px] font-bold">
+                <div className="mt-4 flex items-center gap-5">
+                  <button
+                    className="md-btn md-btn--sm"
+                    onClick={() => void shareDaily()}
+                  >
+                    🔗 {shareCopied ? "Copied!" : "Share result"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => playDaily()}
+                    className="font-display text-[13px] font-bold text-[var(--md-ink-muted)] underline-offset-2 hover:text-[var(--md-ink)] hover:underline"
+                  >
                     Review your team
-                  </span>
-                  <span className="font-display text-xl font-bold" aria-hidden>
-                    →
-                  </span>
-                </button>
+                  </button>
+                </div>
               </>
             ) : (
               <>

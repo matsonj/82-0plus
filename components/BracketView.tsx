@@ -120,7 +120,9 @@ function GameRow({
 
 // A stable identity for a drafted player, used to spot the same player across
 // multiple teams (everyone draws the same daily board, so overlap is expected).
-const playerKey = (p: BracketPlayer) => `${p.name}|${p.team}|${p.season}`;
+// Exported so other shared-board views (e.g. the daily leaderboard's roster diff)
+// build the same `compareKeys` set against the viewer's own roster.
+export const playerKey = (p: BracketPlayer) => `${p.name}|${p.team}|${p.season}`;
 
 // One player row in a roster panel: name + subtle "team 'season", captain chip.
 // `shared` greys + italicises a player YOU also drafted (daily mode), so this
@@ -148,15 +150,49 @@ function PlayerRow({ p, shared }: { p: BracketPlayer; shared?: boolean }) {
   );
 }
 
-// The expandable roster panel for one team: five starters, a divider, sixth man.
-// Degrades gracefully when the stored bracket predates the roster fields.
+// The five starters (+ optional sixth man) as player rows, greying/italicising any
+// pick in `compareKeys` (a shared pick with the viewer). The bare list — no panel
+// chrome — so callers can drop it into any container. Exported for reuse by other
+// shared-board comparisons (the daily leaderboard's roster diff feeds it the same
+// `compareKeys` set built from the viewer's own roster).
+export function RosterList({
+  roster,
+  sixthMan,
+  compareKeys,
+}: {
+  roster: BracketPlayer[];
+  sixthMan?: BracketPlayer;
+  // The viewer's roster keys to grey out here (a shared pick). Undefined for the
+  // viewer's own roster (or a non-shared view) → nothing greyed.
+  compareKeys?: Set<string>;
+}) {
+  const isShared = (p: BracketPlayer) => compareKeys?.has(playerKey(p)) ?? false;
+  return (
+    <>
+      {roster.map((p, i) => (
+        <PlayerRow key={`${p.team}-${p.name}-${i}`} p={p} shared={isShared(p)} />
+      ))}
+      {sixthMan && (
+        <>
+          <div className="my-1 border-t-2 border-[var(--md-ink)]" />
+          <div className="font-display text-[8px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+            Sixth Man
+          </div>
+          <PlayerRow p={sixthMan} shared={isShared(sixthMan)} />
+        </>
+      )}
+    </>
+  );
+}
+
+// The expandable roster panel for one team in a bracket: the roster list wrapped in
+// the series-panel chrome. Degrades gracefully when a stored bracket predates the
+// roster fields.
 function RosterPanel({
   team,
   compareKeys,
 }: {
   team: BracketTeam | undefined;
-  // The viewer's roster keys to grey out on THIS team (a shared pick). Undefined
-  // for the viewer's own team (or non-daily / public view) → nothing greyed.
   compareKeys?: Set<string>;
 }) {
   if (!team || team.roster === undefined) {
@@ -166,21 +202,13 @@ function RosterPanel({
       </div>
     );
   }
-  const isShared = (p: BracketPlayer) => compareKeys?.has(playerKey(p)) ?? false;
   return (
     <div className="border-t-2 border-dashed border-[var(--md-ink)] bg-[var(--md-paper)] px-2 py-1.5">
-      {team.roster.map((p, i) => (
-        <PlayerRow key={`${p.team}-${p.name}-${i}`} p={p} shared={isShared(p)} />
-      ))}
-      {team.sixthMan && (
-        <>
-          <div className="my-1 border-t-2 border-[var(--md-ink)]" />
-          <div className="font-display text-[8px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Sixth Man
-          </div>
-          <PlayerRow p={team.sixthMan} shared={isShared(team.sixthMan)} />
-        </>
-      )}
+      <RosterList
+        roster={team.roster}
+        sixthMan={team.sixthMan}
+        compareKeys={compareKeys}
+      />
     </div>
   );
 }
