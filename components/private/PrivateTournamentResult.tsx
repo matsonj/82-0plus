@@ -92,71 +92,85 @@ export function PrivateTournamentResult({
           Final standings
         </span>
         <div className="overflow-x-auto">
-          <div className="min-w-[460px]">
-            {/* Column headers: Team · Net margin · Reg record · Playoff record · Round. */}
-            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 border-b-2 border-[var(--md-ink)] px-1 pb-1 font-display text-[9px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-              <span>Team</span>
-              <span className="text-right">Net</span>
-              <span className="text-right">Reg</span>
-              <span className="text-right">Playoff</span>
-              <span className="text-right">Round</span>
-            </div>
-            {[...data.entries]
-              .sort((a, b) => {
-                const [aw, am] = standingsRank(a);
-                const [bw, bm] = standingsRank(b);
-                return bw - aw || bm - am;
-              })
-              .map((e, i) => {
-                const mine = !!you?.entryId && e.entryId === you.entryId;
-                const isBot = e.status === "bot_replaced";
-                const margin =
-                  !isBot && e.finalRealizedMargin != null
-                    ? formatSignedMargin(e.finalRealizedMargin)
-                    : null;
-                const reg = formatRecord(e.regW, e.regL);
-                const playoff = isBot ? null : formatRecord(e.finalRecordW, e.finalRecordL);
-                const round = isBot
-                  ? formatPrivateEntryStatus(e.status)
-                  : formatTournamentStatus(e.finalStatus);
-                return (
-                  <div
-                    key={e.entryId || `${e.userName}-${i}`}
-                    className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-x-3 border-b border-[var(--md-paper-3)] px-1 py-1.5 font-display text-[12px]"
-                    style={mine ? { background: "var(--md-yellow)" } : undefined}
-                  >
-                    <span className="min-w-0 truncate font-bold">
-                      {mine ? "★ " : ""}
-                      {e.teamName ?? e.userName}
-                    </span>
-                    <span className="text-right tabular-nums">
-                      {margin ? (
-                        <span
-                          style={{
-                            color: margin.positive
-                              ? "var(--md-teal)"
-                              : "var(--md-coral)",
-                          }}
-                        >
-                          {margin.text}
-                        </span>
-                      ) : (
-                        <span className="text-[var(--md-ink-muted)]">—</span>
-                      )}
-                    </span>
-                    <span className="text-right tabular-nums text-[var(--md-ink-muted)]">
-                      {reg ?? "—"}
-                    </span>
-                    <span className="text-right tabular-nums">
-                      {playoff ?? "—"}
-                    </span>
-                    <span className="text-right text-[11px] text-[var(--md-ink-muted)]">
-                      {round}
-                    </span>
-                  </div>
-                );
-              })}
-          </div>
+          {/* A real table so every column shares ONE width across all rows —
+              fixed layout + explicit column widths keep it aligned. */}
+          <table className="w-full min-w-[460px] table-fixed border-collapse font-display">
+            <colgroup>
+              <col />
+              <col className="w-[64px]" />
+              <col className="w-[72px]" />
+              <col className="w-[64px]" />
+              <col className="w-[124px]" />
+            </colgroup>
+            <thead>
+              <tr className="border-b-2 border-[var(--md-ink)] text-[9px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                <th className="px-1 pb-1 text-left">Team</th>
+                <th className="px-1 pb-1 text-right">Net</th>
+                <th className="px-1 pb-1 text-right">Reg</th>
+                <th className="px-1 pb-1 text-right">Playoff</th>
+                <th className="px-1 pb-1 text-right">Round</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...data.entries]
+                .sort((a, b) => {
+                  const [aw, am] = standingsRank(a);
+                  const [bw, bm] = standingsRank(b);
+                  return bw - aw || bm - am;
+                })
+                .map((e, i) => {
+                  const mine = !!you?.entryId && e.entryId === you.entryId;
+                  const isBot = e.status === "bot_replaced";
+                  const margin =
+                    !isBot && e.finalRealizedMargin != null
+                      ? formatSignedMargin(e.finalRealizedMargin)
+                      : null;
+                  const reg = formatRecord(e.regW, e.regL);
+                  const playoff = isBot
+                    ? null
+                    : formatRecord(e.finalRecordW, e.finalRecordL);
+                  const round = isBot
+                    ? formatPrivateEntryStatus(e.status)
+                    : formatTournamentStatus(e.finalStatus);
+                  return (
+                    <tr
+                      key={e.entryId || `${e.userName}-${i}`}
+                      className="border-b border-[var(--md-paper-3)] text-[12px]"
+                      style={mine ? { background: "var(--md-yellow)" } : undefined}
+                    >
+                      <td className="truncate px-1 py-1.5 font-bold">
+                        {mine ? "★ " : ""}
+                        {e.teamName ?? e.userName}
+                      </td>
+                      <td className="px-1 py-1.5 text-right tabular-nums">
+                        {margin ? (
+                          <span
+                            style={{
+                              color: margin.positive
+                                ? "var(--md-teal)"
+                                : "var(--md-coral)",
+                            }}
+                          >
+                            {margin.text}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--md-ink-muted)]">—</span>
+                        )}
+                      </td>
+                      <td className="px-1 py-1.5 text-right tabular-nums text-[var(--md-ink-muted)]">
+                        {reg ?? "—"}
+                      </td>
+                      <td className="px-1 py-1.5 text-right tabular-nums">
+                        {playoff ?? "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-1 py-1.5 text-right text-[11px] text-[var(--md-ink-muted)]">
+                        {round}
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
         </div>
       </div>
 
