@@ -21,6 +21,7 @@ import {
   NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
+import { draftSourceKey, type DraftRosterMap } from "@/lib/draftSources";
 
 const HOWTO_KEY = "md820-seen-tournament-howto";
 
@@ -53,6 +54,7 @@ export function TournamentEntry({
   dailyBench = null,
   dailyDate = null,
   privateConfig = null,
+  preloadedRosters,
   onBack,
 }: {
   initialLineup: (LineupEntry | null)[];
@@ -73,6 +75,7 @@ export function TournamentEntry({
     pin: string;
     onSubmitted: () => void;
   } | null;
+  preloadedRosters?: DraftRosterMap;
   onBack: () => void;
 }) {
   const isDaily = mode === "daily";
@@ -95,6 +98,7 @@ export function TournamentEntry({
   const [sixth, setSixth] = useState<LineupEntry | null>(null);
   const [currentDecade, setCurrentDecade] = useState<number | null>(null);
   const [currentTeam, setCurrentTeam] = useState<string | null>(null);
+  const [currentPlayers, setCurrentPlayers] = useState<PublicPlayer[] | null>(null);
   const [currentReceipt, setCurrentReceipt] = useState<string>(""); // bench roll receipt
   const [teamSkips, setTeamSkips] = useState(1);
   const [rolling, setRolling] = useState(false);
@@ -207,9 +211,10 @@ export function TournamentEntry({
       const decade = opts.decade ?? pickWeightedDecade(decades, usage);
       setCurrentDecade(decade);
       setCurrentTeam(null);
+      setCurrentPlayers(null);
       const url = `/api/slot?decade=${decade}${
         excludes.length ? `&exclude=${excludes.join(",")}` : ""
-      }`;
+      }&includePlayers=1&mode=${listMode}`;
       fetch(url)
         .then(async (res) => {
           if (!res.ok) throw new Error("roll failed");
@@ -219,6 +224,7 @@ export function TournamentEntry({
           if (rollSeq.current !== myId) return;
           setCurrentTeam(data.team);
           setCurrentReceipt(data.receipt ?? "");
+          setCurrentPlayers(Array.isArray(data.players) ? data.players : null);
         })
         .catch(() => {
           if (rollSeq.current === myId)
@@ -269,6 +275,7 @@ export function TournamentEntry({
     });
     setCurrentDecade(null);
     setCurrentTeam(null);
+    setCurrentPlayers(null);
   };
 
   const teamSkip = () => {
@@ -292,6 +299,13 @@ export function TournamentEntry({
       teamNameCheck.ok &&
       pinOk &&
       !submitting;
+  const fixedBenchRoster =
+    currentTeam && currentDecade !== null
+      ? preloadedRosters?.[
+          draftSourceKey({ team: currentTeam, decade: currentDecade })
+        ]
+      : undefined;
+  const benchPlayers = fixedBenchRoster ?? currentPlayers;
 
   const submit = async () => {
     if (!canSubmit || captainSlot === null || !sixth) return;
@@ -537,6 +551,10 @@ export function TournamentEntry({
                 team={currentTeam}
                 decade={currentDecade}
                 mode={listMode}
+                players={benchPlayers}
+                playersMode={
+                  benchPlayers !== null && benchPlayers !== undefined ? listMode : null
+                }
                 allowRespin={!benchIsFixed}
                 draftable={draftable}
                 onPick={pickSixth}

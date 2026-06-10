@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
-import { getTeamWeights, getPlayableTeams } from "@/lib/queries";
+import { getTeamWeights, getPlayableTeams, getPlayers } from "@/lib/queries";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { signRoll } from "@/lib/tournamentToken";
+import type { PublicPlayer } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +32,8 @@ export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
     const decade = Number(sp.get("decade"));
+    const includePlayers = sp.get("includePlayers") === "1";
+    const mode = sp.get("mode") === "hoopiq" ? "hoopiq" : "classic";
     if (!Number.isInteger(decade) || decade < 1900 || decade > 2100) {
       return jsonWithSessionHint(
         sessionHint,
@@ -82,11 +85,20 @@ export async function GET(req: NextRequest) {
     // Signed receipt: proof the server randomly rolled this (team, decade),
     // redeemable when entering the tournament. The decade-skip exchanges it for a
     // new-decade receipt via /api/team-decades.
-    return jsonWithSessionHint(sessionHint, {
+    const body: {
+      team: string;
+      decade: number;
+      receipt: string;
+      players?: PublicPlayer[];
+    } = {
       team,
       decade,
       receipt: signRoll(team, decade),
-    });
+    };
+    if (includePlayers) {
+      body.players = await getPlayers(team, decade, mode, queryOptions);
+    }
+    return jsonWithSessionHint(sessionHint, body);
   } catch (err) {
     console.error("[/api/slot]", err);
     return jsonWithSessionHint(

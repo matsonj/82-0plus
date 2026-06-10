@@ -8,6 +8,7 @@ import {
   listPrivateEntries,
   registerPrivateEntry,
 } from "@/lib/privateTournamentQueries";
+import { getDraftRosters } from "@/lib/draftSourceRosters";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ const UUID_RE =
 
 export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);
+  const queryOptions = { sessionHint: sessionHint.value };
   try {
     const body = await req.json();
 
@@ -62,6 +64,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    const sources = [...tournament.board.slots, tournament.board.benchSlot];
 
     // Idempotent: if this account already has an entry, return it as-is (don't
     // re-reserve / change the slot count). The board is included so a returning
@@ -72,6 +75,7 @@ export async function POST(req: NextRequest) {
         entryId: existing.entryId,
         status: existing.status,
         board: tournament.board,
+        rosters: await getDraftRosters(sources, tournament.mode, queryOptions),
         size: tournament.size,
         mode: tournament.mode,
       });
@@ -89,6 +93,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const rosters = await getDraftRosters(sources, tournament.mode, queryOptions);
     const entryId = await registerPrivateEntry({
       tournamentId,
       userId: auth.userId,
@@ -99,6 +104,7 @@ export async function POST(req: NextRequest) {
       entryId,
       status: "registered",
       board: tournament.board,
+      rosters,
       size: tournament.size,
       mode: tournament.mode,
     });

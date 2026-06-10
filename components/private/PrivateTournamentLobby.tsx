@@ -122,6 +122,7 @@ export function PrivateTournamentLobby({
           mode={session.mode}
           name={name}
           pin={pin}
+          rosters={session.rosters}
           onComplete={() => {
             setSession(null);
             onRefresh();

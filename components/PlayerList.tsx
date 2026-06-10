@@ -55,6 +55,8 @@ export function PlayerList({
   team,
   decade,
   mode,
+  players,
+  playersMode = null,
   allowRespin,
   draftable,
   onPick,
@@ -63,6 +65,8 @@ export function PlayerList({
   team: string;
   decade: number;
   mode: GameMode;
+  players?: PublicPlayer[] | null;
+  playersMode?: GameMode | null;
   allowRespin: boolean;
   draftable: (p: PublicPlayer) => boolean;
   onPick: (p: PublicPlayer) => void;
@@ -78,8 +82,16 @@ export function PlayerList({
 
   useEffect(() => {
     let active = true;
-    setStatus("loading");
     setQ("");
+    const hasPreloadedPlayers = players !== null && players !== undefined;
+    if (hasPreloadedPlayers && playersMode === mode) {
+      setAll(players);
+      setStatus("ok");
+      return () => {
+        active = false;
+      };
+    }
+    setStatus("loading");
     fetch(`/api/players?team=${team}&decade=${decade}&mode=${mode}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -100,7 +112,7 @@ export function PlayerList({
     return () => {
       active = false;
     };
-  }, [team, decade, mode, reloadKey]);
+  }, [team, decade, mode, players, playersMode, reloadKey]);
 
   const available = useMemo(() => all.filter(draftable), [all, draftable]);
   const rows = useMemo(() => {

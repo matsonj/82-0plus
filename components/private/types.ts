@@ -5,6 +5,7 @@
 import type { BracketResult, SimResult, SimRosterLine } from "@/lib/types";
 import type { PrivateBoard } from "@/lib/privateBoard";
 import type { PrivateMode, PrivateBoardMode } from "@/lib/privateTournament";
+import type { DraftRosterMap } from "@/lib/draftSources";
 
 // The viewer's own entry, attached to a GET when valid creds are supplied.
 export interface PrivateYou {
@@ -91,6 +92,7 @@ export interface PrivateRegisterResponse {
   entryId: string;
   status: string;
   board: PrivateBoard;
+  rosters?: DraftRosterMap;
   size: number;
   mode: PrivateMode;
 }
