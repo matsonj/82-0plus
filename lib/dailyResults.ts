@@ -209,6 +209,133 @@ export async function listDailyResults(
   }));
 }
 
+/** The player's standing on a given day among everyone who played it. */
+export interface DailyRank {
+  rank: number; // 1-based; ties share a rank
+  total: number; // how many accounts played that day
+}
+
+/**
+ * Where the account placed on `date` among all players: ranked by wins, then by
+ * margin (net rating) as the tie-break. `rank` counts the strictly-better entries
+ * plus one, so ties share a rank. Returns null if the account hasn't played `date`
+ * (no standing to report) or nobody has. One round-trip; the menu reads this for
+ * today only, alongside the completion list.
+ */
+export async function getDailyRank(
+  userId: string,
+  date: string,
+): Promise<DailyRank | null> {
+  await ensureSchema();
+  const rows = await queryRW<{ rank: number; total: number }>(
+    `WITH me AS (
+       SELECT wins, margin FROM ${TDB}.daily_results
+        WHERE user_id = $1 AND daily_date = $2
+        LIMIT 1
+     )
+     SELECT
+       (SELECT COUNT(*) FROM ${TDB}.daily_results WHERE daily_date = $2) AS total,
+       (SELECT COUNT(*)
+          FROM ${TDB}.daily_results o, me
+         WHERE o.daily_date = $2
+           AND (o.wins > me.wins
+                OR (o.wins = me.wins AND o.margin > me.margin))) + 1 AS rank
+     FROM me`,
+    [userId, date],
+  );
+  if (!rows[0]) return null;
+  return { rank: Number(rows[0].rank), total: Number(rows[0].total) };
+}
+
+/** One row on the daily leaderboard — a player's standing plus their roster, so the
+ *  client can expand a row into the head-to-head roster diff with no extra fetch. */
+export interface DailyLeaderEntry {
+  id: string; // the account id — a stable, unique row key (ties share a rank, so rank isn't unique)
+  rank: number; // 1-based; ties share a rank (RANK())
+  name: string;
+  wins: number;
+  losses: number;
+  margin: number;
+  perfect: boolean;
+  isYou: boolean;
+  roster: DailyRosterLine[]; // the five picks (slot order [G,FLEX,W,FLEX,B]); [] on legacy rows
+}
+
+export interface DailyLeaderboardData {
+  date: string;
+  total: number; // how many accounts played that day
+  youRank: number | null; // the viewer's rank, or null if they haven't played
+  top: DailyLeaderEntry[]; // the leaders (rank ≤ topN)
+  around: DailyLeaderEntry[]; // the viewer's neighbourhood, when ranked outside the top
+}
+
+/**
+ * The daily leaderboard for `date`: the top `topN` plus the viewer's own
+ * neighbourhood (±`around` ranks), each row carrying its roster so a tap can show
+ * the head-to-head pick diff without another round-trip. Ranked by wins, then
+ * margin as the tie-break (ties share a rank). Names come from the users table;
+ * rosters from the stored row — never the client.
+ */
+export async function getDailyLeaderboard(
+  viewerUserId: string,
+  date: string,
+  topN = 15,
+  around = 2,
+): Promise<DailyLeaderboardData> {
+  await ensureSchema();
+  const rows = await queryRW<{
+    user_id: string;
+    rank: number;
+    total: number;
+    name: string;
+    wins: number;
+    losses: number;
+    margin: number;
+    perfect: boolean;
+    is_you: boolean;
+    roster_json: unknown;
+  }>(
+    `WITH ranked AS (
+       SELECT d.user_id, u.name, d.wins, d.losses, d.margin, d.perfect, d.roster_json,
+              RANK() OVER (ORDER BY d.wins DESC, d.margin DESC) AS rank,
+              COUNT(*) OVER () AS total
+         FROM ${TDB}.daily_results d
+         JOIN ${TDB}.users u ON u.user_id = d.user_id
+        WHERE d.daily_date = $2
+     ),
+     me AS (SELECT rank FROM ranked WHERE user_id = $1)
+     SELECT r.user_id, r.rank, r.total, r.name, r.wins, r.losses, r.margin, r.perfect,
+            (r.user_id = $1) AS is_you, r.roster_json
+       FROM ranked r
+      WHERE r.rank <= $3
+         OR ABS(r.rank - COALESCE((SELECT rank FROM me), -1000000)) <= $4
+      ORDER BY r.rank, r.name`,
+    [viewerUserId, date, topN, around],
+  );
+
+  const entries: DailyLeaderEntry[] = rows.map((r) => ({
+    id: r.user_id,
+    rank: Number(r.rank),
+    name: r.name,
+    wins: r.wins,
+    losses: r.losses,
+    margin: r.margin,
+    perfect: !!r.perfect,
+    isYou: !!r.is_you,
+    roster: parse<DailyRosterLine[]>(r.roster_json, []),
+  }));
+
+  const total = rows.length ? Number(rows[0].total) : 0;
+  const youRank = entries.find((e) => e.isYou)?.rank ?? null;
+  return {
+    date,
+    total,
+    youRank,
+    top: entries.filter((e) => e.rank <= topN),
+    around: entries.filter((e) => e.rank > topN),
+  };
+}
+
 export interface RecordDailyArgs {
   userId: string;
   date: string;
