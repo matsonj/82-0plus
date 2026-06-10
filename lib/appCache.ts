@@ -181,15 +181,33 @@ const BUILD_TEAM_DECADE_WEIGHTS = `CREATE OR REPLACE TABLE ${ACDB}.team_decade_w
    WHERE b.period = 'FullGame' AND s.season_type = 'Regular Season'
    GROUP BY 1, 2`;
 
-/** Cheap source fingerprint: row count + latest game date of the schedule.
- *  New games bump one or both, so an unchanged fingerprint means an unchanged
- *  cache — skip the multi-second rebuild. */
-const SOURCE_FINGERPRINT_SQL = `SELECT count(*)::VARCHAR || ':' ||
-  COALESCE(max(game_date)::VARCHAR, '') AS fp FROM ${SRC}.schedule`;
+// Cheap source fingerprint across EVERY table the cache derives from, so a
+// backfill/correction to any of them triggers a rebuild — not just new games in
+// `schedule`. (`game_quality` is a view of box_scores+schedule, so it needs no
+// separate signal.) Row counts + the latest game date are metadata-cheap; this
+// catches additions/backfills. Pure in-place value edits that don't change a row
+// count won't trip it — a manual `scripts/buildCache.ts` run covers that rare case.
+const SOURCE_FINGERPRINT_SQL = `SELECT
+    (SELECT count(*)::VARCHAR || ':' || COALESCE(max(game_date)::VARCHAR, '') FROM ${SRC}.schedule)
+    || '|' || (SELECT count(*)::VARCHAR FROM ${SRC}.box_scores)
+    || '|' || (SELECT count(*)::VARCHAR FROM ${SRC}.all_defense)
+    || '|' || (SELECT count(*)::VARCHAR FROM ${SRC}.player_bio) AS fp`;
 
 async function sourceFingerprint(): Promise<string> {
   const rows = await queryRW<{ fp: string }>(SOURCE_FINGERPRINT_SQL);
   return rows[0]?.fp ?? "";
+}
+
+/**
+ * Drop the in-process warm caches that are derived from the cache tables, so they
+ * reload from the freshly-rebuilt data on next access. (These globals are declared
+ * in lib/queries.ts and lib/tournamentQueries.ts; we reset them here because a
+ * rebuild is the moment they go stale, and importing those modules would cycle.)
+ */
+function invalidateWarmCaches(): void {
+  globalThis.__player_index__ = undefined;
+  globalThis.__team_weights__ = undefined;
+  globalThis.__stat_norms__ = undefined;
 }
 
 /** Run the full build (CREATE OR REPLACE all tables) and stamp cache_meta. */
@@ -207,11 +225,17 @@ async function buildAll(): Promise<void> {
   await queryRW(BUILD_PLAYER_INDEX);
   await queryRW(BUILD_TEAM_DECADE_WEIGHTS);
   await queryRW(`DELETE FROM ${ACDB}.cache_meta WHERE cache_key = 'global'`);
+  const stampedAt = Date.now();
   await queryRW(
     `INSERT INTO ${ACDB}.cache_meta (cache_key, built_at, source_fp, status)
        VALUES ('global', now(), $1, 'ready')`,
     [fp],
   );
+  // This process is now consistent with what it just wrote: drop its warm caches
+  // and record the build it has reconciled with (so its next freshness check
+  // doesn't re-invalidate for its own rebuild).
+  globalThis.__app_cache_seen_built_at__ = stampedAt;
+  invalidateWarmCaches();
 }
 
 declare global {
@@ -219,6 +243,9 @@ declare global {
   var __app_cache_build__: Promise<void> | undefined;
   // eslint-disable-next-line no-var
   var __app_cache_last_check__: number | undefined;
+  // built_at (ms) this process has reconciled its warm caches with.
+  // eslint-disable-next-line no-var
+  var __app_cache_seen_built_at__: number | undefined;
 }
 
 /** Single-flight wrapper around buildAll (per process). Cross-instance dupes are
@@ -274,7 +301,18 @@ export async function refreshCacheIfStale(): Promise<void> {
       await runBuild(); // never built → build it
       return;
     }
-    const ageMs = now - new Date(row.built_at).getTime();
+    // Cross-instance invalidation: if ANOTHER instance rebuilt since we last
+    // reconciled, our warm globals are stale even though we didn't rebuild —
+    // drop them so they reload from the new tables. (≤ CHECK_INTERVAL_MS lag.)
+    const builtAtMs = new Date(row.built_at).getTime();
+    const seen = globalThis.__app_cache_seen_built_at__;
+    if (seen === undefined) {
+      globalThis.__app_cache_seen_built_at__ = builtAtMs; // adopt; nothing warmed against an older build yet
+    } else if (builtAtMs > seen) {
+      globalThis.__app_cache_seen_built_at__ = builtAtMs;
+      invalidateWarmCaches();
+    }
+    const ageMs = now - builtAtMs;
     const fp = await sourceFingerprint();
     if (fp !== row.source_fp || ageMs > MAX_AGE_MS) {
       await runBuild();

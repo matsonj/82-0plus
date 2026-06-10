@@ -5,10 +5,13 @@ import { refreshCacheIfStale } from "@/lib/appCache";
 export const runtime = "nodejs";
 
 // Career-by-season history for one player (entity_id) → the Classic-mode player
-// card. The data is global/public and changes at most once a day, so the response
-// is CDN-cacheable (s-maxage). It's served from the app_cache rollup (sub-ms), and
-// a background freshness check (gated, non-blocking) keeps the cache warm without
-// stalling the response. This is the app's single hottest query — caching it here
+// card. The data is global/public, so the response is CDN-cached. We use a SHORT
+// s-maxage + long stale-while-revalidate: the CDN always serves instantly, but
+// background-revalidates within ~10 min — so once a cache rebuild lands, the fresh
+// data propagates quickly instead of being pinned behind a day-long CDN entry
+// built from the stale snapshot. Served from the app_cache rollup (sub-ms); a
+// gated, non-blocking freshness check on the (cheap, background) revalidation
+// keeps app_cache warm. This is the app's single hottest query — caching it here
 // keeps the bulk of the carousel's ±2 prefetch traffic off the function and DB.
 // (No session-hint cookie here: the response is shared/public, and the data comes
 // from app_cache via the RW pool, so read-pool affinity is irrelevant.)
@@ -25,7 +28,7 @@ export async function GET(req: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            "public, s-maxage=86400, stale-while-revalidate=604800",
+            "public, s-maxage=600, stale-while-revalidate=86400",
         },
       },
     );
