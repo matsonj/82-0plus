@@ -13,7 +13,6 @@ import {
   finalizePrivate,
 } from "@/lib/privateTournamentFinalize";
 import { validateTeamName, normalizeTeamName } from "@/lib/tournamentValidation";
-import type { PrivateStatus } from "@/lib/privateTournament";
 import {
   loadOpenPrivateEntry,
   validatePrivateStarters,
@@ -133,9 +132,9 @@ export async function POST(req: NextRequest) {
       rosterDisplay: { roster: entryTeam.roster, sixthMan: entryTeam.sixthManInfo },
       provisionalRecordW: prov.recordW,
       provisionalRecordL: prov.recordL,
-      // The status column stores the human round label (a free string); the typed
-      // column is PrivateStatus, so cast at the boundary.
-      provisionalStatus: prov.status as PrivateStatus,
+      // The result label (e.g. "Champion", "Lost Play-In") — a PrivateResultLabel,
+      // distinct from the tournament's open/completed lifecycle.
+      provisionalStatus: prov.status,
       teamName,
     });
 

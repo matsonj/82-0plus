@@ -3,6 +3,7 @@ import type {
   PrivateBoardMode,
   PrivateEntryStatus,
   PrivateMode,
+  PrivateResultLabel,
   PrivateSize,
   PrivateStatus,
 } from "./privateTournament";
@@ -70,10 +71,10 @@ export interface PrivateEntryRow {
   teamBoxJson: unknown; // the five's reg-season 9-stat box; null before
   provisionalRecordW: number | null;
   provisionalRecordL: number | null;
-  provisionalStatus: PrivateStatus | null;
+  provisionalStatus: PrivateResultLabel | null;
   finalRecordW: number | null;
   finalRecordL: number | null;
-  finalStatus: PrivateStatus | null;
+  finalStatus: PrivateResultLabel | null;
   finalRealizedMargin: number | null;
   finalReachedRound: number | null;
   viewedFinalAt: string | null;
@@ -99,10 +100,10 @@ export interface PrivateEntryForUserRow {
   regL: number | null;
   provisionalRecordW: number | null;
   provisionalRecordL: number | null;
-  provisionalStatus: PrivateStatus | null;
+  provisionalStatus: PrivateResultLabel | null;
   finalRecordW: number | null;
   finalRecordL: number | null;
-  finalStatus: PrivateStatus | null;
+  finalStatus: PrivateResultLabel | null;
   finalReachedRound: number | null;
   viewedFinalAt: string | null;
 }
@@ -255,10 +256,10 @@ export function mapEntryRow(r: EntryDbRow): PrivateEntryRow {
     teamBoxJson: r.team_box_json == null ? null : parseJson(r.team_box_json),
     provisionalRecordW: r.provisional_record_w ?? null,
     provisionalRecordL: r.provisional_record_l ?? null,
-    provisionalStatus: (r.provisional_status as PrivateStatus | null) ?? null,
+    provisionalStatus: r.provisional_status ?? null,
     finalRecordW: r.final_record_w ?? null,
     finalRecordL: r.final_record_l ?? null,
-    finalStatus: (r.final_status as PrivateStatus | null) ?? null,
+    finalStatus: r.final_status ?? null,
     finalRealizedMargin: r.final_realized_margin ?? null,
     finalReachedRound: r.final_reached_round ?? null,
     viewedFinalAt: toIso(r.viewed_final_at),
@@ -285,10 +286,10 @@ export function mapEntryForUserRow(r: EntryForUserDbRow): PrivateEntryForUserRow
     regL: r.reg_l ?? null,
     provisionalRecordW: r.provisional_record_w ?? null,
     provisionalRecordL: r.provisional_record_l ?? null,
-    provisionalStatus: (r.provisional_status as PrivateStatus | null) ?? null,
+    provisionalStatus: r.provisional_status ?? null,
     finalRecordW: r.final_record_w ?? null,
     finalRecordL: r.final_record_l ?? null,
-    finalStatus: (r.final_status as PrivateStatus | null) ?? null,
+    finalStatus: r.final_status ?? null,
     finalReachedRound: r.final_reached_round ?? null,
     viewedFinalAt: toIso(r.viewed_final_at),
   };

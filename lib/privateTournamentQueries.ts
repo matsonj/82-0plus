@@ -3,8 +3,8 @@ import type { PrivateBoard } from "./privateBoard";
 import type {
   PrivateBoardMode,
   PrivateMode,
+  PrivateResultLabel,
   PrivateSize,
-  PrivateStatus,
 } from "./privateTournament";
 import {
   type EntryDbRow,
@@ -252,7 +252,7 @@ export interface SubmitPrivateEntryArgs {
   rosterDisplay: unknown; // final names (with captain flagged + sixth man)
   provisionalRecordW: number;
   provisionalRecordL: number;
-  provisionalStatus: PrivateStatus;
+  provisionalStatus: PrivateResultLabel;
   teamName?: string | null; // franchise name, if chosen at submit
 }
 
@@ -318,7 +318,7 @@ export interface UpdateEntryFinalArgs {
   entryId: string;
   finalRecordW: number;
   finalRecordL: number;
-  finalStatus: PrivateStatus;
+  finalStatus: PrivateResultLabel;
   finalRealizedMargin: number;
   finalReachedRound: number;
 }

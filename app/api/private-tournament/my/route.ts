@@ -6,6 +6,7 @@ import {
   privateModeLabel,
   type PrivateEntryStatus,
   type PrivateMode,
+  type PrivateResultLabel,
   type PrivateSize,
   type PrivateStatus,
 } from "@/lib/privateTournament";
@@ -37,10 +38,10 @@ interface MyPrivateTournament {
   entryStatus: PrivateEntryStatus;
   finalRecordW: number | null;
   finalRecordL: number | null;
-  finalStatus: PrivateStatus | null;
+  finalStatus: PrivateResultLabel | null;
   provisionalRecordW: number | null;
   provisionalRecordL: number | null;
-  provisionalStatus: PrivateStatus | null;
+  provisionalStatus: PrivateResultLabel | null;
   needsAttention: boolean; // reuse needsAttention() — drives the unread dot
 }
 

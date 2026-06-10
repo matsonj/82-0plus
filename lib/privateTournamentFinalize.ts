@@ -1,6 +1,5 @@
 import "server-only";
 import type { QueryOptions } from "./motherduck";
-import type { PrivateStatus } from "./privateTournament";
 import {
   getPrivateTournament,
   listPrivateEntries,
@@ -171,9 +170,8 @@ async function persistEntryFinals(
       entryId: r.entryId,
       finalRecordW: r.finalRecordW,
       finalRecordL: r.finalRecordL,
-      // The status column stores the human round label (a free string); the typed
-      // column is PrivateStatus, so cast at the boundary.
-      finalStatus: r.finalStatus as unknown as PrivateStatus,
+      // The result label (e.g. "Champion", "Lost Play-In") — a PrivateResultLabel.
+      finalStatus: r.finalStatus,
       finalRealizedMargin: r.finalRealizedMargin,
       finalReachedRound: r.finalReachedRound,
     });

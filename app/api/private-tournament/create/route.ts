@@ -1,4 +1,4 @@
-import { scryptSync, randomBytes, randomUUID } from "node:crypto";
+import { scryptSync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { authenticate } from "@/lib/dailyResults";
@@ -13,7 +13,10 @@ import {
   type PrivateBoard,
   type PrivateSlot,
 } from "@/lib/privateBoard";
-import { createPrivateTournament } from "@/lib/privateTournamentQueries";
+import {
+  createPrivateTournament,
+  getPrivateTournamentsByNameNorm,
+} from "@/lib/privateTournamentQueries";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,6 +92,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ---- Enforce (name + PIN) uniqueness. A name MAY repeat across tournaments,
+    // but only with a DIFFERENT PIN: /lookup resolves a name+PIN to the FIRST row
+    // whose PIN matches, so a second tournament sharing both name and PIN would be
+    // permanently unreachable by the name+PIN flow (entrants would land in the
+    // older bracket). Reject a PIN collision under the same normalized name. ----
+    const nameNorm = normalizeTournamentName(name);
+    const existing = await getPrivateTournamentsByNameNorm(nameNorm);
+    const pinCollides = existing.some((t) => {
+      const candidate = scryptSync(pin, t.pinSalt, 32);
+      const stored = Buffer.from(t.pinHash, "hex");
+      return (
+        candidate.length === stored.length && timingSafeEqual(candidate, stored)
+      );
+    });
+    if (pinCollides) {
+      return jsonWithSessionHint(
+        sessionHint,
+        {
+          error:
+            "a tournament with that name and PIN already exists — pick a different PIN",
+        },
+        { status: 409 },
+      );
+    }
+
     // ---- The tournament id is fixed UP FRONT so a blind board is seeded by it. ----
     const tournamentId = randomUUID();
 
@@ -136,7 +164,7 @@ export async function POST(req: NextRequest) {
     const storedId = await createPrivateTournament({
       tournamentId,
       name, // the TOURNAMENT's display name (already validated + normalized)
-      nameNorm: normalizeTournamentName(name), // tournament name's lookup key
+      nameNorm, // tournament name's lookup key (computed above)
       pinHash, // hash of the TOURNAMENT's own PIN
       pinSalt: salt,
       adminUserId: auth.userId, // the signed-in admin account

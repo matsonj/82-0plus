@@ -28,6 +28,13 @@ export type PrivateSize = 4 | 8 | 12 | 16 | 20;
 /** Lifecycle: "open" while accepting entries, "completed" once finalized. */
 export type PrivateStatus = "open" | "completed";
 
+/** An entry's bracket RESULT label (the `statusLabel` output) — e.g. "Champion",
+ *  "Lost Finals", "Lost Play-In". This is the displayed outcome of a run, NOT the
+ *  tournament lifecycle (PrivateStatus). Kept a string alias because the value is
+ *  produced/stored as free text; the alias just marks intent so it never gets
+ *  conflated with PrivateStatus. */
+export type PrivateResultLabel = string;
+
 /** The legal field sizes, in ascending order. */
 export const PRIVATE_SIZES: readonly PrivateSize[] = [4, 8, 12, 16, 20];
 
@@ -70,11 +77,11 @@ export interface PrivateEntrySummary {
   // Provisional bracket standing (computed as others submit, before finalize).
   provisionalRecordW: number | null;
   provisionalRecordL: number | null;
-  provisionalStatus: PrivateStatus | null;
+  provisionalStatus: PrivateResultLabel | null;
   // Final bracket standing (after finalize).
   finalRecordW: number | null;
   finalRecordL: number | null;
-  finalStatus: PrivateStatus | null;
+  finalStatus: PrivateResultLabel | null;
   // When this entrant last opened the finished bracket (for the unread badge).
   viewedFinalAt: string | null;
 }
