@@ -1,5 +1,5 @@
 import { query, type QueryOptions } from "./motherduck";
-import { ACDB, readCache } from "./appCache";
+import { ACDB, readCache, isCacheReady, refreshCacheIfStale } from "./appCache";
 import { eligiblePositions, positionRank } from "./positions";
 import type { GameMode, PublicPlayer, SimPick, SimRosterLine } from "./types";
 import type { ScoringPlayer } from "./scoring";
@@ -158,10 +158,16 @@ declare global {
  * Read the precomputed index. Prefers the self-managed `app_cache.main.player_index`
  * table (a fast SELECT, refreshed by lib/appCache), and falls back to computing it
  * live against the view if the cache is missing or empty.
+ *
+ * Nearly every route except /api/player funnels through here, so this is also
+ * where the cache reconciles: a gated (≤1×/hour/process), non-blocking
+ * refreshCacheIfStale() drops stale warm globals + rebuilds when the source
+ * changed — so any route process self-heals, not just ones that hit /api/player.
  */
 export function getPlayerIndex(
   options: QueryOptions = {},
 ): Promise<IndexedPlayer[]> {
+  void refreshCacheIfStale();
   if (!globalThis.__player_index__) {
     globalThis.__player_index__ = (async () => {
       try {
@@ -339,8 +345,13 @@ export async function getPlayerSeasonHistory(
       [entityId],
     );
     if (cached.length > 0) return cached;
+    // A built cache returning no rows means this id has no qualifying (>=5-game)
+    // seasons — exactly what the live view would return — so don't pay the
+    // self-join. Only fall through when the cache isn't built yet; this stops
+    // random valid-format ids from bypassing the cache into the expensive view.
+    if (await isCacheReady()) return cached;
   } catch {
-    // cache missing → fall through to the live view
+    // cache unavailable → fall through to the live view
   }
   return query<PlayerSeasonRow>(
     `SELECT s.season_year AS season,

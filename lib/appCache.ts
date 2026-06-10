@@ -29,6 +29,35 @@ export function readCache<T = Record<string, unknown>>(
   return queryRW<T>(sql, params);
 }
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __app_cache_ready__: boolean | undefined;
+}
+
+/**
+ * Has the cache been built at least once? (a `status='ready'` row in cache_meta,
+ * which buildAll writes LAST — so ready implies every table is populated.) Lets a
+ * caller tell "this id legitimately has no rows" (return empty — the live query
+ * would too) apart from "cache not built yet" (fall back to the live query),
+ * instead of paying the expensive view for every empty result. Memoized true:
+ * rebuilds replace tables in place, never drop them, so readiness is monotonic.
+ */
+export async function isCacheReady(): Promise<boolean> {
+  if (globalThis.__app_cache_ready__) return true;
+  try {
+    const rows = await queryRW(
+      `SELECT 1 FROM ${ACDB}.cache_meta WHERE cache_key = 'global' AND status = 'ready' LIMIT 1`,
+    );
+    if (rows.length > 0) {
+      globalThis.__app_cache_ready__ = true;
+      return true;
+    }
+    return false;
+  } catch {
+    return false; // cache_meta / app_cache missing → not built
+  }
+}
+
 // ── Build SQL (one CREATE OR REPLACE per table, in dependency order) ─────────
 //
 // 1. game_quality — a straight snapshot of the live view. The expensive
