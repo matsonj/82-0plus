@@ -14,9 +14,12 @@ import {
 } from "@/lib/tournamentLabels";
 import type { PrivateCompletedEntry } from "@/components/private/types";
 
-// Final standings rank: most playoff wins first, then better net margin. Bot-
-// replaced / null records sort to the bottom.
+// Final standings rank: most playoff wins first, then better net margin. A
+// timed-out (bot_replaced) entrant is DISPLAYED as "Bot (timed out)" with its
+// W-L/margin hidden — so it must rank at the BOTTOM, regardless of the replacement
+// bot's stored final record (which finalization writes back onto the entry).
 function standingsRank(e: PrivateCompletedEntry): [number, number] {
+  if (e.status === "bot_replaced") return [-Infinity, -Infinity];
   return [e.finalRecordW ?? -1, e.finalRealizedMargin ?? -Infinity];
 }
 

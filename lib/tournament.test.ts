@@ -480,9 +480,9 @@ describe("region affinity", () => {
     expect(regionScore(neutral)).toBe(0);
   });
 
-  it("the two strongest teams land in DIFFERENT conferences (fair snake seeding)", () => {
-    // Conferences are assigned by a strength-balanced SNAKE (NOT region affinity),
-    // so the field's two strongest can only meet in the Final — never round 1.
+  it("the two strongest teams land in DIFFERENT conferences (pair-split balance)", () => {
+    // Conferences are assigned by splitting each consecutive STRENGTH pair, so the
+    // field's two strongest can only meet in the Final — never round 1.
     const teams16 = Array.from({ length: 16 }, (_, i) =>
       team({
         id: `T${i}`,
@@ -491,7 +491,7 @@ describe("region affinity", () => {
         sixthManInfo: { name: "s", team: "POR", season: 1996 },
       }),
     );
-    const r = simulateBracket(teams16, "snake", norms());
+    const r = simulateBracket(teams16, "pairsplit", norms());
     const east = r.teams.filter((t) => t.conference === "East");
     const west = r.teams.filter((t) => t.conference === "West");
     expect(east).toHaveLength(8);
@@ -502,6 +502,26 @@ describe("region affinity", () => {
     expect([eastTop.seedNet, westTop.seedNet].sort((a, b) => b - a)).toEqual([
       16, 15,
     ]);
+  });
+
+  it("affinity decides which side each strength-pair member takes", () => {
+    // A strength pair of one clearly-West and one clearly-East team must split with
+    // the West-leaner in the West and the East-leaner in the East. Build 4 teams as
+    // two pairs; in each pair the stronger is West-leaning, the weaker East-leaning.
+    const westRoster = ros(["LAL", "GSW", "DEN", "PHX", "DAL"], 0); // all West
+    const eastRoster = ros(["BOS", "NYK", "MIA", "CHI", "PHI"], 0); // all East
+    const teams4 = [
+      team({ id: "P0W", seedNet: 100, roster: westRoster, sixthManInfo: { name: "s", team: "POR", season: 1996 } }),
+      team({ id: "P0E", seedNet: 90, roster: eastRoster, sixthManInfo: { name: "s", team: "TOR", season: 1996 } }),
+      team({ id: "P1W", seedNet: 50, roster: westRoster, sixthManInfo: { name: "s", team: "POR", season: 1996 } }),
+      team({ id: "P1E", seedNet: 40, roster: eastRoster, sixthManInfo: { name: "s", team: "TOR", season: 1996 } }),
+    ];
+    const r = simulateBracket(teams4, "affinity-pair", norms(), C, 4);
+    const confOf = (id: string) => r.teams.find((t) => t.id === id)!.conference;
+    expect(confOf("P0W")).toBe("West");
+    expect(confOf("P0E")).toBe("East");
+    expect(confOf("P1W")).toBe("West");
+    expect(confOf("P1E")).toBe("East");
   });
 });
 

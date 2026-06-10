@@ -44,7 +44,11 @@ export function DeleteTournamentControl({
         setBusy(false);
         return;
       }
-      router.push("/tournament?tab=private");
+      // Replace (the deleted tournament shouldn't sit in history) + refresh to
+      // bust the App Router segment cache, so My Teams reloads a fresh private
+      // list rather than a stale/empty cached render of /tournament.
+      router.replace("/tournament?tab=private");
+      router.refresh();
     } catch {
       setError("Couldn't delete this tournament right now. Try again.");
       setBusy(false);

@@ -643,30 +643,34 @@ export function simulateBracket(
   const byStrength = (a: TournamentTeam, b: TournamentTeam) =>
     b.seedNet - a.seedNet || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-  // ---- 1. STRENGTH-BALANCED SNAKE seeding. ----
+  // ---- 1. STRENGTH-FIRST seeding; affinity assigns conferences PAIR-WISE. ----
   // Strength (seedNet) is the PRIMARY key: sort ALL teams high-to-low by seedNet
-  // (id tie-break) FIRST. Then SERPENTINE them into the two conferences so the
-  // bracket is FAIR — the two STRONGEST teams must land in DIFFERENT conferences
-  // (they can only meet in the Final, never round 1), and each conference gets a
-  // balanced spread of strength.
+  // (id tie-break) FIRST. Then walk that strength order TWO AT A TIME and split
+  // each consecutive pair across the conferences. This keeps the two conferences
+  // strength-balanced — the field's two STRONGEST land in different conferences,
+  // so they can only meet in the Final (never round 1) — while region AFFINITY
+  // still decides WHICH side each member of a pair takes: the more West-leaning
+  // (higher regionScore, captain doubled) goes West, the other East; ties send the
+  // stronger team West. Seeds WITHIN a conference still follow seedNet (seedConf
+  // re-sorts), since each conference draws one team from every strength pair.
   //
-  // Snake pattern over the strength-sorted list (index → conference):
-  //   0→E, 1→W, 2→W, 3→E, 4→E, 5→W, 6→W, 7→E, …  (i%4 ∈ {0,3} → East else West)
-  // For any even `size` this fills both conferences to exactly `half`, puts the #1
-  // and #2 overall as the two conferences' #1 seeds, and (re-sorting each side by
-  // strength below) keeps seeds WITHIN a conference in seedNet order.
-  //
-  // (Region affinity / regionScore is intentionally NOT used to assign conferences
-  // anymore: affinity could stack the two best teams into the same conference, so
-  // the field's two strongest played in round 1 while the Final was decided
-  // against a weak team. A balanced snake is the standard fair-bracket seeding.)
+  // (This is the reconciliation of two constraints: strength must drive seeding,
+  // but affinity used as the PRIMARY partition key let the two best stack into one
+  // conference. Pairing enforces the balance; affinity is the within-pair signal.)
   const byStrengthAll = [...teams].sort(byStrength);
   const eastRaw: TournamentTeam[] = [];
   const westRaw: TournamentTeam[] = [];
-  byStrengthAll.forEach((t, i) => {
-    const toEast = i % 4 === 0 || i % 4 === 3;
-    (toEast ? eastRaw : westRaw).push(t);
-  });
+  for (let k = 0; k < byStrengthAll.length; k += 2) {
+    const a = byStrengthAll[k];
+    const b = byStrengthAll[k + 1]; // `size` is even, so the pair always exists
+    if (regionScore(a) >= regionScore(b)) {
+      westRaw.push(a);
+      eastRaw.push(b);
+    } else {
+      westRaw.push(b);
+      eastRaw.push(a);
+    }
+  }
 
   const seedConf = (raw: TournamentTeam[], conference: Conference) => {
     const sorted = [...raw].sort(byStrength);
