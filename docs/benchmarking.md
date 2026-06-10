@@ -40,9 +40,12 @@ regression that isn't real.)
   both `next start` and Vercel run production). Any value works; it just has to
   be present.
 
-> The write flows leave a few `daily_results` rows under `DLY*` user names in
-> `nba_tournament`. Private tournaments are created and auto-deleted. Lower
-> `AUTH_RUNS` to write less; clean the rows afterward if you care.
+> **Write flows are OFF by default (`AUTH_RUNS=0`).** Read flows never mutate.
+> Setting `AUTH_RUNS>0` creates benchmark users in `nba_tournament` on **both**
+> targets — private tournaments auto-delete, but a few `daily_results` rows under
+> `DLY*` names persist (the app exposes no delete for them). The harness
+> **refuses** write flows against a prod-looking host unless `ALLOW_PROD_WRITES=1`.
+> Prefer a non-prod preview baseline so production data is never touched.
 
 ---
 
@@ -61,9 +64,11 @@ PR's actual base:
 git merge-base <pr-branch> origin/main   # the baseline commit
 ```
 
-If prod happens to be deployed at that commit, use the prod alias as `MAIN_URL`.
-Otherwise deploy the baseline commit as its own preview (same steps below) so
-you're comparing only the PR's change.
+**Prefer deploying the baseline commit as its own preview** (same steps below)
+and use *that* as `MAIN_URL`, so you compare only the PR's change. Using the prod
+alias as `MAIN_URL` is acceptable **only for read-only runs** (`AUTH_RUNS=0`):
+write flows would create benchmark users in production data, so the harness
+refuses a prod-looking baseline unless you set `ALLOW_PROD_WRITES=1`.
 
 ### 2. Deploy the candidate (and baseline, if needed) as a preview
 
@@ -122,6 +127,10 @@ BENCH_MODE=bundled \
   node scripts/benchmark.mjs | tee bench-deployed.txt
 ```
 
+Write flows are off by default. To include them, deploy a **non-prod** baseline
+preview and add `AUTH_RUNS=3` — they create throwaway users in `nba_tournament`
+(and are refused against a prod-looking URL unless `ALLOW_PROD_WRITES=1`).
+
 > Header-only bypass (no `x-vercel-set-bypass-cookie`): the set-cookie variant
 > answers with a redirect that loops under `fetch`'s auto-follow. The plain
 > header returns `200` directly. `benchmark.mjs` already does it this way.
@@ -147,7 +156,8 @@ production servers, then benchmark across loopback.
 
 ```bash
 git fetch origin main <pr-branch>
-git worktree add --detach /tmp/bench-main origin/main
+BASE=$(git merge-base <pr-branch> origin/main)   # the PR's base — NOT bare origin/main
+git worktree add --detach /tmp/bench-main "$BASE"
 git worktree add --detach /tmp/bench-pr   <pr-branch>
 
 cp .env.local /tmp/bench-main/.env.local

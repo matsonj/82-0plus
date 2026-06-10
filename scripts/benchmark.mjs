@@ -41,16 +41,22 @@
  *   PR_URL     candidate server        (default http://127.0.0.1:4101)
  *   BENCH_MODE bundled | mirror        (default bundled)
  *   RUNS       read-flow repetitions   (default 5)
- *   AUTH_RUNS  write-flow repetitions  (default 3) — each writes throwaway rows
- *              to nba_tournament; private tournaments are auto-deleted, a few
- *              daily_results rows under DLY* names remain.
+ *   AUTH_RUNS  write-flow repetitions  (default 0 — OFF). Read flows never
+ *              mutate. Write flows create benchmark users in nba_tournament on
+ *              BOTH targets (private tournaments auto-delete; a few DLY*
+ *              daily_results rows persist). Refused against a prod-looking host
+ *              unless ALLOW_PROD_WRITES=1.
+ *   ALLOW_PROD_WRITES  set to 1 to permit write flows against a prod-looking URL.
  *   VERCEL_PROTECTION_BYPASS  if set, sent as the x-vercel-protection-bypass
  *              header on every request so a protected Vercel preview is reachable
  *              (harmless against a public production alias).
  *
- * NOTE: both servers must point at a MotherDuck account where `nba_tournament`
- * is WRITABLE (the write flows run CREATE/INSERT). TOURNAMENT_SECRET must be set
- * on each server (required in production mode).
+ * Each iteration measures main vs pr in RANDOMIZED order, so warmup can't
+ * systematically favor whichever branch is always measured second.
+ *
+ * NOTE: with AUTH_RUNS>0, both servers must point at a MotherDuck account where
+ * `nba_tournament` is WRITABLE (the write flows run CREATE/INSERT).
+ * TOURNAMENT_SECRET must be set on each server (required in production mode).
  */
 
 import { performance } from "node:perf_hooks";
@@ -66,7 +72,27 @@ if (MODE !== "bundled" && MODE !== "mirror") {
 }
 
 const RUNS = Number(process.env.RUNS ?? "5");
-const AUTH_RUNS = Number(process.env.AUTH_RUNS ?? "3");
+// Write flows are OFF by default: read flows tell the main story and never
+// mutate, while write flows create benchmark users/tournaments in nba_tournament.
+const AUTH_RUNS = Number(process.env.AUTH_RUNS ?? "0");
+
+// Guard: write flows (AUTH_RUNS>0) create benchmark users + tournaments in
+// nba_tournament on BOTH targets (private tournaments auto-delete; a few DLY*
+// daily_results rows persist — the app exposes no delete for them). Refuse to do
+// that against a production-looking host unless explicitly allowed.
+const looksProd = (u) => /82-0plus\.vercel\.app/i.test(u) || /(^|[./])prod\b/i.test(u);
+if (AUTH_RUNS > 0 && !process.env.ALLOW_PROD_WRITES) {
+  for (const [name, url] of Object.entries(BASES)) {
+    if (looksProd(url)) {
+      throw new Error(
+        `Refusing write flows (AUTH_RUNS=${AUTH_RUNS}) against ${name.toUpperCase()}_URL=${url}: ` +
+          `they create benchmark users in nba_tournament (DLY* rows persist). Point the ` +
+          `baseline at a non-prod preview, or set ALLOW_PROD_WRITES=1 to override.`,
+      );
+    }
+  }
+}
+
 const DECADES = [2020, 2010, 2000, 1990, 1980];
 const MANUAL_SLOTS = [
   { team: "BOS", decade: 1980 },
@@ -414,20 +440,45 @@ async function run() {
       : prWarm.get("/api/daily?includePlayers=1&mode=hoopiq"),
   ]);
 
+  // Measure the main + pr halves of one flow in RANDOMIZED order each iteration,
+  // so a systematic warmup advantage (shared backend caches, connection reuse,
+  // cold start) can't always accrue to whichever branch is measured second and
+  // manufacture a win for it.
+  const measurePair = async (flow, mainFn, prFn) => {
+    const order = [
+      ["main", BASES.main, mainFn],
+      ["pr", BASES.pr, prFn],
+    ];
+    if (Math.random() < 0.5) order.reverse();
+    const out = [];
+    for (const [branch, base, fn] of order) {
+      out.push(await measure(flow, new Client(base, branch), fn));
+    }
+    return out;
+  };
+
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    results.push(await measure("Free draft: 5 rolled sources", new Client(BASES.main, "main"), freeFiveOld));
-    results.push(await measure("Free draft: 5 rolled sources", new Client(BASES.pr, "pr"), PR_FLOWS.free));
-    results.push(await measure("Daily board load", new Client(BASES.main, "main"), dailyBoardOld));
-    results.push(await measure("Daily board load", new Client(BASES.pr, "pr"), PR_FLOWS.daily));
+    results.push(...(await measurePair("Free draft: 5 rolled sources", freeFiveOld, PR_FLOWS.free)));
+    results.push(...(await measurePair("Daily board load", dailyBoardOld, PR_FLOWS.daily)));
   }
 
   for (let i = 0; i < AUTH_RUNS; i++) {
     const suffix = `${Date.now().toString(36).slice(-5)}${i}`.toUpperCase();
-    results.push(await measure("Authenticated daily start", new Client(BASES.main, "main"), (c) => dailyStartOld(c, suffix)));
-    results.push(await measure("Authenticated daily start", new Client(BASES.pr, "pr"), (c) => PR_FLOWS.dailyStart(c, suffix)));
-    results.push(await measure("Private register + board rosters", new Client(BASES.main, "main"), (c) => privateRegisterOld(c, suffix)));
-    results.push(await measure("Private register + board rosters", new Client(BASES.pr, "pr"), (c) => PR_FLOWS.privateRegister(c, suffix)));
+    results.push(
+      ...(await measurePair(
+        "Authenticated daily start",
+        (c) => dailyStartOld(c, suffix),
+        (c) => PR_FLOWS.dailyStart(c, suffix),
+      )),
+    );
+    results.push(
+      ...(await measurePair(
+        "Private register + board rosters",
+        (c) => privateRegisterOld(c, suffix),
+        (c) => PR_FLOWS.privateRegister(c, suffix),
+      )),
+    );
   }
 
   return results;
