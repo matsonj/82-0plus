@@ -64,13 +64,13 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    const sources = [...tournament.board.slots, tournament.board.benchSlot];
 
     // Idempotent: if this account already has an entry, return it as-is (don't
     // re-reserve / change the slot count). The board is included so a returning
     // entrant can resume drafting.
     const existing = await getPrivateEntry(tournamentId, auth.userId);
     if (existing) {
-      const sources = [...tournament.board.slots, tournament.board.benchSlot];
       return jsonWithSessionHint(sessionHint, {
         entryId: existing.entryId,
         status: existing.status,
@@ -93,18 +93,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const rosters = await getDraftRosters(sources, tournament.mode, queryOptions);
     const entryId = await registerPrivateEntry({
       tournamentId,
       userId: auth.userId,
       userName: auth.name,
     });
 
-    const sources = [...tournament.board.slots, tournament.board.benchSlot];
     return jsonWithSessionHint(sessionHint, {
       entryId,
       status: "registered",
       board: tournament.board,
-      rosters: await getDraftRosters(sources, tournament.mode, queryOptions),
+      rosters,
       size: tournament.size,
       mode: tournament.mode,
     });
