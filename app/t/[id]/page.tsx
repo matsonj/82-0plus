@@ -77,7 +77,7 @@ export default function PublicBracketPage({
                 Champion
               </div>
             </div>
-            <BracketView bracket={bracket} daily={daily} />
+            <BracketView bracket={bracket} sharedBoard={daily} />
           </div>
         )}
       </section>

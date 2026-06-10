@@ -394,24 +394,25 @@ function RoundSection({
 export function BracketView({
   bracket,
   youId,
-  daily = false,
+  sharedBoard = false,
 }: {
   bracket: BracketResult;
   youId?: string;
-  // Daily fields share one board, so opponents draft from the same pool. When this
-  // is a daily AND we know which team is "you", an OPPONENT's players that you ALSO
-  // drafted render greyed/italic — so the picks that team made *differently* from
-  // you (the bold ones) stand out. Your own team is never greyed.
-  daily?: boolean;
+  // SHARED-board fields (daily AND private tournaments) all draft from the same
+  // pool, so roster overlap is expected. When this is set AND we know which team
+  // is "you", an OPPONENT's players that you ALSO drafted render greyed/italic — so
+  // the picks that team made *differently* from you (the bold ones) stand out. Your
+  // own team is never greyed. (Off for classic/ranked, where boards are unique.)
+  sharedBoard?: boolean;
 }) {
   const byId = new Map(bracket.teams.map((t) => [t.id, t]));
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
   const teamOf = (id: string) => byId.get(id);
 
   // The viewer's own roster keys — the set we compare opponents against. Only for
-  // daily with a known "you"; otherwise undefined → nothing is greyed anywhere.
+  // a shared board with a known "you"; otherwise undefined → nothing is greyed.
   const youKeys = (() => {
-    if (!daily || !youId) return undefined;
+    if (!sharedBoard || !youId) return undefined;
     const you = byId.get(youId);
     if (!you) return undefined;
     const roster = [...(you.roster ?? []), ...(you.sixthMan ? [you.sixthMan] : [])];

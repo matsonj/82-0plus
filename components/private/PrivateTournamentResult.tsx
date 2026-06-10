@@ -8,20 +8,16 @@ import type { PrivateCompletedResponse } from "@/components/private/types";
 import {
   privateModeLabel,
   formatPrivateEntryStatus,
-  formatRecordWithStatus,
+  formatTournamentStatus,
+  formatRecord,
+  formatSignedMargin,
 } from "@/lib/tournamentLabels";
+import type { PrivateCompletedEntry } from "@/components/private/types";
 
-// Final standing label for one entrant row. A bot-replaced entrant shows the
-// timed-out copy; everyone else shows "W–L · Status" (finalStatus carries the
-// human round label, e.g. "Champion"/"Lost R1"/"Lost Play-In").
-function statusLabel(e: {
-  status: string;
-  finalStatus: string | null;
-  finalRecordW: number | null;
-  finalRecordL: number | null;
-}): string {
-  if (e.status === "bot_replaced") return formatPrivateEntryStatus(e.status);
-  return formatRecordWithStatus(e.finalRecordW, e.finalRecordL, e.finalStatus);
+// Final standings rank: most playoff wins first, then better net margin. Bot-
+// replaced / null records sort to the bottom.
+function standingsRank(e: PrivateCompletedEntry): [number, number] {
+  return [e.finalRecordW ?? -1, e.finalRealizedMargin ?? -Infinity];
 }
 
 export function PrivateTournamentResult({
@@ -90,25 +86,77 @@ export function PrivateTournamentResult({
         )}
       </div>
 
-      {/* Final standings. */}
+      {/* Final standings — tabular; the viewer's own team highlighted yellow. */}
       <div className="md-card flex flex-col gap-2 p-4">
         <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
           Final standings
         </span>
-        <div className="flex flex-col divide-y divide-[var(--md-paper-3)]">
-          {data.entries.map((e, i) => (
-            <div
-              key={`${e.userName}-${i}`}
-              className="flex items-center justify-between gap-2 py-1.5"
-            >
-              <span className="min-w-0 truncate font-display text-sm font-bold">
-                {e.teamName ?? e.userName}
-              </span>
-              <span className="shrink-0 font-display text-[11px] text-[var(--md-ink-muted)]">
-                {statusLabel(e)}
-              </span>
+        <div className="overflow-x-auto">
+          <div className="min-w-[460px]">
+            {/* Column headers: Team · Net margin · Reg record · Playoff record · Round. */}
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 border-b-2 border-[var(--md-ink)] px-1 pb-1 font-display text-[9px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+              <span>Team</span>
+              <span className="text-right">Net</span>
+              <span className="text-right">Reg</span>
+              <span className="text-right">Playoff</span>
+              <span className="text-right">Round</span>
             </div>
-          ))}
+            {[...data.entries]
+              .sort((a, b) => {
+                const [aw, am] = standingsRank(a);
+                const [bw, bm] = standingsRank(b);
+                return bw - aw || bm - am;
+              })
+              .map((e, i) => {
+                const mine = !!you?.entryId && e.entryId === you.entryId;
+                const isBot = e.status === "bot_replaced";
+                const margin =
+                  !isBot && e.finalRealizedMargin != null
+                    ? formatSignedMargin(e.finalRealizedMargin)
+                    : null;
+                const reg = formatRecord(e.regW, e.regL);
+                const playoff = isBot ? null : formatRecord(e.finalRecordW, e.finalRecordL);
+                const round = isBot
+                  ? formatPrivateEntryStatus(e.status)
+                  : formatTournamentStatus(e.finalStatus);
+                return (
+                  <div
+                    key={e.entryId || `${e.userName}-${i}`}
+                    className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-x-3 border-b border-[var(--md-paper-3)] px-1 py-1.5 font-display text-[12px]"
+                    style={mine ? { background: "var(--md-yellow)" } : undefined}
+                  >
+                    <span className="min-w-0 truncate font-bold">
+                      {mine ? "★ " : ""}
+                      {e.teamName ?? e.userName}
+                    </span>
+                    <span className="text-right tabular-nums">
+                      {margin ? (
+                        <span
+                          style={{
+                            color: margin.positive
+                              ? "var(--md-teal)"
+                              : "var(--md-coral)",
+                          }}
+                        >
+                          {margin.text}
+                        </span>
+                      ) : (
+                        <span className="text-[var(--md-ink-muted)]">—</span>
+                      )}
+                    </span>
+                    <span className="text-right tabular-nums text-[var(--md-ink-muted)]">
+                      {reg ?? "—"}
+                    </span>
+                    <span className="text-right tabular-nums">
+                      {playoff ?? "—"}
+                    </span>
+                    <span className="text-right text-[11px] text-[var(--md-ink-muted)]">
+                      {round}
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
         </div>
       </div>
 
@@ -116,7 +164,9 @@ export function PrivateTournamentResult({
       {data.bracket ? (
         <div className="flex flex-col gap-3">
           <div className="md-capsule self-start">The Bracket</div>
-          <BracketView bracket={data.bracket} youId={youId} />
+          {/* Private tournaments share one board, so grey+italicise an opponent's
+              players that you also drafted — same as daily. */}
+          <BracketView bracket={data.bracket} youId={youId} sharedBoard />
         </div>
       ) : (
         <div className="md-card p-4 text-center font-display text-sm text-[var(--md-ink-muted)]">

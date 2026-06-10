@@ -54,12 +54,16 @@ export interface PrivateLobbyResponse {
 
 // One entrant row in the completed view (final standings).
 export interface PrivateCompletedEntry {
+  entryId: string; // matches you.teamId = `entry:<entryId>` to highlight "my team"
   userName: string;
   teamName: string | null;
   status: string;
-  finalRecordW: number | null;
+  regW: number | null; // regular-season record (the five's projection)
+  regL: number | null;
+  finalRealizedMargin: number | null; // playoff net margin
+  finalRecordW: number | null; // playoff record (excludes play-in)
   finalRecordL: number | null;
-  finalStatus: string | null;
+  finalStatus: string | null; // round reached label
 }
 
 // GET response once the tournament is completed (final).

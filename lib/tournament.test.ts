@@ -480,31 +480,28 @@ describe("region affinity", () => {
     expect(regionScore(neutral)).toBe(0);
   });
 
-  it("the eight most-Western teams land in the West", () => {
-    // 8 clearly-West teams + 8 clearly-East teams.
-    const westRosters = Array.from({ length: 8 }, (_, i) =>
+  it("the two strongest teams land in DIFFERENT conferences (fair snake seeding)", () => {
+    // Conferences are assigned by a strength-balanced SNAKE (NOT region affinity),
+    // so the field's two strongest can only meet in the Final — never round 1.
+    const teams16 = Array.from({ length: 16 }, (_, i) =>
       team({
-        id: `W${i}`,
-        seedNet: i,
-        roster: ros(["LAL", "GSW", "DEN", "PHX", "DAL"], 0),
+        id: `T${i}`,
+        seedNet: 16 - i, // distinct strengths: T0=16 (best) … T15=1
+        roster: ros(["LAL", "BOS", "NYK", "MIA", "CHI"], 0),
         sixthManInfo: { name: "s", team: "POR", season: 1996 },
       }),
     );
-    const eastRosters = Array.from({ length: 8 }, (_, i) =>
-      team({
-        id: `E${i}`,
-        seedNet: i,
-        roster: ros(["BOS", "NYK", "MIA", "CHI", "PHI"], 0),
-        sixthManInfo: { name: "s", team: "TOR", season: 1996 },
-      }),
-    );
-    const r = simulateBracket([...eastRosters, ...westRosters], "region", norms());
-    const west = r.teams.filter((t) => t.conference === "West");
+    const r = simulateBracket(teams16, "snake", norms());
     const east = r.teams.filter((t) => t.conference === "East");
-    expect(west).toHaveLength(8);
+    const west = r.teams.filter((t) => t.conference === "West");
     expect(east).toHaveLength(8);
-    expect(west.every((t) => t.id.startsWith("W"))).toBe(true);
-    expect(east.every((t) => t.id.startsWith("E"))).toBe(true);
+    expect(west).toHaveLength(8);
+    // Each conference's #1 seed is one of the overall top two — and they're split.
+    const eastTop = east.find((t) => t.seed === 1)!;
+    const westTop = west.find((t) => t.seed === 1)!;
+    expect([eastTop.seedNet, westTop.seedNet].sort((a, b) => b - a)).toEqual([
+      16, 15,
+    ]);
   });
 });
 
@@ -644,12 +641,11 @@ describe("simulateBracket: variable sizes", () => {
     }
   });
 
-  it("affinity decides the conference but never reorders strength within it", () => {
-    // A WEAKER West-leaning team must NOT be seeded ahead of a STRONGER team that
-    // shares its conference. Build a 4-team field: a very strong East-leaning team
-    // and a weak West-leaning team that, under the old region-primary sort, would
-    // have been placed in the West ahead of stronger neutral teams. Verify that
-    // wherever two teams share a conference, the stronger one has the better seed.
+  it("region lean never reorders strength within a conference", () => {
+    // Conference assignment is a strength snake, NOT region affinity. A WEAKER team
+    // must never be seeded ahead of a STRONGER team that shares its conference,
+    // regardless of region lean. Build a 4-team field of same-region teams with
+    // distinct strengths and verify within-conference seeds follow seedNet.
     const westRos = (cap: number) => ({
       roster: [
         { name: "a", team: "LAL", season: 1996, ...(cap === 0 ? { captain: true } : {}) },

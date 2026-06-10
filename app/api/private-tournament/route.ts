@@ -86,9 +86,13 @@ export async function GET(req: NextRequest) {
         finalizedAt: tournament.finalizedAt,
         bracket: bracket && Array.isArray(bracket.teams) ? bracket : null,
         entries: entries.map((e) => ({
+          entryId: e.entryId,
           userName: e.userName,
           teamName: e.teamName,
           status: e.status,
+          regW: e.regW,
+          regL: e.regL,
+          finalRealizedMargin: e.finalRealizedMargin,
           finalRecordW: e.finalRecordW,
           finalRecordL: e.finalRecordL,
           finalStatus: e.finalStatus,

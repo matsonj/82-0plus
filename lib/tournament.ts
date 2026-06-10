@@ -643,33 +643,30 @@ export function simulateBracket(
   const byStrength = (a: TournamentTeam, b: TournamentTeam) =>
     b.seedNet - a.seedNet || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-  // ---- 1. STRENGTH-FIRST seeding, then conference assignment by affinity. ----
-  // Strength (seedNet) is the PRIMARY key: we sort ALL teams high-to-low by
-  // seedNet (id tie-break) FIRST. Affinity (regionScore + captain influence)
-  // ONLY decides WHICH conference a team lands in — it can never reorder a weaker
-  // team ahead of a stronger one for seeding.
+  // ---- 1. STRENGTH-BALANCED SNAKE seeding. ----
+  // Strength (seedNet) is the PRIMARY key: sort ALL teams high-to-low by seedNet
+  // (id tie-break) FIRST. Then SERPENTINE them into the two conferences so the
+  // bracket is FAIR — the two STRONGEST teams must land in DIFFERENT conferences
+  // (they can only meet in the Final, never round 1), and each conference gets a
+  // balanced spread of strength.
   //
-  // Assignment walks teams strongest-first and places each into its affinity-
-  // preferred conference (West if regionScore > 0, East if < 0; a 0/neutral lean
-  // prefers West so the West stays slightly stronger, matching the old intent)
-  // while that conference still has open slots; otherwise it spills into the
-  // other. Because we walk in descending-strength order and each conference fills
-  // in that same order, seeds WITHIN a conference always follow seedNet order —
-  // a stronger team is never seeded below a weaker one in the same conference.
+  // Snake pattern over the strength-sorted list (index → conference):
+  //   0→E, 1→W, 2→W, 3→E, 4→E, 5→W, 6→W, 7→E, …  (i%4 ∈ {0,3} → East else West)
+  // For any even `size` this fills both conferences to exactly `half`, puts the #1
+  // and #2 overall as the two conferences' #1 seeds, and (re-sorting each side by
+  // strength below) keeps seeds WITHIN a conference in seedNet order.
+  //
+  // (Region affinity / regionScore is intentionally NOT used to assign conferences
+  // anymore: affinity could stack the two best teams into the same conference, so
+  // the field's two strongest played in round 1 while the Final was decided
+  // against a weak team. A balanced snake is the standard fair-bracket seeding.)
   const byStrengthAll = [...teams].sort(byStrength);
-  const westRaw: TournamentTeam[] = [];
   const eastRaw: TournamentTeam[] = [];
-  for (const t of byStrengthAll) {
-    // Affinity lean: >0 West, <0 East, 0 → West (neutral nod to the West).
-    const prefersWest = regionScore(t) >= 0;
-    if (prefersWest) {
-      if (westRaw.length < half) westRaw.push(t);
-      else eastRaw.push(t);
-    } else {
-      if (eastRaw.length < half) eastRaw.push(t);
-      else westRaw.push(t);
-    }
-  }
+  const westRaw: TournamentTeam[] = [];
+  byStrengthAll.forEach((t, i) => {
+    const toEast = i % 4 === 0 || i % 4 === 3;
+    (toEast ? eastRaw : westRaw).push(t);
+  });
 
   const seedConf = (raw: TournamentTeam[], conference: Conference) => {
     const sorted = [...raw].sort(byStrength);

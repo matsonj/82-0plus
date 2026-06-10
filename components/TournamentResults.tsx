@@ -520,7 +520,7 @@ export function TournamentResults({
             <span>★ you</span>
           </div>
         </div>
-        <BracketView bracket={bracket} youId={you.id} daily={isDaily} />
+        <BracketView bracket={bracket} youId={you.id} sharedBoard={isDaily} />
       </div>
     </div>
   );
