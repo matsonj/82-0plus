@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { authenticate, listDailyResults } from "@/lib/dailyResults";
+import { authenticate, listDailyResults, getDailyRank } from "@/lib/dailyResults";
 import { recentDailyDates } from "@/lib/dailyDate";
 
 export const runtime = "nodejs";
@@ -23,8 +23,12 @@ export async function POST(req: NextRequest) {
     // window the menu can actually show.
     const window = recentDailyDates();
     const since = window[window.length - 1];
-    const results = await listDailyResults(auth.userId, since);
-    return jsonWithSessionHint(sessionHint, { results });
+    // window[0] is today (Pacific); the menu shows today's standing on its card.
+    const [results, todayRank] = await Promise.all([
+      listDailyResults(auth.userId, since),
+      getDailyRank(auth.userId, window[0]),
+    ]);
+    return jsonWithSessionHint(sessionHint, { results, todayRank });
   } catch (err) {
     console.error("[/api/daily/results]", err);
     return jsonWithSessionHint(sessionHint, { error: "Couldn't look that up." }, { status: 500 });

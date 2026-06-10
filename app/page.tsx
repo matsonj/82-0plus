@@ -13,6 +13,7 @@ import type { LineupEntry } from "@/components/LineupBoard";
 import { LineupDraftBoard } from "@/components/LineupDraftBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { DailyArchive } from "@/components/DailyArchive";
+import { DailyTimeline } from "@/components/DailyTimeline";
 import { DailySignIn } from "@/components/DailySignIn";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { TournamentEntry } from "@/components/TournamentEntry";
@@ -87,7 +88,7 @@ export default function Home() {
   const [dailyDate, setDailyDate] = useState<string>("");
   const [today, setToday] = useState<string>("");
   const [dailyResult, setDailyResult] = useState<
-    { wins: number; losses: number; perfect: boolean } | null
+    { wins: number; losses: number; margin?: number; perfect: boolean } | null
   >(null);
   // Server-authoritative completions for the replayable window, keyed by date.
   // Drives the menu's "already played" state (today's card + the archive list) so
@@ -127,6 +128,10 @@ export default function Home() {
   // and on any lookup failure we surface a retry instead of drafting.
   const [dailyChecking, setDailyChecking] = useState(false);
   const [dailyGateError, setDailyGateError] = useState<string | null>(null);
+  // The 7-day strip's "View all" reveals the full back-catalogue (DailyArchive).
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  // Today's standing among everyone who played it (null until played / loaded).
+  const [dailyRank, setDailyRank] = useState<{ rank: number; total: number } | null>(null);
   const attemptedDaily = useRef<string | undefined>(undefined);
   // Server-signed token for the current daily result's share link (unforgeable).
   const [dailyShareToken, setDailyShareToken] = useState<string | null>(null);
@@ -336,14 +341,16 @@ export default function Home() {
         body: JSON.stringify({ name: u.username, pin: u.pin }),
       });
       if (!res.ok) return;
-      const { results } = (await res.json()) as {
+      const { results, todayRank } = (await res.json()) as {
         results: { date: string; wins: number; losses: number; margin: number; perfect: boolean }[];
+        todayRank: { rank: number; total: number } | null;
       };
       const map: Record<string, { wins: number; losses: number; margin: number; perfect: boolean }> = {};
       for (const r of results) {
         map[r.date] = { wins: r.wins, losses: r.losses, margin: r.margin, perfect: r.perfect };
       }
       setDailyDone(map);
+      setDailyRank(todayRank ?? null);
     } catch {
       /* leave prior state; the per-date playDaily check still fails closed */
     }
@@ -712,62 +719,104 @@ export default function Home() {
             the season.
           </p>
 
-          {todayResult ? (
-            <button
-              className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5"
-              style={{ background: "var(--md-paper-2)" }}
-              onClick={() => playDaily()}
-            >
-              <div className="flex items-center justify-between">
-                <div className="font-display text-xl font-bold">
-                  Daily Challenge
-                </div>
-                <span className="text-2xl" aria-hidden>
-                  {todayResult.perfect ? "🏆" : "✓"}
-                </span>
-              </div>
-              <p className="mt-1 text-[13px] text-[var(--md-ink)]">
-                Today&rsquo;s result:{" "}
-                <strong>
-                  {todayResult.wins}&ndash;{todayResult.losses}
-                </strong>
-                {todayResult.perfect ? " — perfect season!" : ""}. One per day &middot;
-                tap to review.
-              </p>
-              <p className="mt-1 font-display text-[12px] text-[var(--md-ink-muted)]">
-                Next challenge in <Countdown />
-              </p>
-            </button>
-          ) : (
-            <button
-              className="md-card md-card--lift mt-8 w-full max-w-md p-5 text-left transition-transform hover:-translate-y-0.5 disabled:opacity-70"
-              style={{ background: "var(--md-yellow)" }}
-              disabled={dailyChecking}
-              onClick={() => playDaily()}
-            >
-              <div className="flex items-center justify-between">
-                <div className="font-display text-xl font-bold">
-                  Daily Challenge
-                </div>
-                <span className="text-2xl" aria-hidden>
-                  🏆
-                </span>
-              </div>
-              <p className="mt-1 text-[13px] text-[var(--md-ink)]">
-                The same five team/era rolls for everyone today. Compare records.
-              </p>
-            </button>
-          )}
+          {/* Daily Challenge — lives ON the page (heading + content), not boxed.
+              The Play / Review button is the only CTA; it's stateful: a Play prompt
+              when unplayed, today's record when done. The 7-day streak and the
+              full archive sit directly below at the same width. */}
+          <div className="mt-10 w-full max-w-md text-left">
+            <div className="flex items-center gap-2.5">
+              <h2 className="font-display text-2xl font-bold tracking-tight sm:text-[28px]">
+                Daily Challenge
+              </h2>
+              <span className="text-2xl" aria-hidden>
+                🏆
+              </span>
+            </div>
 
-          {/* Replay any of the last ~30 daily challenges — the daily archive sits
-              directly beneath today's card. */}
-          {today && (
-            <DailyArchive
-              today={today}
-              results={dailyDone}
-              onPlay={(date) => playDaily(date)}
-            />
-          )}
+            {todayResult ? (
+              <>
+                <div className="mt-3 font-display text-[12px] font-bold uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">
+                  Today&rsquo;s result
+                </div>
+                <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className="font-display text-[30px] font-bold tabular-nums leading-none">
+                    {todayResult.wins}&ndash;{todayResult.losses}
+                  </span>
+                  {dailyRank ? (
+                    <span className="text-[15px]">
+                      Rank <strong>#{dailyRank.rank}</strong>{" "}
+                      <span className="text-[var(--md-ink-muted)]">
+                        of {dailyRank.total} today
+                      </span>
+                    </span>
+                  ) : typeof todayResult.margin === "number" ? (
+                    <span className="text-[15px] text-[var(--md-ink-muted)]">
+                      Net rating {todayResult.margin >= 0 ? "+" : ""}
+                      {Math.round(todayResult.margin)}
+                    </span>
+                  ) : null}
+                  {todayResult.perfect && (
+                    <span className="text-[15px]">
+                      <strong>Perfect&nbsp;🏆</strong>
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 font-display text-[12px] text-[var(--md-ink-muted)]">
+                  Next challenge in <Countdown />
+                </div>
+                <button
+                  className="md-card md-card--lift mt-5 flex w-full items-center justify-between gap-3 p-4 text-left transition-transform hover:-translate-y-0.5"
+                  style={{ background: "var(--md-white)" }}
+                  onClick={() => playDaily()}
+                >
+                  <span className="font-display text-[17px] font-bold">
+                    Review your team
+                  </span>
+                  <span className="font-display text-xl font-bold" aria-hidden>
+                    →
+                  </span>
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 text-[15px] leading-relaxed">
+                  The same five team/era rolls for everyone today. Build your
+                  roster, then compare records.
+                </p>
+                <button
+                  className="md-card md-card--lift mt-5 flex w-full items-center justify-between gap-3 p-4 text-left transition-transform hover:-translate-y-0.5 disabled:opacity-70"
+                  style={{ background: "var(--md-yellow)" }}
+                  disabled={dailyChecking}
+                  onClick={() => playDaily()}
+                >
+                  <span className="font-display text-[17px] font-bold">
+                    Play today&rsquo;s challenge
+                  </span>
+                  <span className="font-display text-xl font-bold" aria-hidden>
+                    →
+                  </span>
+                </button>
+              </>
+            )}
+
+            {today && (
+              <DailyTimeline
+                today={today}
+                results={dailyDone}
+                onPlay={(date) => playDaily(date)}
+                archiveOpen={archiveOpen}
+                onToggleArchive={() => setArchiveOpen((v) => !v)}
+              />
+            )}
+            {today && (
+              <DailyArchive
+                today={today}
+                results={dailyDone}
+                onPlay={(date) => playDaily(date)}
+                open={archiveOpen}
+              />
+            )}
+          </div>
 
           {/* Daily replay gate: verifying / fail-closed retry. */}
           {dailyChecking && (

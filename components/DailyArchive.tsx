@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { recentDailyDates } from "@/lib/dailyDate";
 
 // "2026-06-05" → "Jun 5" (parsed as a plain calendar date, no TZ shift).
@@ -14,44 +14,37 @@ function label(date: string): string {
   });
 }
 
-/** The Daily archive: replay any of the last ~30 daily challenges. Today is shown
- *  by the main CTA, so this lists the prior days. Completion is server-authoritative
- *  (`results`, keyed by date) — a finished day shows its record (tap to review the
- *  result/compare), an unplayed day offers Play. The click still routes through
- *  playDaily, so the server remains the gate even if this map is stale. */
+/** The Daily archive: replay any of the last ~30 daily challenges. The last 7 days
+ *  are shown by the DailyTimeline strip, so this is the full back-catalogue, opened
+ *  via that strip's "View all" toggle (`open` is controlled by the parent).
+ *  Completion is server-authoritative (`results`, keyed by date) — a finished day
+ *  shows its record (tap to review the result/compare), an unplayed day offers Play.
+ *  The click still routes through playDaily, so the server remains the gate even if
+ *  this map is stale. */
 export function DailyArchive({
   today,
   results = {},
   onPlay,
+  open,
 }: {
   today: string;
   results?: Record<string, { wins: number; losses: number; perfect: boolean }>;
   onPlay: (date: string) => void;
+  open: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-
   const dates = useMemo(
     () => recentDailyDates().filter((d) => d !== today),
     [today],
   );
 
-  if (dates.length === 0) return null;
+  if (!open || dates.length === 0) return null;
 
   return (
-    <div className="mt-3 w-full max-w-md">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+    <div className="mt-3 w-full">
+      <div
+        className="md-scroll max-h-[16rem] overflow-auto border-2 border-[var(--md-ink)] bg-[var(--md-white)] text-left"
+        style={{ boxShadow: "var(--md-shadow-md)" }}
       >
-        {open ? "Hide previous challenges" : "Previous challenges"}
-      </button>
-
-      {open && (
-        <div
-          className="md-scroll mt-3 max-h-[16rem] overflow-auto border-2 border-[var(--md-ink)] bg-[var(--md-white)] text-left"
-          style={{ boxShadow: "var(--md-shadow-md)" }}
-        >
           {dates.map((d) => {
             const done = results[d];
             return (
@@ -82,8 +75,7 @@ export function DailyArchive({
               </div>
             );
           })}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

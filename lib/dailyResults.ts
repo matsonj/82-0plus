@@ -209,6 +209,44 @@ export async function listDailyResults(
   }));
 }
 
+/** The player's standing on a given day among everyone who played it. */
+export interface DailyRank {
+  rank: number; // 1-based; ties share a rank
+  total: number; // how many accounts played that day
+}
+
+/**
+ * Where the account placed on `date` among all players: ranked by wins, then by
+ * margin (net rating) as the tie-break. `rank` counts the strictly-better entries
+ * plus one, so ties share a rank. Returns null if the account hasn't played `date`
+ * (no standing to report) or nobody has. One round-trip; the menu reads this for
+ * today only, alongside the completion list.
+ */
+export async function getDailyRank(
+  userId: string,
+  date: string,
+): Promise<DailyRank | null> {
+  await ensureSchema();
+  const rows = await queryRW<{ rank: number; total: number }>(
+    `WITH me AS (
+       SELECT wins, margin FROM ${TDB}.daily_results
+        WHERE user_id = $1 AND daily_date = $2
+        LIMIT 1
+     )
+     SELECT
+       (SELECT COUNT(*) FROM ${TDB}.daily_results WHERE daily_date = $2) AS total,
+       (SELECT COUNT(*)
+          FROM ${TDB}.daily_results o, me
+         WHERE o.daily_date = $2
+           AND (o.wins > me.wins
+                OR (o.wins = me.wins AND o.margin > me.margin))) + 1 AS rank
+     FROM me`,
+    [userId, date],
+  );
+  if (!rows[0]) return null;
+  return { rank: Number(rows[0].rank), total: Number(rows[0].total) };
+}
+
 export interface RecordDailyArgs {
   userId: string;
   date: string;
