@@ -24,7 +24,7 @@ import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
 import {
   reachedRoundLabel,
   formatPrivateEntryStatus,
-  formatRecordWithStatus,
+  formatTournamentStatus,
   formatSignedMargin,
 } from "@/lib/tournamentLabels";
 
@@ -208,10 +208,19 @@ function TeamRow({
 // row that needs attention (unviewed final / unfinished draft).
 function PrivateRow({ row }: { row: MyPrivateRow }) {
   const completed = row.status === "completed";
+  const isChampion = completed && row.finalStatus === "Champion";
+  // Big record: your final record once completed, else your provisional standing.
+  const recW = completed ? row.finalRecordW : row.provisionalRecordW;
+  const recL = completed ? row.finalRecordL : row.provisionalRecordL;
+  const hasRec = recW != null && recL != null;
+  const dateText =
+    completed && row.finalizedAt
+      ? new Date(row.finalizedAt).toLocaleDateString()
+      : "Open";
   return (
     <Link
       href={`/p/${row.tournamentId}`}
-      className="md-card md-card--lift flex flex-col gap-2 p-4 transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px]"
+      className="md-card md-card--lift flex w-full flex-col gap-2 p-4 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px]"
     >
       <div className="flex items-center justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2">
@@ -222,12 +231,18 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
               style={{ background: "var(--md-coral)" }}
             />
           )}
-          <span className="min-w-0 truncate font-display text-lg font-bold leading-tight">
+          <span className="font-display text-lg font-bold leading-tight break-words">
             {row.name}
           </span>
         </span>
+        <span className="font-display text-xs text-[var(--md-ink-muted)] whitespace-nowrap">
+          {dateText}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2">
         <span
-          className="md-capsule shrink-0"
+          className="md-capsule"
           style={
             row.mode === "hoopiq"
               ? { background: "var(--md-ink)", color: "var(--md-white)" }
@@ -236,24 +251,43 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
         >
           {row.modeLabel}
         </span>
+        <span className="md-capsule">{row.size} teams</span>
+        {isChampion && (
+          <span className="md-capsule md-capsule--teal">🏆 Champion</span>
+        )}
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-display text-sm font-bold">
-          {completed
-            ? row.finalRecordW != null && row.finalRecordL != null
-              ? formatRecordWithStatus(
-                  row.finalRecordW,
-                  row.finalRecordL,
-                  row.finalStatus,
-                )
-              : row.championName
-                ? `🏆 ${row.championName}`
-                : "Final ready"
-            : formatPrivateEntryStatus(row.entryStatus)}
+
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-display text-3xl font-bold tabular-nums">
+          {hasRec ? (
+            <>
+              {recW}&ndash;{recL}
+            </>
+          ) : (
+            "—"
+          )}
         </span>
         <span className="font-display text-[11px] uppercase tracking-wide text-[var(--md-blue)]">
           {completed ? "View results →" : "Open lobby →"}
         </span>
+      </div>
+
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="font-display text-sm font-bold">
+          {completed
+            ? formatTournamentStatus(row.finalStatus)
+            : formatPrivateEntryStatus(row.entryStatus)}
+        </span>
+        {completed &&
+          (isChampion ? (
+            <span className="font-display text-sm text-[var(--md-teal)]">
+              🏆 You won it all
+            </span>
+          ) : row.championName ? (
+            <span className="font-display text-sm text-[var(--md-ink-muted)]">
+              Won by {row.championName}
+            </span>
+          ) : null)}
       </div>
     </Link>
   );
