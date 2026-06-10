@@ -225,16 +225,21 @@ async function buildAll(): Promise<void> {
   await queryRW(BUILD_PLAYER_INDEX);
   await queryRW(BUILD_TEAM_DECADE_WEIGHTS);
   await queryRW(`DELETE FROM ${ACDB}.cache_meta WHERE cache_key = 'global'`);
-  const stampedAt = Date.now();
   await queryRW(
     `INSERT INTO ${ACDB}.cache_meta (cache_key, built_at, source_fp, status)
        VALUES ('global', now(), $1, 'ready')`,
     [fp],
   );
-  // This process is now consistent with what it just wrote: drop its warm caches
-  // and record the build it has reconciled with (so its next freshness check
-  // doesn't re-invalidate for its own rebuild).
-  globalThis.__app_cache_seen_built_at__ = stampedAt;
+  // Drop this process's now-stale warm caches and record the EXACT build we wrote
+  // (read it back so it equals what the freshness check will read — a local clock
+  // wouldn't match the DB's now()). That equality stops the next check from
+  // re-invalidating for our own build.
+  const [meta] = await queryRW<{ built_at: Date }>(
+    `SELECT built_at FROM ${ACDB}.cache_meta WHERE cache_key = 'global' LIMIT 1`,
+  );
+  globalThis.__app_cache_seen_built_at__ = meta
+    ? new Date(meta.built_at).getTime()
+    : undefined;
   invalidateWarmCaches();
 }
 
@@ -301,14 +306,14 @@ export async function refreshCacheIfStale(): Promise<void> {
       await runBuild(); // never built → build it
       return;
     }
-    // Cross-instance invalidation: if ANOTHER instance rebuilt since we last
-    // reconciled, our warm globals are stale even though we didn't rebuild —
-    // drop them so they reload from the new tables. (≤ CHECK_INTERVAL_MS lag.)
+    // Warm-cache reconciliation: if the build we're looking at differs from the
+    // one our warm globals were loaded against, drop them so they reload fresh.
+    // This fires on the FIRST observation too (seen === undefined): a process can
+    // warm __player_index__ etc. from an older build BEFORE its first check, so
+    // adopting a build without clearing would pin that stale data. Equality holds
+    // after our own build (we recorded its exact built_at), so no needless reload.
     const builtAtMs = new Date(row.built_at).getTime();
-    const seen = globalThis.__app_cache_seen_built_at__;
-    if (seen === undefined) {
-      globalThis.__app_cache_seen_built_at__ = builtAtMs; // adopt; nothing warmed against an older build yet
-    } else if (builtAtMs > seen) {
+    if (globalThis.__app_cache_seen_built_at__ !== builtAtMs) {
       globalThis.__app_cache_seen_built_at__ = builtAtMs;
       invalidateWarmCaches();
     }
