@@ -13,6 +13,9 @@ import { Pool, types } from "pg";
 // Mirror lib/motherduck.ts so reads-after-write return numbers, not strings.
 types.setTypeParser(20, (v) => parseInt(v, 10)); // int8 / bigint (counts)
 types.setTypeParser(1700, (v) => parseFloat(v)); // numeric
+// Timezone-naive DuckDB TIMESTAMP holds UTC wall-clock; parse oid 1114 as UTC
+// (pg's default treats it as local, double-applying the machine offset).
+types.setTypeParser(1114, (v) => new Date(v.replace(" ", "T") + "Z"));
 
 const PG_HOST =
   process.env.MOTHERDUCK_PG_HOST ?? "pg.us-east-1-aws.motherduck.com";
@@ -133,6 +136,41 @@ export function ensureSchema(): Promise<void> {
           `ALTER TABLE ${TDB}.ghosts ADD COLUMN IF NOT EXISTS ${col}`,
         );
       }
+      // ── Private (invite-only) tournaments ───────────────────────────────────
+      // One row per admin-created private tournament. The board (six (team,
+      // decade) slots, blind or manual) is stored as JSON; once finalized the
+      // resolved bracket + champion are stored alongside status/timestamps.
+      // PK on tournament_id matches existing style, but MotherDuck does NOT
+      // reliably enforce it — name+PIN dedup is done in app code (SELECT first).
+      await queryRW(
+        `CREATE TABLE IF NOT EXISTS ${TDB}.private_tournaments (
+           tournament_id UUID DEFAULT uuid(), name VARCHAR, name_norm VARCHAR,
+           pin_hash VARCHAR, pin_salt VARCHAR,
+           admin_user_id UUID, admin_name VARCHAR,
+           mode VARCHAR, size INTEGER, board_mode VARCHAR, board_json JSON,
+           status VARCHAR, created_at TIMESTAMP DEFAULT now(),
+           expires_at TIMESTAMP, finalized_at TIMESTAMP,
+           final_bracket_json JSON, champion_name VARCHAR,
+           PRIMARY KEY (tournament_id))`,
+      );
+      // One row per entrant per tournament. The (tournament_id, user_id) one-
+      // entry-per-account guard is APP-LEVEL (SELECT before INSERT) — MotherDuck
+      // won't reliably enforce a UNIQUE/PK on the pair, so the PK is just the id.
+      await queryRW(
+        `CREATE TABLE IF NOT EXISTS ${TDB}.private_entries (
+           entry_id UUID DEFAULT uuid(), tournament_id UUID,
+           user_id UUID, user_name VARCHAR, team_name VARCHAR, status VARCHAR,
+           roster_json JSON, sixth_json JSON, roster_display JSON,
+           captain_slot INTEGER, seed_net DOUBLE,
+           reg_w INTEGER, reg_l INTEGER, team_box_json JSON,
+           provisional_record_w INTEGER, provisional_record_l INTEGER,
+           provisional_status VARCHAR,
+           final_record_w INTEGER, final_record_l INTEGER, final_status VARCHAR,
+           final_realized_margin DOUBLE, final_reached_round INTEGER,
+           viewed_final_at TIMESTAMP,
+           created_at TIMESTAMP DEFAULT now(), submitted_at TIMESTAMP,
+           PRIMARY KEY (entry_id))`,
+      );
     })().catch((err) => {
       globalThis.__md_rw_schema__ = undefined; // allow retry on failure
       throw err;

@@ -25,6 +25,7 @@ import type {
   Conference,
   GameBreakdown,
   GameResult,
+  PlayInResult,
   SeriesResult,
   StatKey,
   StatNorms,
@@ -373,6 +374,32 @@ export function recoveryCarry(
   return endFatigue * (1 - recovery);
 }
 
+/**
+ * Recovery carry for a PLAY-IN survivor entering round 1 (size 20 only).
+ *
+ * The play-in is a SINGLE game (best-of-1) the night before the bracket, so by
+ * product rule the survivor gets NO recovery from it — it must carry play-in
+ * fatigue straight into round 1. The normal `recoveryCarry` table can't express
+ * this: it keys off series length, clamps 1→4 (a "sweep"), and a sweep recovers
+ * 100% → carry 0. So we model the play-in carry EXPLICITLY here instead of
+ * abusing the best-of-7 SERIES_RECOVERY_PCT table.
+ *
+ * The carry is the fatigue cost of HAVING PLAYED the play-in game, with 0%
+ * recovery. `fatigue()` measures fatigue going INTO game N (game 1 → 0), so the
+ * cost of completing one game is `fatigue(team, 2)` — one game's accrued slope:
+ * FATIGUE_PER_GAME × ageFactor × SIXTH_MAN mult. No recovery is applied (the
+ * play-in is "yesterday"), so the full amount carries. Deterministic; older
+ * teams carry more via ageFactor. Bye teams / normal R1 entrants never call this.
+ */
+export function recoveryCarryFromPlayIn(
+  team: TournamentTeam,
+  cfg: TournamentConfig = TOURNAMENT_CONFIG,
+): number {
+  // One game's worth of fatigue (fatigue going into game 2), carried in full —
+  // i.e. effectively ~0% recovery from the play-in game.
+  return fatigue(team, 2, cfg);
+}
+
 // ---------------------------------------------------------------------------
 // Bracket construction + series play.
 // ---------------------------------------------------------------------------
@@ -428,13 +455,20 @@ function teamHeight(team: TournamentTeam): number {
   );
 }
 
-/** Every round is best-of-7 (clinch = 4). The bo5 entries remain for the type
- *  but are unused now. */
-const CLINCH: Record<5 | 7, number> = { 5: 3, 7: 4 };
+/** Series length the engine knows how to play. Main-bracket rounds are all
+ *  best-of-7; the size-20 play-in is a SINGLE game (best-of-1). bo5 remains for
+ *  the type but is unused in the main bracket. */
+export type BestOf = 1 | 5 | 7;
+
+/** Every main-bracket round is best-of-7 (clinch = 4). best-of-1 (the play-in)
+ *  clinches at 1 game; the bo5 entry remains for the type but is unused now. */
+const CLINCH: Record<BestOf, number> = { 1: 1, 5: 3, 7: 4 };
 
 /** Home/away game ownership by the HIGHER seed (`hi`): 2-2-1 / 2-2-1-1-1 (the
- *  modern NBA format — the 7-game series alternates after the first four). */
-export const HOME_OWNER: Record<5 | 7, ("hi" | "lo")[]> = {
+ *  modern NBA format — the 7-game series alternates after the first four). The
+ *  best-of-1 play-in is a single game hosted by the higher seed. */
+export const HOME_OWNER: Record<BestOf, ("hi" | "lo")[]> = {
+  1: ["hi"],
   5: ["hi", "hi", "lo", "lo", "hi"],
   7: ["hi", "hi", "lo", "lo", "hi", "lo", "hi"],
 };
@@ -455,7 +489,7 @@ interface SeriesStatics {
 function playSeries(
   hi: TournamentTeam,
   lo: TournamentTeam,
-  bestOf: 5 | 7,
+  bestOf: BestOf,
   statics: SeriesStatics,
   seedKey: string,
   round: number,
@@ -565,14 +599,28 @@ function playSeries(
   };
 }
 
+/** Supported bracket sizes (teams). 16 is the original; the rest are added. */
+export type BracketSize = 4 | 8 | 12 | 16 | 20;
+const VALID_SIZES: ReadonlySet<number> = new Set([4, 8, 12, 16, 20]);
+
 /**
- * Top-level entry: 16 teams → a fully resolved BracketResult.
+ * Top-level entry: `size` teams (default 16) → a fully resolved BracketResult.
  *
- * 1. Region-affinity split: score each team by its players' real conferences
- *    (West +1 / East −1, captain doubled), top 8 → West / bottom 8 → East (ties
- *    to seedNet). Within each conference sort by seedNet desc → seeds 1..8.
- * 2. Fixed tree (NO reseed): pairings 1v8 / 4v5 / 3v6 / 2v7. Every round best-of-7; conf
- *    semis, conf finals and the Final are best-of-7. rounds = [8, 4, 2, 1].
+ * 1. STRENGTH-FIRST seeding: sort ALL teams by seedNet desc (id tie-break), then
+ *    assign conferences by region affinity (West +1 / East −1, captain doubled).
+ *    Walking strongest-first, each team goes to its affinity-preferred conference
+ *    while that side has open slots (size/2), else the other. Affinity decides
+ *    only WHICH conference; it can never seed a weaker team above a stronger one.
+ *    Seeds within each conference follow seedNet desc → seeds 1..N (N = size/2).
+ * 2. Fixed tree per size (NO reseed). Every main-bracket round is best-of-7:
+ *      4  → [ConfFinals: 2, Final: 1]
+ *      8  → [Semis: 4, ConfFinals: 2, Final: 1]
+ *      12 → seeds 1-2 BYE; seeds 3-6 play an opening round (3v6,4v5); then
+ *           [Open: 4, Semis: 4, ConfFinals: 2, Final: 1] (byes enter the semis)
+ *      16 → [R1: 8, Semis: 4, ConfFinals: 2, Final: 1]  (UNCHANGED original)
+ *      20 → per-conference NBA play-in (single games) decides seeds 7 & 8, then a
+ *           normal 8-team conference bracket. Play-in games live in `playIn`, not
+ *           `rounds`, so they're EXCLUDED from displayed W-L.
  * 3. Each series: higher seed = home court. Per game, adjusted net comes from the
  *    breakdown; the winner is the higher adj; recovery carry flows from the
  *    team's previous series; fatigue grows within the series; luck is seeded.
@@ -582,25 +630,47 @@ export function simulateBracket(
   seedKey: string,
   statNorms: StatNorms,
   cfg: TournamentConfig = TOURNAMENT_CONFIG,
+  size: BracketSize = 16,
 ): BracketResult {
-  if (teams.length !== 16) {
-    throw new Error(`simulateBracket requires exactly 16 teams, got ${teams.length}`);
+  if (!VALID_SIZES.has(size)) {
+    throw new Error(`simulateBracket: unsupported size ${size} (must be 4/8/12/16/20)`);
   }
-
-  // ---- 1. Region-affinity split into conferences, then seed within each. ----
-  // Sort by region score (West-leaning first); ties broken by seedNet (higher →
-  // West), so the West ends up slightly stronger. Top 8 → West, bottom 8 → East.
-  const byRegion = [...teams].sort(
-    (a, b) =>
-      regionScore(b) - regionScore(a) ||
-      b.seedNet - a.seedNet ||
-      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-  );
-  const westRaw = byRegion.slice(0, 8);
-  const eastRaw = byRegion.slice(8, 16);
+  if (teams.length !== size) {
+    throw new Error(`simulateBracket requires exactly ${size} teams, got ${teams.length}`);
+  }
+  const half = size / 2; // conference size N
 
   const byStrength = (a: TournamentTeam, b: TournamentTeam) =>
     b.seedNet - a.seedNet || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+  // ---- 1. STRENGTH-FIRST seeding; affinity assigns conferences PAIR-WISE. ----
+  // Strength (seedNet) is the PRIMARY key: sort ALL teams high-to-low by seedNet
+  // (id tie-break) FIRST. Then walk that strength order TWO AT A TIME and split
+  // each consecutive pair across the conferences. This keeps the two conferences
+  // strength-balanced — the field's two STRONGEST land in different conferences,
+  // so they can only meet in the Final (never round 1) — while region AFFINITY
+  // still decides WHICH side each member of a pair takes: the more West-leaning
+  // (higher regionScore, captain doubled) goes West, the other East; ties send the
+  // stronger team West. Seeds WITHIN a conference still follow seedNet (seedConf
+  // re-sorts), since each conference draws one team from every strength pair.
+  //
+  // (This is the reconciliation of two constraints: strength must drive seeding,
+  // but affinity used as the PRIMARY partition key let the two best stack into one
+  // conference. Pairing enforces the balance; affinity is the within-pair signal.)
+  const byStrengthAll = [...teams].sort(byStrength);
+  const eastRaw: TournamentTeam[] = [];
+  const westRaw: TournamentTeam[] = [];
+  for (let k = 0; k < byStrengthAll.length; k += 2) {
+    const a = byStrengthAll[k];
+    const b = byStrengthAll[k + 1]; // `size` is even, so the pair always exists
+    if (regionScore(a) >= regionScore(b)) {
+      westRaw.push(a);
+      eastRaw.push(b);
+    } else {
+      westRaw.push(b);
+      eastRaw.push(a);
+    }
+  }
 
   const seedConf = (raw: TournamentTeam[], conference: Conference) => {
     const sorted = [...raw].sort(byStrength);
@@ -611,7 +681,7 @@ export function simulateBracket(
         name: t.name,
         isGhost: t.isGhost,
         conference,
-        seed: i + 1, // 1..8
+        seed: i + 1, // 1..N
         seedNet: t.seedNet,
         roster: t.roster,
         sixthMan: t.sixthManInfo,
@@ -622,6 +692,8 @@ export function simulateBracket(
   const east = seedConf(eastRaw, "East");
   const west = seedConf(westRaw, "West");
   const teamsOut: BracketTeam[] = [...east, ...west].map((e) => e.bracket);
+  // teamId → BracketTeam, so play-in losers can be flagged after the fact.
+  const bracketById = new Map(teamsOut.map((b) => [b.id, b] as const));
 
   // teamId → TournamentTeam (for series play after we only carry BracketTeams).
   const byId = new Map(teams.map((t) => [t.id, t] as const));
@@ -649,23 +721,26 @@ export function simulateBracket(
     return { gameScoreBuff: gsBuff, heightBuff, carry };
   };
 
-  // ---- 2/3. Play each conference's bracket, then the Final. ----
   const rounds: SeriesResult[][] = [];
-  // Track how each team's last series ended (games over minimum) for next-round carry.
+  // Track how each team's last series ended (games over the bo7 minimum) for the
+  // next round's recovery carry. The play-in writes here too (its winners carry
+  // play-in fatigue straight into round 1 with NO recovery — see below).
   const lastGamesOver = new Map<string, number>();
-  // Track the deepest round each team reached (0 = lost R1 … 4 = champion).
-  const reached = new Map<string, number>();
-  for (const t of teams) reached.set(t.id, 0);
-
-  // R1 pairing order within a conference (seed indices, 0-based): 1v8,4v5,3v6,2v7.
-  const R1_PAIRS: [number, number][] = [[0, 7], [3, 4], [2, 5], [1, 6]];
+  // Some teams' carry must reflect a best-of-1 (play-in), so record each team's
+  // previous series length directly: gamesPlayed (4..7) or 1 (play-in), 0 if none.
+  const lastGamesPlayed = new Map<string, number>();
+  // Play-in survivors (size 20 only) carry play-in fatigue into round 1 via the
+  // EXPLICIT `recoveryCarryFromPlayIn` path — NOT the best-of-7 recovery table,
+  // which would otherwise treat their 1-game play-in as a sweep and grant a full
+  // (carry-0) reset. Membership here routes a team to that explicit path once.
+  const playInSurvivors = new Set<string>();
 
   // A "slot" carries the surviving team plus whatever its bracket entry was.
   type Slot = { team: TournamentTeam };
 
   const playRound = (
     matchups: [Slot, Slot][],
-    bestOf: 5 | 7,
+    bestOf: BestOf,
     round: number,
     confOffset: number, // so East/West series indices don't collide within a round
   ): { series: SeriesResult[]; winners: Slot[] } => {
@@ -675,54 +750,238 @@ export function simulateBracket(
       // Higher seed = the team with the better seedNet (tie-break id) = home court.
       const [hi, lo] =
         byStrength(sa.team, sb.team) <= 0 ? [sa.team, sb.team] : [sb.team, sa.team];
-      // Games the team's PREVIOUS series went (gamesOverMin + clinch), or 0 if it
-      // hasn't played yet (round 1). Drives how much fatigue rolls over.
-      const gamesPlayedPrev = (id: string) =>
-        lastGamesOver.has(id) ? lastGamesOver.get(id)! + CLINCH[7] : 0;
+      // Games the team's PREVIOUS series went, or 0 if it hasn't played yet.
+      // For bo7 series this is gamesOverMin + 4; for a play-in winner it's the
+      // single play-in game (recorded directly in lastGamesPlayed). A team coming
+      // off a BYE has no prior series → 0 → no carry.
+      const gamesPlayedPrev = (id: string) => lastGamesPlayed.get(id) ?? 0;
+      // Play-in survivors enter R1 via the explicit play-in carry (no recovery);
+      // everyone else uses the standard series-length recovery table.
+      const carryFor = (t: TournamentTeam) =>
+        playInSurvivors.has(t.id)
+          ? recoveryCarryFromPlayIn(t, cfg)
+          : recoveryCarry(t, gamesPlayedPrev(t.id), cfg);
       const carry: Record<string, number> = {
-        [hi.id]: recoveryCarry(hi, gamesPlayedPrev(hi.id), cfg),
-        [lo.id]: recoveryCarry(lo, gamesPlayedPrev(lo.id), cfg),
+        [hi.id]: carryFor(hi),
+        [lo.id]: carryFor(lo),
       };
       const statics = computeStatics(hi, lo, carry);
       const { result, gamesOverMin } = playSeries(
         hi, lo, bestOf, statics, seedKey, round, confOffset + idx, cfg,
       );
       series.push(result);
-      for (const id of Object.keys(gamesOverMin)) lastGamesOver.set(id, gamesOverMin[id]);
+      const played = result.games.length;
+      for (const id of Object.keys(gamesOverMin)) {
+        lastGamesOver.set(id, gamesOverMin[id]);
+        lastGamesPlayed.set(id, played);
+      }
       const winId = result.winnerId;
-      const winTeam = byId.get(winId)!;
-      winners.push({ team: winTeam });
-      reached.set(winId, round); // advancing past round R-1 means you reached round R
+      winners.push({ team: byId.get(winId)! });
     });
     return { series, winners };
   };
 
-  // Build conference R1 matchups in seed order.
-  const confR1 = (seeded: { team: TournamentTeam }[]): [Slot, Slot][] =>
-    R1_PAIRS.map(([a, b]) => [{ team: seeded[a].team }, { team: seeded[b].team }]);
+  // ---- 0. (size 20 only) NBA-style conference play-in. ----
+  // 7v8 → winner is the 7 seed. 9v10 → its winner then visits the LOSER of 7v8
+  // for the 8 seed (NBA format). Single games (best-of-1). Play-in games AFFECT
+  // fatigue/advancement but are EXCLUDED from displayed W-L (they go in `playIn`,
+  // not `rounds`); the 8-seed game's loser is flagged `lostPlayIn`. Winners get
+  // NO recovery before round 1 — the single game's fatigue (game 1 = 0 anyway)
+  // and, more importantly, the carry-from-prior-series machinery treats the
+  // play-in as their "previous series" of length 1 with the same recovery rule.
+  const playIn: PlayInResult[] = [];
+  // After the play-in resolves, `seeded[6]`/`seeded[7]` (the 7 & 8 seeds) are
+  // replaced by the play-in winners for the main bracket below.
+  const resolvePlayIn = (
+    seeded: { team: TournamentTeam }[],
+    conference: Conference,
+    confOffset: number, // distinct series indices for East/West within round 0
+  ): { team: TournamentTeam }[] => {
+    const s7 = seeded[6].team, s8 = seeded[7].team;
+    const s9 = seeded[8].team, s10 = seeded[9].team;
+    // A play-in game reuses playSeries as a best-of-1; statics carry 0 (no prior
+    // series feeds these). round = 0 keeps its RNG seeds distinct from round 1.
+    const single = (a: TournamentTeam, b: TournamentTeam, idx: number) => {
+      const [hi, lo] = byStrength(a, b) <= 0 ? [a, b] : [b, a];
+      const carry: Record<string, number> = { [hi.id]: 0, [lo.id]: 0 };
+      const statics = computeStatics(hi, lo, carry);
+      const { result } = playSeries(hi, lo, 1, statics, seedKey, 0, confOffset + idx, cfg);
+      // Record the play-in as each entrant's previous series (length 1). The
+      // surviving 7/8 seeds are marked as play-in survivors below so round 1 uses
+      // the EXPLICIT `recoveryCarryFromPlayIn` path (no recovery from the play-in
+      // game), NOT the best-of-7 recovery table — which, keyed on series length,
+      // would clamp this 1-game series to a 4-game sweep and grant a 100% reset.
+      lastGamesPlayed.set(hi.id, 1);
+      lastGamesPlayed.set(lo.id, 1);
+      lastGamesOver.set(hi.id, 1 - CLINCH[7]);
+      lastGamesOver.set(lo.id, 1 - CLINCH[7]);
+      return { hi, lo, result };
+    };
 
-  // Round 1 (best-of-7, like every round): 8 series total (4 East + 4 West).
-  const eR1 = playRound(confR1(east), 7, 1, 0);
-  const wR1 = playRound(confR1(west), 7, 1, 4);
-  rounds.push([...eR1.series, ...wR1.series]);
+    // Game A: 7v8 → winner is the 7 seed; loser drops to the 8-seed game.
+    const a = single(s7, s8, 0);
+    const sevenWinId = a.result.winnerId;
+    const sevenLoserId = sevenWinId === a.hi.id ? a.lo.id : a.hi.id;
+    playIn.push({
+      conference, forSeed: 7, hiId: a.hi.id, loId: a.lo.id,
+      game: a.result.games[0], winnerId: sevenWinId,
+    });
+    // Game B: 9v10 → winner advances to the 8-seed game.
+    const b = single(s9, s10, 1);
+    const nineWinId = b.result.winnerId;
+    playIn.push({
+      conference, forSeed: 8 /* feeder; the deciding 8-seed game is C */, hiId: b.hi.id, loId: b.lo.id,
+      game: b.result.games[0], winnerId: nineWinId,
+    });
+    // Game C: loser of (7v8) HOSTS winner of (9v10) for the 8 seed.
+    const c = single(byId.get(sevenLoserId)!, byId.get(nineWinId)!, 2);
+    const eightWinId = c.result.winnerId;
+    const eightLoserId = eightWinId === c.hi.id ? c.lo.id : c.hi.id;
+    playIn.push({
+      conference, forSeed: 8, hiId: c.hi.id, loId: c.lo.id,
+      game: c.result.games[0], winnerId: eightWinId,
+    });
+    // The 9/10 entrant that lost game B, and the loser of game C, are eliminated.
+    // Only the game-C loser is flagged "Lost Play-In" (it reached the 8-seed game
+    // — the closest near-miss the UI surfaces); the 9v10 loser is out outright too.
+    const bLoserId = nineWinId === b.hi.id ? b.lo.id : b.hi.id;
+    for (const id of [eightLoserId, bLoserId]) {
+      const bt = bracketById.get(id);
+      if (bt) bt.lostPlayIn = true;
+    }
+    // The two survivors (the resolved 7 & 8 seeds) carry play-in fatigue into
+    // round 1 with NO recovery — route them through `recoveryCarryFromPlayIn`.
+    playInSurvivors.add(sevenWinId);
+    playInSurvivors.add(eightWinId);
+    // Resolved 7 & 8 seeds replace slots 6 & 7; seeds 9/10 are gone.
+    const out = seeded.slice(0, 6);
+    out.push({ team: byId.get(sevenWinId)! });
+    out.push({ team: byId.get(eightWinId)! });
+    return out;
+  };
 
-  // Conference semifinals (best-of-7): winners of (1v8 vs 4v5) and (3v6 vs 2v7).
-  const semiPairs = (w: Slot[]): [Slot, Slot][] => [[w[0], w[1]], [w[2], w[3]]];
-  const eR2 = playRound(semiPairs(eR1.winners), 7, 2, 0);
-  const wR2 = playRound(semiPairs(wR1.winners), 7, 2, 2);
-  rounds.push([...eR2.series, ...wR2.series]);
+  // ---- 2/3. Per-size conference tree, then the Final. ----
+  // Each conference plays its rounds; the two conference champions meet in the
+  // Final. Round NUMBERS and per-round series INDICES are chosen so size 16 is
+  // byte-identical to the original (R1 idx 0..3 E / 4..7 W; semis 0..1 E / 2..3 W;
+  // conf finals 0 E / 1 W; Final 0).
 
-  // Conference finals (best-of-7): the two semifinal winners in each conference.
-  const eR3 = playRound([[eR2.winners[0], eR2.winners[1]]], 7, 3, 0);
-  const wR3 = playRound([[wR2.winners[0], wR2.winners[1]]], 7, 3, 1);
-  rounds.push([...eR3.series, ...wR3.series]);
+  // Conference bracket: returns { confRounds, champion } given seeded slots 0..N-1.
+  // `roundBase` is the round number of the conference's FIRST played round.
+  type ConfPlan = {
+    rounds: SeriesResult[][]; // one entry per conference round, in order
+    champion: Slot;
+  };
 
-  // The Final (best-of-7): East champ vs West champ.
-  const fin = playRound([[eR3.winners[0], wR3.winners[0]]], 7, 4, 0);
+  // Pairing helpers (0-based seed indices within the conference).
+  const pairBySeeds = (seeded: { team: TournamentTeam }[], pairs: [number, number][]): [Slot, Slot][] =>
+    pairs.map(([a, b]) => [{ team: seeded[a].team }, { team: seeded[b].team }]);
+  // Re-pair a list of winners into adjacent pairs: [w0,w1],[w2,w3],…
+  const pairAdjacent = (w: Slot[]): [Slot, Slot][] => {
+    const out: [Slot, Slot][] = [];
+    for (let i = 0; i < w.length; i += 2) out.push([w[i], w[i + 1]]);
+    return out;
+  };
+
+  // Play one conference to its champion for the given size, recording each round.
+  // eastOffsets/westOffsets give each round its confOffset so E/W indices don't
+  // collide. Returns the per-round series (already merged is done by caller).
+  const playConference = (
+    seededIn: { team: TournamentTeam }[],
+    confOffsets: number[], // confOffset per played round (length = #rounds)
+  ): ConfPlan => {
+    const confRounds: SeriesResult[][] = [];
+    let seeded = seededIn;
+    let roundIdx = 0; // index into confOffsets / into the conference's round list
+
+    if (size === 4) {
+      // 2 per conf: a single conference final (round 1), then the Final (round 2).
+      const r = playRound(pairBySeeds(seeded, [[0, 1]]), 7, 1, confOffsets[roundIdx]);
+      confRounds.push(r.series);
+      return { rounds: confRounds, champion: r.winners[0] };
+    }
+
+    if (size === 8) {
+      // 4 per conf: semis (1v4,2v3 → round 1), conf final (round 2), Final (3).
+      const semis = playRound(pairBySeeds(seeded, [[0, 3], [1, 2]]), 7, 1, confOffsets[roundIdx++]);
+      confRounds.push(semis.series);
+      const cf = playRound(pairAdjacent(semis.winners), 7, 2, confOffsets[roundIdx++]);
+      confRounds.push(cf.series);
+      return { rounds: confRounds, champion: cf.winners[0] };
+    }
+
+    if (size === 12) {
+      // 6 per conf: seeds 1-2 BYE. Opening round 3v6,4v5 (round 1). Winners join
+      // seeds 1,2 in the semis (round 2): seed1 vs winner(4v5), seed2 vs winner(3v6).
+      // Then conf final (round 3), Final (round 4). Opening-round winners carry
+      // fatigue into the semis; the two bye teams enter fresh (no prior series).
+      const open = playRound(pairBySeeds(seeded, [[2, 5], [3, 4]]), 7, 1, confOffsets[roundIdx++]);
+      confRounds.push(open.series);
+      // open.winners[0] = winner of 3v6, open.winners[1] = winner of 4v5.
+      const semiMatch: [Slot, Slot][] = [
+        [{ team: seeded[0].team }, open.winners[1]], // seed 1 vs winner(4v5)
+        [{ team: seeded[1].team }, open.winners[0]], // seed 2 vs winner(3v6)
+      ];
+      const semis = playRound(semiMatch, 7, 2, confOffsets[roundIdx++]);
+      confRounds.push(semis.series);
+      const cf = playRound(pairAdjacent(semis.winners), 7, 3, confOffsets[roundIdx++]);
+      confRounds.push(cf.series);
+      return { rounds: confRounds, champion: cf.winners[0] };
+    }
+
+    // size 16 or 20 → an 8-team conference bracket (for 20, `seeded` is already
+    // the post-play-in 8 seeds). Pairings 1v8,4v5,3v6,2v7 → semis → conf final.
+    // For size 16 this is byte-identical to the original (round numbers 1/2/3).
+    const R1_PAIRS: [number, number][] = [[0, 7], [3, 4], [2, 5], [1, 6]];
+    const r1 = playRound(pairBySeeds(seeded, R1_PAIRS), 7, 1, confOffsets[roundIdx++]);
+    confRounds.push(r1.series);
+    // semis: (1v8 vs 4v5) and (3v6 vs 2v7).
+    const semis = playRound(pairAdjacent(r1.winners), 7, 2, confOffsets[roundIdx++]);
+    confRounds.push(semis.series);
+    const cf = playRound(pairAdjacent(semis.winners), 7, 3, confOffsets[roundIdx++]);
+    confRounds.push(cf.series);
+    return { rounds: confRounds, champion: cf.winners[0] };
+  };
+
+  // For size 20, resolve each conference's play-in BEFORE seeding into the tree.
+  let eastSeeded = east as { team: TournamentTeam }[];
+  let westSeeded = west as { team: TournamentTeam }[];
+  if (size === 20) {
+    // East play-in series indices 0..2, West 3..5 within round 0.
+    eastSeeded = resolvePlayIn(eastSeeded, "East", 0);
+    westSeeded = resolvePlayIn(westSeeded, "West", 3);
+  }
+
+  // confOffsets per conference round. East rounds use offset 0; West offsets are
+  // shifted by the number of East series in that same round so indices don't
+  // collide. The per-round East series counts (= West shift) by size:
+  //   4 → [1];  8 → [2,1];  12 → [2,2,1];  16/20 → [4,2,1].
+  const westShiftByRound: number[] =
+    size === 4 ? [1] :
+    size === 8 ? [2, 1] :
+    size === 12 ? [2, 2, 1] :
+    [4, 2, 1];
+  const eastOffsets = westShiftByRound.map(() => 0);
+  const westOffsets = [...westShiftByRound];
+
+  const eastPlan = playConference(eastSeeded, eastOffsets);
+  const westPlan = playConference(westSeeded, westOffsets);
+
+  // Merge conference rounds pairwise (East series first, then West) — matches the
+  // original [E…, W…] ordering within each round for size 16.
+  for (let i = 0; i < eastPlan.rounds.length; i++) {
+    rounds.push([...eastPlan.rounds[i], ...westPlan.rounds[i]]);
+  }
+
+  // The Final: round number is one past the last conference round.
+  const finalRound = eastPlan.rounds.length + 1;
+  const fin = playRound([[eastPlan.champion, westPlan.champion]], 7, finalRound, 0);
   rounds.push(fin.series);
 
   const championId = fin.series[0].winnerId;
   const championName = byId.get(championId)!.name;
 
-  return { teams: teamsOut, rounds, championId, championName };
+  const result: BracketResult = { teams: teamsOut, rounds, championId, championName, size };
+  if (size === 20) result.playIn = playIn;
+  return result;
 }

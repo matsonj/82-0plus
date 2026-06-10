@@ -1,0 +1,418 @@
+import { randomUUID } from "node:crypto";
+import type { PrivateBoard } from "./privateBoard";
+import type {
+  PrivateBoardMode,
+  PrivateMode,
+  PrivateResultLabel,
+  PrivateSize,
+} from "./privateTournament";
+import {
+  type EntryDbRow,
+  type EntryForUserDbRow,
+  mapEntryForUserRow,
+  mapEntryRow,
+  mapTournamentRow,
+  PRIVATE_ENTRY_COLS,
+  PRIVATE_ENTRY_FOR_USER_COLS,
+  PRIVATE_TOURNAMENT_COLS,
+  type PrivateEntryForUserRow,
+  type PrivateEntryRow,
+  type PrivateTournamentRow,
+  type TournamentDbRow,
+} from "./privateTournamentRows";
+import { ensureSchema, queryRW } from "./tournamentDb";
+
+// Private (invite-only) tournament WRITE helpers. Mirror tournamentQueries.ts:
+// ensureSchema() is awaited before every write; UUIDs are generated in app code
+// (not via RETURNING/DEFAULT) so the id is deterministic for the caller; JSON
+// columns are JSON.stringify'd on write and parsed defensively on read; params
+// bind positionally to $1, $2, …. This file ONLY persists — finalization MATH
+// (bracket sim, records, margins) lives elsewhere; here we just store results.
+//
+// The raw row shapes, the camelCase mapped types, the SELECT column lists, and
+// the row→object mappers all live in lib/privateTournamentRows.ts so the RW
+// pool here and the RO pool (lib/privateTournamentReadQueries.ts) can never
+// diverge. This file injects queryRW + ensureSchema(); the reads reuse the same
+// mappers and column constants.
+
+// Re-export the shared mapped row types so existing importers of this module
+// keep their import paths.
+export type {
+  PrivateEntryForUserRow,
+  PrivateEntryRow,
+  PrivateTournamentRow,
+};
+
+const TDB = "nba_tournament.main";
+
+// ── Tournament create / read ──────────────────────────────────────────────────
+
+export interface CreatePrivateTournamentArgs {
+  name: string;
+  nameNorm: string;
+  pinHash: string;
+  pinSalt: string;
+  adminUserId: string;
+  adminName: string;
+  mode: PrivateMode;
+  size: PrivateSize;
+  boardMode: PrivateBoardMode;
+  board: PrivateBoard;
+  expiresAt: string; // ISO timestamp the open window closes
+  // Optional caller-supplied id. The blind board is seeded by the tournament id,
+  // so the create route fixes the id UP FRONT, generates the board from it, then
+  // passes it here so the stored row and the board's seed agree. Omit to let this
+  // helper mint one (still deterministic for the caller via the return value).
+  tournamentId?: string;
+}
+
+/**
+ * Insert a private tournament and return its tournament_id. The UUID is
+ * generated in app code (like insertUser/insertTeam) so it's deterministic for
+ * the caller — no dependence on RETURNING. Status starts 'open'; the board is
+ * stored as JSON text (DuckDB casts text → JSON on insert). A caller may pass its
+ * own `tournamentId` so a blind board can be seeded by the id before insert.
+ */
+export async function createPrivateTournament(
+  args: CreatePrivateTournamentArgs,
+): Promise<string> {
+  await ensureSchema();
+  const tournamentId = args.tournamentId ?? randomUUID();
+  await queryRW(
+    `INSERT INTO ${TDB}.private_tournaments
+       (tournament_id, name, name_norm, pin_hash, pin_salt,
+        admin_user_id, admin_name, mode, size, board_mode, board_json,
+        status, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', $12)`,
+    [
+      tournamentId,
+      args.name,
+      args.nameNorm,
+      args.pinHash,
+      args.pinSalt,
+      args.adminUserId,
+      args.adminName,
+      args.mode,
+      args.size,
+      args.boardMode,
+      JSON.stringify(args.board),
+      args.expiresAt,
+    ],
+  );
+  return tournamentId;
+}
+
+/** Full tournament row (board + final bracket parsed), or null if not found. */
+export async function getPrivateTournament(
+  tournamentId: string,
+): Promise<PrivateTournamentRow | null> {
+  await ensureSchema();
+  const rows = await queryRW<TournamentDbRow>(
+    `SELECT ${PRIVATE_TOURNAMENT_COLS}
+       FROM ${TDB}.private_tournaments
+      WHERE tournament_id = $1
+      LIMIT 1`,
+    [tournamentId],
+  );
+  return rows[0] ? mapTournamentRow(rows[0]) : null;
+}
+
+/**
+ * All private tournaments sharing a normalized name (for name+PIN lookup). Like
+ * getUsersByName: a name is NOT unique, so the route picks the one whose PIN
+ * verifies against pin_hash/pin_salt. Oldest first (stable).
+ */
+export async function getPrivateTournamentsByNameNorm(
+  nameNorm: string,
+): Promise<PrivateTournamentRow[]> {
+  await ensureSchema();
+  const rows = await queryRW<TournamentDbRow>(
+    `SELECT ${PRIVATE_TOURNAMENT_COLS}
+       FROM ${TDB}.private_tournaments
+      WHERE name_norm = $1
+      ORDER BY created_at ASC`,
+    [nameNorm],
+  );
+  return rows.map(mapTournamentRow);
+}
+
+// ── Entry list / read ─────────────────────────────────────────────────────────
+
+/** All entries for a tournament, oldest first (registration order). */
+export async function listPrivateEntries(
+  tournamentId: string,
+): Promise<PrivateEntryRow[]> {
+  await ensureSchema();
+  const rows = await queryRW<EntryDbRow>(
+    `SELECT ${PRIVATE_ENTRY_COLS}
+       FROM ${TDB}.private_entries
+      WHERE tournament_id = $1
+      ORDER BY created_at ASC`,
+    [tournamentId],
+  );
+  return rows.map(mapEntryRow);
+}
+
+/**
+ * One entrant's row in a tournament (the one-entry-per-account guard + the
+ * "already registered" path). MotherDuck won't enforce a UNIQUE on the pair, so
+ * this SELECT is the dedup check; LIMIT 1 returns the first if a dup ever slips.
+ */
+export async function getPrivateEntry(
+  tournamentId: string,
+  userId: string,
+): Promise<PrivateEntryRow | null> {
+  await ensureSchema();
+  const rows = await queryRW<EntryDbRow>(
+    `SELECT ${PRIVATE_ENTRY_COLS}
+       FROM ${TDB}.private_entries
+      WHERE tournament_id = $1 AND user_id = $2
+      ORDER BY created_at ASC
+      LIMIT 1`,
+    [tournamentId, userId],
+  );
+  return rows[0] ? mapEntryRow(rows[0]) : null;
+}
+
+// ── Entry lifecycle writes ─────────────────────────────────────────────────────
+
+export interface RegisterPrivateEntryArgs {
+  tournamentId: string;
+  userId: string;
+  userName: string;
+}
+
+/**
+ * Insert a freshly-registered entry (no roster yet) and return its entry_id.
+ * The UUID is generated in app code (deterministic for the caller). The dedup
+ * guard is the caller's responsibility — call getPrivateEntry first.
+ */
+export async function registerPrivateEntry(
+  args: RegisterPrivateEntryArgs,
+): Promise<string> {
+  await ensureSchema();
+  const entryId = randomUUID();
+  await queryRW(
+    `INSERT INTO ${TDB}.private_entries
+       (entry_id, tournament_id, user_id, user_name, status)
+     VALUES ($1, $2, $3, $4, 'registered')`,
+    [entryId, args.tournamentId, args.userId, args.userName],
+  );
+  return entryId;
+}
+
+export interface SavePrivatePartialArgs {
+  entryId: string;
+  rosterJson: unknown; // SimPick[] — the five starters
+  rosterDisplay: unknown; // { roster: BracketPlayer[]; ... } — names for the list
+  seedNet: number;
+  regW: number;
+  regL: number;
+  teamBoxJson?: unknown; // the five's reg-season 9-stat box
+  teamName?: string | null; // franchise name, if chosen by this point
+}
+
+/**
+ * Save the interstitial 5-player draft as a 'partial' entry: just the starters,
+ * the reg-season record + seed, and the share box. The sixth man, captain and
+ * final bracket fields are filled later (submit / finalize).
+ */
+export async function savePrivatePartial(
+  args: SavePrivatePartialArgs,
+): Promise<void> {
+  await ensureSchema();
+  await queryRW(
+    `UPDATE ${TDB}.private_entries
+        SET status = 'partial',
+            roster_json = $2,
+            roster_display = $3,
+            seed_net = $4,
+            reg_w = $5,
+            reg_l = $6,
+            team_box_json = $7,
+            team_name = COALESCE($8, team_name)
+      WHERE entry_id = $1`,
+    [
+      args.entryId,
+      JSON.stringify(args.rosterJson),
+      JSON.stringify(args.rosterDisplay),
+      args.seedNet,
+      args.regW,
+      args.regL,
+      args.teamBoxJson == null ? null : JSON.stringify(args.teamBoxJson),
+      args.teamName ?? null,
+    ],
+  );
+}
+
+export interface SubmitPrivateEntryArgs {
+  entryId: string;
+  sixthJson: unknown; // { entity_id, team, decade }
+  captainSlot: number;
+  rosterDisplay: unknown; // final names (with captain flagged + sixth man)
+  provisionalRecordW: number;
+  provisionalRecordL: number;
+  provisionalStatus: PrivateResultLabel;
+  teamName?: string | null; // franchise name, if chosen at submit
+}
+
+/**
+ * Lock in a complete six as a 'submitted' entry: the sixth man, captain slot,
+ * final roster display, and the provisional bracket standing computed at submit
+ * time. The final_* playoff fields are written only at finalization.
+ */
+export async function submitPrivateEntry(
+  args: SubmitPrivateEntryArgs,
+): Promise<void> {
+  await ensureSchema();
+  await queryRW(
+    `UPDATE ${TDB}.private_entries
+        SET status = 'submitted',
+            sixth_json = $2,
+            captain_slot = $3,
+            roster_display = $4,
+            provisional_record_w = $5,
+            provisional_record_l = $6,
+            provisional_status = $7,
+            team_name = COALESCE($8, team_name),
+            submitted_at = now()
+      WHERE entry_id = $1`,
+    [
+      args.entryId,
+      JSON.stringify(args.sixthJson),
+      args.captainSlot,
+      JSON.stringify(args.rosterDisplay),
+      args.provisionalRecordW,
+      args.provisionalRecordL,
+      args.provisionalStatus,
+      args.teamName ?? null,
+    ],
+  );
+}
+
+// ── Finalization persistence (MATH lives elsewhere) ───────────────────────────
+
+export interface MarkTournamentCompletedArgs {
+  tournamentId: string;
+  finalBracketJson: unknown; // BracketResult
+  championName: string;
+}
+
+/** Stamp a tournament 'completed' with its resolved bracket + champion + time. */
+export async function markTournamentCompleted(
+  args: MarkTournamentCompletedArgs,
+): Promise<void> {
+  await ensureSchema();
+  await queryRW(
+    `UPDATE ${TDB}.private_tournaments
+        SET status = 'completed',
+            finalized_at = now(),
+            final_bracket_json = $2,
+            champion_name = $3
+      WHERE tournament_id = $1`,
+    [args.tournamentId, JSON.stringify(args.finalBracketJson), args.championName],
+  );
+}
+
+export interface UpdateEntryFinalArgs {
+  entryId: string;
+  finalRecordW: number;
+  finalRecordL: number;
+  finalStatus: PrivateResultLabel;
+  finalRealizedMargin: number;
+  finalReachedRound: number;
+}
+
+/** Write one entry's resolved final bracket standing (computed by the caller). */
+export async function updateEntryFinal(
+  args: UpdateEntryFinalArgs,
+): Promise<void> {
+  await ensureSchema();
+  await queryRW(
+    `UPDATE ${TDB}.private_entries
+        SET final_record_w = $2,
+            final_record_l = $3,
+            final_status = $4,
+            final_realized_margin = $5,
+            final_reached_round = $6
+      WHERE entry_id = $1`,
+    [
+      args.entryId,
+      args.finalRecordW,
+      args.finalRecordL,
+      args.finalStatus,
+      args.finalRealizedMargin,
+      args.finalReachedRound,
+    ],
+  );
+}
+
+/**
+ * Convert an incomplete entry (registered/partial) to 'bot_replaced' — a board-
+ * constrained bot took the slot at finalize. The bot's roster/seed are written
+ * with updateEntryFinal as usual; this just flips the status.
+ */
+export async function markEntryBotReplaced(entryId: string): Promise<void> {
+  await ensureSchema();
+  await queryRW(
+    `UPDATE ${TDB}.private_entries
+        SET status = 'bot_replaced'
+      WHERE entry_id = $1`,
+    [entryId],
+  );
+}
+
+/** Stamp an entry's viewed_final_at (clears the unread badge). */
+export async function markPrivateEntryViewed(entryId: string): Promise<void> {
+  await ensureSchema();
+  await queryRW(
+    `UPDATE ${TDB}.private_entries
+        SET viewed_final_at = now()
+      WHERE entry_id = $1`,
+    [entryId],
+  );
+}
+
+// ── Admin teardown ─────────────────────────────────────────────────────────────
+
+/**
+ * Permanently delete a tournament and all of its entries (host-only — the route
+ * authorizes admin_user_id before calling this). Entries go FIRST so no row is
+ * ever orphaned to a tournament that's already gone; the tournament row drops
+ * second. Both are TDB-qualified, positional, and re-use the RW pool.
+ */
+export async function deletePrivateTournament(
+  tournamentId: string,
+): Promise<void> {
+  await ensureSchema();
+  await queryRW(
+    `DELETE FROM ${TDB}.private_entries WHERE tournament_id = $1`,
+    [tournamentId],
+  );
+  await queryRW(
+    `DELETE FROM ${TDB}.private_tournaments WHERE tournament_id = $1`,
+    [tournamentId],
+  );
+}
+
+// ── My Teams / notifications (entries joined with their tournament) ───────────
+
+/**
+ * All of a user's private entries joined with their tournament summary (name,
+ * status, mode, size, expiry, finalize time, champion) — powers the My Teams
+ * rows and the attention/notification badge. Newest tournament first.
+ */
+export async function listPrivateEntriesForUser(
+  userId: string,
+): Promise<PrivateEntryForUserRow[]> {
+  await ensureSchema();
+  const rows = await queryRW<EntryForUserDbRow>(
+    `SELECT ${PRIVATE_ENTRY_FOR_USER_COLS}
+       FROM ${TDB}.private_entries e
+       JOIN ${TDB}.private_tournaments t ON t.tournament_id = e.tournament_id
+      WHERE e.user_id = $1
+      ORDER BY t.created_at DESC`,
+    [userId],
+  );
+  return rows.map(mapEntryForUserRow);
+}

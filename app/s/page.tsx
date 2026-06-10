@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { decodeShare } from "@/lib/shareCode";
 import { SITE_URL } from "@/lib/site";
+import { GlobalHeader } from "@/components/GlobalHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -62,17 +63,9 @@ export default async function SharePage({
   const sign = data && data.n >= 0 ? "+" : "";
 
   return (
-    <main className="relative mx-auto flex min-h-full max-w-xl flex-col items-center px-4 py-12 text-center">
+    <main className="relative mx-auto flex min-h-full max-w-xl flex-col px-4 pb-12 text-center">
       <div className="md-sunbeam" />
-      <Link
-        href="/"
-        className="relative z-10 flex items-center gap-2 font-display text-lg font-bold tracking-tight"
-      >
-        <span className="text-2xl" aria-hidden>
-          🦆
-        </span>
-        82-0<span className="text-[var(--md-orange)]">+</span>
-      </Link>
+      <GlobalHeader />
 
       <div className="md-card md-card--lift relative z-10 mt-8 flex w-full flex-col gap-4 p-6">
         {data ? (

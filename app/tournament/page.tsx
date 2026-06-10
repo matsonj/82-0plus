@@ -1,33 +1,29 @@
 "use client";
 
+import { use } from "react";
 import Link from "next/link";
 import { TournamentLookup } from "@/components/TournamentLookup";
+import { GlobalHeader } from "@/components/GlobalHeader";
 import { MOTHERDUCK_URL } from "@/lib/site";
 
 // Lookup-only landing. You ENTER the tournament from a finished Classic/Ranked
 // game (the "Enter Tournament" button on the results), which carries your drafted
 // five + mode in. This page is just for checking your bracket later by name + PIN.
-export default function TournamentPage() {
+// `?tab=private` deep-links straight to the Private filter (from the main menu).
+export default function TournamentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = use(searchParams);
+  const initialTab = tab === "private" ? ("private" as const) : undefined;
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
       <div className="md-sunbeam" />
 
-      <header className="relative z-10 flex items-center justify-between py-4 sm:py-5">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-2xl" aria-hidden>
-            🦆
-          </span>
-          <span className="font-display text-lg font-bold tracking-tight">
-            82-0<span className="text-[var(--md-orange)]">+</span>
-          </span>
-        </Link>
-        <span className="md-capsule" style={{ background: "var(--md-orange)" }}>
-          Tournament Edition
-        </span>
-      </header>
+      <GlobalHeader />
 
-      <section className="relative z-10 flex flex-col items-center text-center">
-        <div className="md-capsule mb-4">🏀 Check your team</div>
+      <section className="relative z-10 mt-6 flex flex-col items-center text-center sm:mt-8">
         <h1
           className="font-display font-bold tracking-tight"
           style={{ fontSize: "clamp(34px, 9vw, 64px)", lineHeight: 1 }}
@@ -43,7 +39,7 @@ export default function TournamentPage() {
         </p>
 
         <div className="mt-8 w-full max-w-md">
-          <TournamentLookup onBack={undefined} />
+          <TournamentLookup onBack={undefined} initialTab={initialTab} />
         </div>
 
         <Link

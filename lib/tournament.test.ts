@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { simulateRoster, type ScoringPlayer } from "./scoring";
+import { deriveRecord } from "./tournamentRun";
 import type { StatNorms, BracketResult, BracketPlayer } from "./types";
 import { STAT_KEYS } from "./types";
 import {
@@ -70,9 +71,14 @@ function norms(): StatNorms {
   return { mean, std };
 }
 
-// 16 teams with given seedNets (rest defaulted).
+// `nets.length` teams with given seedNets (rest defaulted). Used for any size.
 function field(nets: number[]): TournamentTeam[] {
   return nets.map((n, i) => team({ id: `T${i}`, name: `T${i}`, seedNet: n }));
+}
+
+// A descending-seedNet field of `n` teams (clear seed line, no ties).
+function descField(n: number): TournamentTeam[] {
+  return field(Array.from({ length: n }, (_, i) => n - i));
 }
 
 describe("PRNG (mulberry32 / hashSeed)", () => {
@@ -474,31 +480,48 @@ describe("region affinity", () => {
     expect(regionScore(neutral)).toBe(0);
   });
 
-  it("the eight most-Western teams land in the West", () => {
-    // 8 clearly-West teams + 8 clearly-East teams.
-    const westRosters = Array.from({ length: 8 }, (_, i) =>
+  it("the two strongest teams land in DIFFERENT conferences (pair-split balance)", () => {
+    // Conferences are assigned by splitting each consecutive STRENGTH pair, so the
+    // field's two strongest can only meet in the Final — never round 1.
+    const teams16 = Array.from({ length: 16 }, (_, i) =>
       team({
-        id: `W${i}`,
-        seedNet: i,
-        roster: ros(["LAL", "GSW", "DEN", "PHX", "DAL"], 0),
+        id: `T${i}`,
+        seedNet: 16 - i, // distinct strengths: T0=16 (best) … T15=1
+        roster: ros(["LAL", "BOS", "NYK", "MIA", "CHI"], 0),
         sixthManInfo: { name: "s", team: "POR", season: 1996 },
       }),
     );
-    const eastRosters = Array.from({ length: 8 }, (_, i) =>
-      team({
-        id: `E${i}`,
-        seedNet: i,
-        roster: ros(["BOS", "NYK", "MIA", "CHI", "PHI"], 0),
-        sixthManInfo: { name: "s", team: "TOR", season: 1996 },
-      }),
-    );
-    const r = simulateBracket([...eastRosters, ...westRosters], "region", norms());
-    const west = r.teams.filter((t) => t.conference === "West");
+    const r = simulateBracket(teams16, "pairsplit", norms());
     const east = r.teams.filter((t) => t.conference === "East");
-    expect(west).toHaveLength(8);
+    const west = r.teams.filter((t) => t.conference === "West");
     expect(east).toHaveLength(8);
-    expect(west.every((t) => t.id.startsWith("W"))).toBe(true);
-    expect(east.every((t) => t.id.startsWith("E"))).toBe(true);
+    expect(west).toHaveLength(8);
+    // Each conference's #1 seed is one of the overall top two — and they're split.
+    const eastTop = east.find((t) => t.seed === 1)!;
+    const westTop = west.find((t) => t.seed === 1)!;
+    expect([eastTop.seedNet, westTop.seedNet].sort((a, b) => b - a)).toEqual([
+      16, 15,
+    ]);
+  });
+
+  it("affinity decides which side each strength-pair member takes", () => {
+    // A strength pair of one clearly-West and one clearly-East team must split with
+    // the West-leaner in the West and the East-leaner in the East. Build 4 teams as
+    // two pairs; in each pair the stronger is West-leaning, the weaker East-leaning.
+    const westRoster = ros(["LAL", "GSW", "DEN", "PHX", "DAL"], 0); // all West
+    const eastRoster = ros(["BOS", "NYK", "MIA", "CHI", "PHI"], 0); // all East
+    const teams4 = [
+      team({ id: "P0W", seedNet: 100, roster: westRoster, sixthManInfo: { name: "s", team: "POR", season: 1996 } }),
+      team({ id: "P0E", seedNet: 90, roster: eastRoster, sixthManInfo: { name: "s", team: "TOR", season: 1996 } }),
+      team({ id: "P1W", seedNet: 50, roster: westRoster, sixthManInfo: { name: "s", team: "POR", season: 1996 } }),
+      team({ id: "P1E", seedNet: 40, roster: eastRoster, sixthManInfo: { name: "s", team: "TOR", season: 1996 } }),
+    ];
+    const r = simulateBracket(teams4, "affinity-pair", norms(), C, 4);
+    const confOf = (id: string) => r.teams.find((t) => t.id === id)!.conference;
+    expect(confOf("P0W")).toBe("West");
+    expect(confOf("P0E")).toBe("East");
+    expect(confOf("P1W")).toBe("West");
+    expect(confOf("P1E")).toBe("East");
   });
 });
 
@@ -576,6 +599,285 @@ describe("simulateBracket: per-game box scores", () => {
       const ar = g.breakdown![g.awayId].randomFactor;
       expect(hr + ar).toBeCloseTo(0, 6);
       expect(Math.abs(hr)).toBeLessThanOrEqual(C.RANDOM_FACTOR_MAX + 1e-9);
+    }
+  });
+});
+
+// ===========================================================================
+// Parametrized bracket sizes (4/8/12/16/20) + size-20 play-in.
+// ===========================================================================
+
+describe("simulateBracket: variable sizes", () => {
+  it("rejects an unsupported size and a teams/size mismatch", () => {
+    // @ts-expect-error 10 is not a BracketSize
+    expect(() => simulateBracket(descField(10), "k", norms(), C, 10)).toThrow();
+    expect(() => simulateBracket(descField(8), "k", norms(), C, 16)).toThrow(); // wrong count
+  });
+
+  it("runs to a single champion for each size 4/8/12/16/20", () => {
+    for (const size of [4, 8, 12, 16, 20] as const) {
+      const r = simulateBracket(descField(size), `champ-${size}`, norms(), C, size);
+      expect(r.size).toBe(size);
+      expect(r.teams.length).toBe(size);
+      // The Final is the last round and has exactly one series with one winner.
+      const final = r.rounds[r.rounds.length - 1];
+      expect(final.length).toBe(1);
+      expect(r.championId).toBe(final[0].winnerId);
+      // Champion is a real team in the field.
+      expect(r.teams.some((t) => t.id === r.championId)).toBe(true);
+    }
+  });
+
+  it("round structure matches the spec per size (every main round best-of-7)", () => {
+    const expected: Record<number, number[]> = {
+      4: [2, 1], // conf finals (1E+1W), Final
+      8: [4, 2, 1], // semis (2E+2W), conf finals, Final
+      12: [4, 4, 2, 1], // opening (2E+2W), semis (2E+2W), conf finals, Final
+      16: [8, 4, 2, 1], // unchanged original
+      20: [8, 4, 2, 1], // post-play-in: a normal 8-team-per-conf bracket
+    };
+    for (const size of [4, 8, 12, 16, 20] as const) {
+      const r = simulateBracket(descField(size), `struct-${size}`, norms(), C, size);
+      expect(r.rounds.map((rd) => rd.length)).toEqual(expected[size]);
+      for (const rd of r.rounds) for (const s of rd) expect(s.bestOf).toBe(7);
+    }
+  });
+
+  it("within a conference, a stronger team is NEVER seeded below a weaker one (strength-first)", () => {
+    // Strength (seedNet) is the primary seeding key; affinity only picks the
+    // conference. So in EVERY conference, walking seeds 1..N must give a
+    // monotonically non-increasing seedNet — even when affinity leans would, in
+    // the old region-primary sort, have floated a weaker team up.
+    for (const size of [4, 8, 12, 16, 20] as const) {
+      const r = simulateBracket(descField(size), `mono-${size}`, norms(), C, size);
+      for (const conf of ["East", "West"] as const) {
+        const seeded = r.teams
+          .filter((t) => t.conference === conf)
+          .sort((a, b) => a.seed - b.seed);
+        for (let i = 1; i < seeded.length; i++) {
+          expect(seeded[i - 1].seedNet).toBeGreaterThanOrEqual(seeded[i].seedNet);
+        }
+      }
+    }
+  });
+
+  it("region lean never reorders strength within a conference", () => {
+    // Conference assignment is a strength snake, NOT region affinity. A WEAKER team
+    // must never be seeded ahead of a STRONGER team that shares its conference,
+    // regardless of region lean. Build a 4-team field of same-region teams with
+    // distinct strengths and verify within-conference seeds follow seedNet.
+    const westRos = (cap: number) => ({
+      roster: [
+        { name: "a", team: "LAL", season: 1996, ...(cap === 0 ? { captain: true } : {}) },
+        { name: "b", team: "GSW", season: 1996, ...(cap === 1 ? { captain: true } : {}) },
+        { name: "c", team: "DEN", season: 1996 },
+        { name: "d", team: "PHX", season: 1996 },
+        { name: "e", team: "DAL", season: 1996 },
+      ],
+      sixthManInfo: { name: "s", team: "POR", season: 1996 },
+    });
+    const teams = [
+      team({ id: "Z0", seedNet: 100, ...westRos(0) }), // strong + West
+      team({ id: "Z1", seedNet: 1, ...westRos(0) }),   // WEAK + West
+      team({ id: "Z2", seedNet: 50, ...westRos(0) }),  // mid + West
+      team({ id: "Z3", seedNet: 40, ...westRos(0) }),  // mid + West
+    ];
+    const r = simulateBracket(teams, "affinity-order", norms(), C, 4);
+    const netById = new Map(teams.map((t) => [t.id, t.seedNet]));
+    for (const conf of ["East", "West"] as const) {
+      const seeded = r.teams
+        .filter((t) => t.conference === conf)
+        .sort((a, b) => a.seed - b.seed);
+      for (let i = 1; i < seeded.length; i++) {
+        expect(netById.get(seeded[i - 1].id)!).toBeGreaterThanOrEqual(
+          netById.get(seeded[i].id)!,
+        );
+      }
+    }
+  });
+
+  it("each conference holds size/2 teams seeded 1..N", () => {
+    for (const size of [4, 8, 12, 16, 20] as const) {
+      const r = simulateBracket(descField(size), `seed-${size}`, norms(), C, size);
+      const n = size / 2;
+      for (const conf of ["East", "West"] as const) {
+        const teams = r.teams.filter((t) => t.conference === conf);
+        expect(teams.length).toBe(n);
+        expect(teams.map((t) => t.seed).sort((a, b) => a - b)).toEqual(
+          Array.from({ length: n }, (_, i) => i + 1),
+        );
+      }
+    }
+  });
+});
+
+describe("simulateBracket: 16-team parity (no regression)", () => {
+  it("default-size call equals an explicit size=16 call (deeply)", () => {
+    const mk = () => field(Array.from({ length: 16 }, (_, i) => (i * 7) % 11));
+    const implicit = simulateBracket(mk(), "parity", norms());
+    const explicit = simulateBracket(mk(), "parity", norms(), C, 16);
+    // size is the only new field; strip it for the pre-change-shape comparison.
+    const { size: _s1, ...implicitCore } = implicit;
+    const { size: _s2, ...explicitCore } = explicit;
+    expect(explicitCore).toEqual(implicitCore);
+    expect(implicit.size).toBe(16);
+    expect(implicit.playIn).toBeUndefined(); // no play-in below size 20
+  });
+
+  it("16-team champion + round shape are stable on a fixed seed", () => {
+    // A pinned-seed snapshot of the unchanged path: champion id and the per-round
+    // series counts must not move. (Guards the generalization against drift.)
+    const r = simulateBracket(
+      field([15, 12, 9, 6, 3, 1, 0, -2, -3, -5, -7, -9, -11, -13, -15, -18]),
+      "scores",
+      norms(),
+    );
+    expect(r.rounds.map((rd) => rd.length)).toEqual([8, 4, 2, 1]);
+    expect(r.championId).toBe("T0"); // strongest team on this deterministic seed
+  });
+});
+
+describe("simulateBracket: 12-team byes + fatigue carry", () => {
+  it("seeds 1-2 per conference get a bye (don't play the opening round)", () => {
+    const r = simulateBracket(descField(12), "byes", norms(), C, 12);
+    const opening = r.rounds[0]; // 2 East + 2 West opening-round series
+    expect(opening.length).toBe(4);
+    const playedIds = new Set(opening.flatMap((s) => [s.hiId, s.loId]));
+    // The two top seeds in each conference must NOT appear in the opening round.
+    for (const conf of ["East", "West"] as const) {
+      const top2 = r.teams
+        .filter((t) => t.conference === conf && t.seed <= 2)
+        .map((t) => t.id);
+      for (const id of top2) expect(playedIds.has(id)).toBe(false);
+    }
+    // Opening round is exactly the seed 3-6 matchups (3v6, 4v5) in each conf.
+    for (const conf of ["East", "West"] as const) {
+      const mid = r.teams
+        .filter((t) => t.conference === conf && t.seed >= 3 && t.seed <= 6)
+        .map((t) => t.id);
+      for (const id of mid) expect(playedIds.has(id)).toBe(true);
+    }
+  });
+
+  it("an opening-round winner carries fatigue into the semis (byes enter fresh)", () => {
+    const r = simulateBracket(descField(12), "carry12", norms(), C, 12);
+    // Find a semifinal series whose participants include an opening-round winner.
+    const openingWinners = new Set(r.rounds[0].map((s) => s.winnerId));
+    const semis = r.rounds[1];
+    let sawCarry = false;
+    let sawFreshBye = false;
+    for (const s of semis) {
+      const g1 = s.games[0];
+      for (const id of [s.hiId, s.loId]) {
+        const carry = g1.breakdown![id].recoveryCarry;
+        if (openingWinners.has(id)) {
+          // Came through the opening round → MAY carry fatigue (>0 unless it swept;
+          // with this deterministic field at least one such team carries > 0).
+          if (carry > 0) sawCarry = true;
+        } else {
+          // A bye team (seed 1 or 2) has no prior series → zero carry into the semis.
+          expect(carry).toBe(0);
+          sawFreshBye = true;
+        }
+      }
+    }
+    expect(sawFreshBye).toBe(true);
+    expect(sawCarry).toBe(true);
+  });
+});
+
+describe("simulateBracket: 20-team play-in", () => {
+  const r = simulateBracket(descField(20), "playin", norms(), C, 20);
+
+  it("produces a play-in stage that decides seeds 7 & 8 in each conference", () => {
+    expect(r.playIn).toBeDefined();
+    // 3 games per conference (7v8, 9v10, 8-seed decider) × 2 conferences = 6.
+    expect(r.playIn!.length).toBe(6);
+    for (const conf of ["East", "West"] as const) {
+      const games = r.playIn!.filter((p) => p.conference === conf);
+      expect(games.length).toBe(3);
+      // The seeds that actually start the main bracket at 7 and 8 are the play-in
+      // winners (the 7-seed game winner and the deciding 8-seed game winner).
+      const r1 = r.rounds[0];
+      const confSeries = r1.filter((s) => {
+        const t = r.teams.find((x) => x.id === s.hiId || x.id === s.loId);
+        return t?.conference === conf;
+      });
+      // Every team in this conference's round-1 is one of its top-8 seeds.
+      const seedsInR1 = new Set<number>();
+      for (const s of confSeries)
+        for (const id of [s.hiId, s.loId])
+          seedsInR1.add(r.teams.find((t) => t.id === id)!.seed);
+      expect([...seedsInR1].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+  });
+
+  it("each play-in matchup is a single game", () => {
+    for (const p of r.playIn!) {
+      expect(p.game.gameNo).toBe(1);
+      expect(p.winnerId === p.hiId || p.winnerId === p.loId).toBe(true);
+    }
+  });
+
+  it("flags play-in losers with lostPlayIn (and only those)", () => {
+    const flagged = r.teams.filter((t) => t.lostPlayIn);
+    // One per conference loses the deciding 8-seed game; one per conference loses
+    // the 9v10 feeder. So 2 flagged per conference, 4 total.
+    expect(flagged.length).toBe(4);
+    // A flagged team must be a 7-10 seed (never a top-6 seed).
+    for (const t of flagged) expect(t.seed).toBeGreaterThanOrEqual(7);
+    // The two teams that START round 1 as seeds 7 & 8 are NOT flagged.
+    const r1Ids = new Set(r.rounds[0].flatMap((s) => [s.hiId, s.loId]));
+    for (const t of flagged) expect(r1Ids.has(t.id)).toBe(false);
+  });
+
+  it("EXCLUDES play-in games from displayed W-L (deriveRecord)", () => {
+    // A play-in LOSER never appears in `rounds`, so its derived record is 0-0.
+    for (const t of r.teams.filter((x) => x.lostPlayIn)) {
+      const rec = deriveRecord(r, t.id);
+      expect(rec.recordW).toBe(0);
+      expect(rec.recordL).toBe(0);
+      expect(rec.reachedRound).toBe(0);
+    }
+    // A play-in WINNER's record counts only its bracket (rounds) games, never the
+    // play-in game: the sum of its per-series game counts equals its W+L.
+    const r1 = r.rounds[0];
+    for (const s of r1) {
+      for (const id of [s.hiId, s.loId]) {
+        const rec = deriveRecord(r, id);
+        // Walk rounds manually and confirm deriveRecord didn't fold in a play-in game.
+        let games = 0;
+        for (const round of r.rounds) {
+          const series = round.find((x) => x.hiId === id || x.loId === id);
+          if (!series) break;
+          games += series.games.length;
+          if (series.winnerId !== id) break;
+        }
+        expect(rec.recordW + rec.recordL).toBe(games);
+      }
+    }
+  });
+
+  it("grants NO recovery between the play-in and round 1 (survivors carry play-in fatigue)", () => {
+    // A play-in survivor enters round 1 having played the play-in game the night
+    // before, so by product rule it gets NO recovery — it must carry play-in
+    // fatigue straight into R1. This is modeled EXPLICITLY via
+    // recoveryCarryFromPlayIn (one game's accrued fatigue, carried in full), NOT
+    // by passing a "1-game series" through the best-of-7 recovery table — which
+    // would clamp to a 4-game sweep and grant a 100% reset → carry 0.
+    const r1 = r.rounds[0];
+    // Identify each conference's round-1 seed-7 and seed-8 (the play-in survivors).
+    const survivors = r.teams.filter((t) => (t.seed === 7 || t.seed === 8));
+    expect(survivors.length).toBe(4); // 2 per conference
+    for (const t of survivors) {
+      const series = r1.find((s) => s.hiId === t.id || s.loId === t.id)!;
+      const carry = series.games[0].breakdown![t.id].recoveryCarry;
+      // Nonzero residual fatigue: exactly one game's worth, with no recovery.
+      // descField teams are league-average age, so this is the one-game slope
+      // fatigue(_, 2) = FATIGUE_PER_GAME × ageFactor(1) × SIXTH_MAN mult = 0.3.
+      expect(carry).toBeGreaterThan(0);
+      expect(Number.isFinite(carry)).toBe(true);
+      expect(carry).toBeCloseTo(fatigue(team({ ageAtPeak: C.LEAGUE_AVG_EXP }), 2), 10);
     }
   });
 });
