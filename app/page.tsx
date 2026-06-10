@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   GameMode,
+  PublicPlayer,
   SimPick,
   SimResult,
   SimRosterLine,
 } from "@/lib/types";
+import { draftSourceKey, type DraftRosterMap } from "@/lib/draftSources";
 import { type SlotKind } from "@/lib/positions";
 import type { LineupEntry } from "@/components/LineupBoard";
 import { LineupDraftBoard } from "@/components/LineupDraftBoard";
@@ -86,6 +88,7 @@ export default function Home() {
   const [dailySlots, setDailySlots] = useState<{ team: string; decade: number }[]>([]);
   // The daily tournament's fixed 6th-man slot (team+decade); null on sparse days.
   const [dailyBench, setDailyBench] = useState<{ team: string; decade: number } | null>(null);
+  const [dailyRosters, setDailyRosters] = useState<DraftRosterMap>({});
   const [dailyDate, setDailyDate] = useState<string>("");
   // Seeded synchronously (pacificDate is deterministic via Intl) so the 7-day strip
   // renders on first paint instead of popping in after an effect; the visibility
@@ -108,6 +111,7 @@ export default function Home() {
   );
   const [currentDecade, setCurrentDecade] = useState<number | null>(null);
   const [currentTeam, setCurrentTeam] = useState<string | null>(null);
+  const [currentPlayers, setCurrentPlayers] = useState<PublicPlayer[] | null>(null);
   const [teamSkips, setTeamSkips] = useState(1);
   const [decadeSkips, setDecadeSkips] = useState(1);
   const [rolling, setRolling] = useState(false);
@@ -167,14 +171,16 @@ export default function Home() {
       const decade = opts.decade ?? pickWeightedDecade(decades, usage);
       setCurrentDecade(decade);
       setCurrentTeam(null);
+      setCurrentPlayers(null);
       try {
-        const url = `/api/slot?decade=${decade}${excludes.length ? `&exclude=${excludes.join(",")}` : ""}`;
+        const url = `/api/slot?decade=${decade}${excludes.length ? `&exclude=${excludes.join(",")}` : ""}&includePlayers=1&mode=${mode}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("roll failed");
         const data = await res.json();
         if (rollSeq.current !== myId) return; // a newer roll superseded this one
         setCurrentTeam(data.team);
         setCurrentReceipt(data.receipt ?? "");
+        setCurrentPlayers(Array.isArray(data.players) ? data.players : null);
       } catch {
         if (rollSeq.current === myId) setError("Couldn't roll a team. Try again.");
       } finally {
@@ -184,7 +190,7 @@ export default function Home() {
         }
       }
     },
-    [decades],
+    [decades, mode],
   );
 
   const startGame = useCallback(async (m: GameMode, type: GameType, dateOverride?: string) => {
@@ -201,27 +207,33 @@ export default function Home() {
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
+    setCurrentPlayers(null);
     setTeamSkips(1);
     setDecadeSkips(1);
     setDailySlots([]);
     setDailyBench(null);
+    setDailyRosters({});
     setError(null);
     setPhase("play");
     setBooting(true);
     try {
       if (type === "daily") {
         const res = await fetch(
-          dateOverride ? `/api/daily?date=${dateOverride}` : "/api/daily",
+          dateOverride
+            ? `/api/daily?date=${dateOverride}&includePlayers=1&mode=hoopiq`
+            : "/api/daily?includePlayers=1&mode=hoopiq",
         );
         if (!res.ok) throw new Error("load failed");
-        const { date, slots, benchSlot } = (await res.json()) as {
+        const { date, slots, benchSlot, rosters } = (await res.json()) as {
           date: string;
           slots: { team: string; decade: number }[];
           benchSlot: { team: string; decade: number } | null;
+          rosters?: DraftRosterMap;
         };
         setDailyDate(date);
         setDailySlots(slots);
         setDailyBench(benchSlot);
+        setDailyRosters(rosters ?? {});
       } else {
         const res = await fetch("/api/decades");
         if (!res.ok) throw new Error("load failed");
@@ -234,6 +246,36 @@ export default function Home() {
       setBooting(false);
     }
   }, []);
+
+  const beginDailyDraft = useCallback(
+    (daily: {
+      date: string;
+      slots: { team: string; decade: number }[];
+      benchSlot: { team: string; decade: number } | null;
+      rosters?: DraftRosterMap;
+    }) => {
+      setMode("hoopiq");
+      setGameType("daily");
+      setResult(null);
+      setResultRoster([]);
+      setDailyShareToken(null);
+      setCurrentReceipt("");
+      setLineup(KINDS.map(() => null));
+      setCurrentDecade(null);
+      setCurrentTeam(null);
+      setCurrentPlayers(null);
+      setTeamSkips(1);
+      setDecadeSkips(1);
+      setDailySlots(daily.slots);
+      setDailyBench(daily.benchSlot);
+      setDailyRosters(daily.rosters ?? {});
+      setDailyDate(daily.date);
+      setError(null);
+      setPhase("play");
+      setBooting(false);
+    },
+    [],
+  );
 
   // Retry persisting a completion whose save never confirmed (the lock kept its
   // picks). "saved" = the server now has it; "rejected" = picks invalid, so no
@@ -286,14 +328,26 @@ export default function Home() {
       setDailyGateError(null);
       setDailyChecking(true);
       try {
-        const res = await fetch("/api/daily/result", {
+        const res = await fetch("/api/daily/start", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ name: u.username, pin: u.pin, date }),
         });
-        if (!res.ok) throw new Error(`lookup ${res.status}`);
-        const { result } = await res.json();
-        if (result) {
+        if (!res.ok) throw new Error(`start ${res.status}`);
+        const data = (await res.json()) as
+          | {
+              status: "played";
+              date: string;
+              result: unknown;
+            }
+          | {
+              status: "open";
+              date: string;
+              slots: { team: string; decade: number }[];
+              benchSlot: { team: string; decade: number } | null;
+              rosters?: DraftRosterMap;
+            };
+        if (data.status === "played") {
           // Already completed this date → show the result/compare, don't re-draft.
           // The server owns the gate now, so drop any stale same-device lock.
           clearPendingDaily(date, u);
@@ -325,7 +379,8 @@ export default function Home() {
           setDailyChecking(false);
         }
         // Server CONFIRMED no stored result (and nothing pending) → safe to draft.
-        startGame("classic", "daily", dateOverride);
+        if (data.status !== "open") throw new Error("bad start payload");
+        beginDailyDraft(data);
       } catch {
         // Fail closed: never draft on a lookup failure (that's the replay hole).
         setDailyChecking(false);
@@ -334,7 +389,7 @@ export default function Home() {
         );
       }
     },
-    [startGame, flushPendingDaily],
+    [beginDailyDraft, flushPendingDaily],
   );
 
   // Pull the signed-in account's completions for the replayable window and mirror
@@ -442,9 +497,11 @@ export default function Home() {
     setCurrentReceipt("");
     setDailySlots([]);
     setDailyBench(null);
+    setDailyRosters({});
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
+    setCurrentPlayers(null);
   };
 
   // Advance the round. Daily mode uses fixed, seeded slots; free play rolls.
@@ -550,6 +607,7 @@ export default function Home() {
       const newDecade = pickWeightedDecade(others, usage);
       setCurrentDecade(newDecade);
       setCurrentReceipt(receipts?.[newDecade] ?? "");
+      setCurrentPlayers(null);
     } catch {
       if (rollSeq.current === myId) {
         setError("Couldn't skip the decade. Try again.");
@@ -1176,6 +1234,7 @@ export default function Home() {
             mode={gameType === "daily" ? "daily" : mode}
             dailyBench={gameType === "daily" ? dailyBench : null}
             dailyDate={gameType === "daily" ? dailyDate : null}
+            preloadedRosters={gameType === "daily" ? dailyRosters : undefined}
             onBack={backToMenu}
           />
         </section>
@@ -1193,12 +1252,20 @@ export default function Home() {
                 ? { team: currentTeam, decade: currentDecade, receipt: currentReceipt }
                 : null
             }
+            sourcePlayers={
+              currentTeam && currentDecade !== null
+                ? gameType === "daily"
+                  ? dailyRosters[draftSourceKey({ team: currentTeam, decade: currentDecade })] ?? null
+                  : currentPlayers
+                : null
+            }
             rolling={rolling}
             mode={mode}
             allowRespin={gameType === "free"}
             onConsumeSource={() => {
               setCurrentDecade(null);
               setCurrentTeam(null);
+              setCurrentPlayers(null);
             }}
             onNoneEligible={() =>
               rollRound({

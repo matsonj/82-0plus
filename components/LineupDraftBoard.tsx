@@ -26,6 +26,7 @@ export function LineupDraftBoard({
   lineup,
   setLineup,
   source,
+  sourcePlayers = null,
   rolling = false,
   mode,
   allowRespin = false,
@@ -45,6 +46,7 @@ export function LineupDraftBoard({
   // advancing. `team` is null while a roll's team reel is still spinning. `receipt`
   // is the signed roll receipt (main game) or "" (board play).
   source: { team: string | null; decade: number; receipt?: string } | null;
+  sourcePlayers?: PublicPlayer[] | null;
   rolling?: boolean;
   mode: GameMode;
   allowRespin?: boolean;
@@ -240,6 +242,7 @@ export function LineupDraftBoard({
                 team={source.team}
                 decade={source.decade}
                 mode={mode}
+                players={sourcePlayers}
                 allowRespin={allowRespin}
                 draftable={draftable}
                 onPick={pick}

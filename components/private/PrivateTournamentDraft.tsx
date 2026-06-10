@@ -25,6 +25,7 @@ import {
   type DraftPick,
 } from "@/lib/privateDraftStorage";
 import type { PrivatePartialResponse } from "@/components/private/types";
+import { draftSourceKey, type DraftRosterMap } from "@/lib/draftSources";
 
 // The five lineup positions, board order [G,FLEX,W,FLEX,B].
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
@@ -56,6 +57,7 @@ export function PrivateTournamentDraft({
   mode,
   name,
   pin,
+  rosters,
   onComplete,
 }: {
   tournamentId: string;
@@ -64,6 +66,7 @@ export function PrivateTournamentDraft({
   mode: PrivateMode;
   name: string;
   pin: string;
+  rosters?: DraftRosterMap;
   onComplete: () => void;
 }) {
   const gameMode = listMode(mode);
@@ -103,16 +106,20 @@ export function PrivateTournamentDraft({
       // persisted — a resume re-enters at the draft and re-runs /partial.)
       const combos = new Map<string, { team: string; decade: number }>();
       for (const p of saved.picks) combos.set(`${p.team}|${p.decade}`, p);
-      const rosters = new Map<string, PublicPlayer[]>();
+      const loadedRosters = new Map<string, PublicPlayer[]>(
+        Object.entries(rosters ?? {}),
+      );
       await Promise.all(
         [...combos.values()].map(async (c) => {
+          const key = draftSourceKey(c);
+          if (loadedRosters.has(key)) return;
           try {
             const r = await fetch(
-              `/api/players?team=${c.team}&decade=${c.decade}&mode=classic`,
+              `/api/players?team=${c.team}&decade=${c.decade}&mode=${gameMode}`,
             );
             if (r.ok) {
               const d = await r.json();
-              rosters.set(`${c.team}|${c.decade}`, (d.players as PublicPlayer[]) ?? []);
+              loadedRosters.set(key, (d.players as PublicPlayer[]) ?? []);
             }
           } catch {
             /* a missing roster leaves a stub */
@@ -124,7 +131,9 @@ export function PrivateTournamentDraft({
         return;
       }
       const findPlayer = (id: string, team: string, decade: number): PublicPlayer =>
-        rosters.get(`${team}|${decade}`)?.find((p) => p.entity_id === id) ??
+        loadedRosters
+          .get(draftSourceKey({ team, decade }))
+          ?.find((p) => p.entity_id === id) ??
         stubPlayer(id);
 
       const next: (LineupEntry | null)[] = [null, null, null, null, null];
@@ -153,7 +162,7 @@ export function PrivateTournamentDraft({
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey]);
+  }, [draftKey, gameMode, rosters]);
 
   // ---- Persist on every change (after the initial load). ----
   useEffect(() => {
@@ -281,6 +290,7 @@ export function PrivateTournamentDraft({
         initialLineup={lineup}
         mode={mode}
         dailyBench={board.benchSlot}
+        preloadedRosters={rosters}
         privateConfig={{
           tournamentId,
           name,
@@ -302,6 +312,7 @@ export function PrivateTournamentDraft({
         lineup={lineup}
         setLineup={setLineup}
         source={reveal ? { team: reveal.team, decade: reveal.decade, receipt: "" } : null}
+        sourcePlayers={reveal ? rosters?.[draftSourceKey(reveal)] ?? null : null}
         mode={gameMode}
         allowCancelPending={false}
         allowRespin={false}

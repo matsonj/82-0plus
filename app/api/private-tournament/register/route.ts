@@ -8,6 +8,7 @@ import {
   listPrivateEntries,
   registerPrivateEntry,
 } from "@/lib/privateTournamentQueries";
+import { getDraftRosters } from "@/lib/draftSourceRosters";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ const UUID_RE =
 
 export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);
+  const queryOptions = { sessionHint: sessionHint.value };
   try {
     const body = await req.json();
 
@@ -68,10 +70,12 @@ export async function POST(req: NextRequest) {
     // entrant can resume drafting.
     const existing = await getPrivateEntry(tournamentId, auth.userId);
     if (existing) {
+      const sources = [...tournament.board.slots, tournament.board.benchSlot];
       return jsonWithSessionHint(sessionHint, {
         entryId: existing.entryId,
         status: existing.status,
         board: tournament.board,
+        rosters: await getDraftRosters(sources, tournament.mode, queryOptions),
         size: tournament.size,
         mode: tournament.mode,
       });
@@ -95,10 +99,12 @@ export async function POST(req: NextRequest) {
       userName: auth.name,
     });
 
+    const sources = [...tournament.board.slots, tournament.board.benchSlot];
     return jsonWithSessionHint(sessionHint, {
       entryId,
       status: "registered",
       board: tournament.board,
+      rosters: await getDraftRosters(sources, tournament.mode, queryOptions),
       size: tournament.size,
       mode: tournament.mode,
     });
