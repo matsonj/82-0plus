@@ -18,7 +18,6 @@ export async function GET(req: NextRequest) {
     const requested = (req.nextUrl.searchParams.get("date") ?? "").slice(0, 10);
     const date = isPlayableDailyDate(requested) ? requested : pacificDate();
     const includePlayers = req.nextUrl.searchParams.get("includePlayers") === "1";
-    const mode = req.nextUrl.searchParams.get("mode") === "classic" ? "classic" : "hoopiq";
     // The board is the 5 starter slots + a 6th bench slot (for the daily
     // tournament's sixth man). The starter slots are unchanged from before.
     const { slots, benchSlot } = await computeDailyBoard(date, queryOptions);
@@ -30,7 +29,7 @@ export async function GET(req: NextRequest) {
     } = { date, slots, benchSlot };
     if (includePlayers) {
       const sources = [...slots, ...(benchSlot ? [benchSlot] : [])];
-      body.rosters = await getDraftRosters(sources, mode, queryOptions);
+      body.rosters = await getDraftRosters(sources, "hoopiq", queryOptions);
     }
     return jsonWithSessionHint(sessionHint, body);
   } catch (err) {

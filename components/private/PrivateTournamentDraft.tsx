@@ -313,6 +313,7 @@ export function PrivateTournamentDraft({
         setLineup={setLineup}
         source={reveal ? { team: reveal.team, decade: reveal.decade, receipt: "" } : null}
         sourcePlayers={reveal ? rosters?.[draftSourceKey(reveal)] ?? null : null}
+        sourcePlayersMode={reveal ? gameMode : null}
         mode={gameMode}
         allowCancelPending={false}
         allowRespin={false}

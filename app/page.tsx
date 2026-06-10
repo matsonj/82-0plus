@@ -153,6 +153,25 @@ export default function Home() {
   const draftedCount = lineup.filter(Boolean).length;
   const draftDone = draftedCount === KINDS.length;
 
+  const resetDraftState = useCallback((nextMode: GameMode, nextType: GameType) => {
+    setMode(nextMode);
+    setGameType(nextType);
+    setResult(null);
+    setResultRoster([]);
+    setDailyShareToken(null);
+    setCurrentReceipt("");
+    setLineup(KINDS.map(() => null));
+    setCurrentDecade(null);
+    setCurrentTeam(null);
+    setCurrentPlayers(null);
+    setTeamSkips(1);
+    setDecadeSkips(1);
+    setDailySlots([]);
+    setDailyBench(null);
+    setDailyRosters({});
+    setError(null);
+  }, []);
+
   const rollRound = useCallback(
     async (opts: { decade?: number; excludeTeam?: string } = {}) => {
       if (decades.length === 0) return;
@@ -198,22 +217,7 @@ export default function Home() {
     // authoritative (it checks /api/daily/result and fails closed). startGame must
     // not re-gate on the local cache, or a stale localStorage entry could silently
     // block valid play after the server already confirmed no result.
-    setMode(type === "daily" ? "hoopiq" : m); // daily hides stats like Ranked
-    setGameType(type);
-    setResult(null);
-    setResultRoster([]);
-    setDailyShareToken(null);
-    setCurrentReceipt("");
-    setLineup(KINDS.map(() => null));
-    setCurrentDecade(null);
-    setCurrentTeam(null);
-    setCurrentPlayers(null);
-    setTeamSkips(1);
-    setDecadeSkips(1);
-    setDailySlots([]);
-    setDailyBench(null);
-    setDailyRosters({});
-    setError(null);
+    resetDraftState(type === "daily" ? "hoopiq" : m, type); // daily hides stats like Ranked
     setPhase("play");
     setBooting(true);
     try {
@@ -245,7 +249,7 @@ export default function Home() {
     } finally {
       setBooting(false);
     }
-  }, []);
+  }, [resetDraftState]);
 
   const beginDailyDraft = useCallback(
     (daily: {
@@ -254,18 +258,7 @@ export default function Home() {
       benchSlot: { team: string; decade: number } | null;
       rosters?: DraftRosterMap;
     }) => {
-      setMode("hoopiq");
-      setGameType("daily");
-      setResult(null);
-      setResultRoster([]);
-      setDailyShareToken(null);
-      setCurrentReceipt("");
-      setLineup(KINDS.map(() => null));
-      setCurrentDecade(null);
-      setCurrentTeam(null);
-      setCurrentPlayers(null);
-      setTeamSkips(1);
-      setDecadeSkips(1);
+      resetDraftState("hoopiq", "daily");
       setDailySlots(daily.slots);
       setDailyBench(daily.benchSlot);
       setDailyRosters(daily.rosters ?? {});
@@ -274,7 +267,7 @@ export default function Home() {
       setPhase("play");
       setBooting(false);
     },
-    [],
+    [resetDraftState],
   );
 
   // Retry persisting a completion whose save never confirmed (the lock kept its
@@ -1259,6 +1252,7 @@ export default function Home() {
                   : currentPlayers
                 : null
             }
+            sourcePlayersMode={currentTeam && currentDecade !== null ? mode : null}
             rolling={rolling}
             mode={mode}
             allowRespin={gameType === "free"}

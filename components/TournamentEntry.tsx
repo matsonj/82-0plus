@@ -299,6 +299,13 @@ export function TournamentEntry({
       teamNameCheck.ok &&
       pinOk &&
       !submitting;
+  const fixedBenchRoster =
+    currentTeam && currentDecade !== null
+      ? preloadedRosters?.[
+          draftSourceKey({ team: currentTeam, decade: currentDecade })
+        ]
+      : undefined;
+  const benchPlayers = fixedBenchRoster ?? currentPlayers;
 
   const submit = async () => {
     if (!canSubmit || captainSlot === null || !sixth) return;
@@ -544,10 +551,9 @@ export function TournamentEntry({
                 team={currentTeam}
                 decade={currentDecade}
                 mode={listMode}
-                players={
-                  preloadedRosters?.[
-                    draftSourceKey({ team: currentTeam, decade: currentDecade })
-                  ] ?? currentPlayers
+                players={benchPlayers}
+                playersMode={
+                  benchPlayers !== null && benchPlayers !== undefined ? listMode : null
                 }
                 allowRespin={!benchIsFixed}
                 draftable={draftable}
