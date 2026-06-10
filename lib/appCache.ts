@@ -7,7 +7,8 @@ import { queryRW, type QueryParam } from "./tournamentDb";
 // The player card alone ran that ~39k times/month at ~265ms each. The source is
 // append-only NBA history that changes at most once/day, so we MATERIALIZE what
 // those queries need into a separate `app_cache` database the app owns (via the
-// RW token — the read token can't write) and refresh it lazily / on a daily cron.
+// RW token — the read token can't write) and refresh it lazily: a gated,
+// background stale-while-revalidate check rebuilds it when the source changes.
 //
 // `app_cache` is owned by MOTHERDUCK_RW_TOKEN, so reads of it go through the RW
 // pool (lib/tournamentDb), same as the tournament tables. The lookups are now a
@@ -32,12 +33,19 @@ export function readCache<T = Record<string, unknown>>(
 //
 // 1. game_quality — a straight snapshot of the live view. The expensive
 //    self-join runs exactly ONCE here; everything downstream reads the table.
+//    Physically sorted by entity_id so the rebuild joins below (which group per
+//    entity) get row-group locality. DuckDB stores rows in CTAS order and keeps
+//    per-row-group min/max zonemaps, so the sort also prunes any future
+//    entity-keyed scan of this table.
 const BUILD_GAME_QUALITY = `CREATE OR REPLACE TABLE ${ACDB}.game_quality AS
-  SELECT * FROM ${SRC}.game_quality`;
+  SELECT * FROM ${SRC}.game_quality ORDER BY entity_id`;
 
 // 2. player_season_stats — the player-card rollup (lib/queries.getPlayerSeasonHistory),
-//    pre-aggregated for ALL players keyed by entity_id. The card query becomes
-//    `WHERE entity_id = $1 ORDER BY season`. GQ comes from the materialized table.
+//    pre-aggregated for ALL players keyed by entity_id. The card query is
+//    `WHERE entity_id = $1 ORDER BY season`, so the table is physically sorted
+//    `entity_id, season`: DuckDB's per-row-group min/max zonemaps then skip every
+//    row group that can't contain the entity (this is the hot read path). GQ
+//    comes from the materialized table.
 const BUILD_PLAYER_SEASON_STATS = `CREATE OR REPLACE TABLE ${ACDB}.player_season_stats AS
   SELECT g.entity_id,
          s.season_year AS season,
@@ -64,7 +72,8 @@ const BUILD_PLAYER_SEASON_STATS = `CREATE OR REPLACE TABLE ${ACDB}.player_season
    WHERE g.game_quality >= 0
      AND s.season_type = 'Regular Season'
    GROUP BY g.entity_id, s.season_year
-  HAVING count(*) >= 5`;
+  HAVING count(*) >= 5
+   ORDER BY g.entity_id, season`;
 
 // 3. player_index — mirrors lib/queries.computePlayerIndexLive, but sources GQ
 //    from the materialized table (fast) and adds a `debut` column (career first
@@ -228,23 +237,24 @@ function runBuild(): Promise<void> {
   return globalThis.__app_cache_build__;
 }
 
-/** Force a full rebuild (used by the daily cron). Awaits completion. */
+/** Force a full rebuild (the manual scripts/buildCache.ts entrypoint). Awaits completion. */
 export function rebuildCache(): Promise<void> {
   return runBuild();
 }
 
 // Don't re-check freshness more than this often per process (avoids a fingerprint
-// round-trip on every request). The cron is the primary trigger; this is a backstop.
+// round-trip on every request).
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1h
 // Consider the cache stale after this long even if the fingerprint check is gated.
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 
 /**
- * Lazy stale-while-revalidate backstop. Cheap, gated to once/hour per process,
- * and NON-blocking for the caller (schedule it via `after()`): it serves the
- * current snapshot and rebuilds in the background only when the source actually
- * changed or the cache is missing/old. NEVER call this on the synchronous read
- * path — the rebuild is multi-second.
+ * Lazy stale-while-revalidate refresh — the cache's self-healing mechanism.
+ * Cheap, gated to once/hour per process, and NON-blocking for the caller
+ * (schedule it via `after()`): callers serve the current snapshot and this
+ * rebuilds in the background only when the source actually changed or the cache
+ * is missing/old. NEVER call it on the synchronous read path — the rebuild is
+ * multi-second.
  */
 export async function refreshCacheIfStale(): Promise<void> {
   const now = Date.now();

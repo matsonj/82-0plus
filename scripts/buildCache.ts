@@ -1,7 +1,7 @@
 /**
  * buildCache.ts — build/refresh the `app_cache` derived-data cache once, then
- * verify it. One-off dev/ops helper; in production the daily cron
- * (/api/cron/refresh-cache) and the lazy backstop do this automatically.
+ * verify it. One-off dev/ops helper; in production the lazy stale-while-
+ * revalidate check (lib/appCache.refreshCacheIfStale) does this automatically.
  *
  * HOW TO RUN:  npx tsx scripts/buildCache.ts
  *   Tokens load from .env.local (see ./_env). Needs MOTHERDUCK_RW_TOKEN (its
