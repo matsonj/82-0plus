@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
+import { jsonPublicCacheable } from "@/lib/publicCache";
 import { getBracketByIdRO } from "@/lib/tournamentReadQueries";
 import { stripBreakdown } from "@/lib/tournamentRun";
 import type { BracketResult } from "@/lib/types";
@@ -47,7 +48,9 @@ export async function GET(req: NextRequest) {
     }
 
     const out = DEBUG ? bracket : stripBreakdown(bracket);
-    return jsonWithSessionHint(sessionHint, { bracket: out, daily: row.daily });
+    // A finalized bracket is immutable historical data, so the 200 is CDN-cached
+    // and drops the session-hint cookie. The 400/404/500 paths above stay uncached.
+    return jsonPublicCacheable({ bracket: out, daily: row.daily });
   } catch (err) {
     console.error("[/api/tournament/bracket]", err);
     return jsonWithSessionHint(

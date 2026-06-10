@@ -1,10 +1,14 @@
 import { NextRequest } from "next/server";
 import { getPlayers } from "@/lib/queries";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
+import { jsonPublicCacheable } from "@/lib/publicCache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// (team, decade, mode) fully determines this roster — it's global/public, so the
+// success response is CDN-cached and drops the session-hint cookie. Invalid-param
+// and error responses keep the cookie path and stay uncached.
 export async function GET(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   const queryOptions = { sessionHint: sessionHint.value };
@@ -30,7 +34,7 @@ export async function GET(req: NextRequest) {
     }
 
     const players = await getPlayers(team, decade, mode, queryOptions);
-    return jsonWithSessionHint(sessionHint, { players });
+    return jsonPublicCacheable({ players });
   } catch (err) {
     console.error("[/api/players]", err);
     return jsonWithSessionHint(

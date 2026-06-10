@@ -19,6 +19,12 @@ import { DailyTimeline } from "@/components/DailyTimeline";
 import { DailyLeaderboard } from "@/components/DailyLeaderboard";
 import { DailySignIn } from "@/components/DailySignIn";
 import { getSavedUser } from "@/lib/tournamentSession";
+import {
+  getCachedDailyResults,
+  setCachedDailyResults,
+  type DailyDoneMap,
+  type DailyRank,
+} from "@/lib/dailyResultsCache";
 import { TournamentEntry } from "@/components/TournamentEntry";
 import { GlobalHeader } from "@/components/GlobalHeader";
 import { HowToPlay } from "@/components/HowToPlay";
@@ -81,6 +87,18 @@ function pickWeightedDecade(pool: number[], usage: Record<number, number>): numb
   return pool[pool.length - 1];
 }
 
+// Stale-while-revalidate seed for the daily completion state. Read ONLY on the
+// client; on the server (and therefore the first hydration render, when the cache
+// is always empty) it returns null, so the initial render is deterministic and
+// hydration-safe — the cache is only ever populated by a post-mount fetch. On a
+// client-side remount (navigating back to Home) it returns the last-known results
+// so we paint them immediately instead of the loading skeleton.
+function readDailyResultsSeed() {
+  if (typeof window === "undefined") return null;
+  const u = getSavedUser();
+  return u ? getCachedDailyResults(u.username) : null;
+}
+
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("menu");
   const [mode, setMode] = useState<GameMode>("classic");
@@ -101,9 +119,9 @@ export default function Home() {
   // Drives the menu's "already played" state (today's card + the archive list) so
   // a finished day shows its record instead of "Play" — cross-device, no client
   // cache. daily_results owns this now; we just mirror it for display.
-  const [dailyDone, setDailyDone] = useState<
-    Record<string, { wins: number; losses: number; margin: number; perfect: boolean }>
-  >({});
+  const [dailyDone, setDailyDone] = useState<DailyDoneMap>(
+    () => readDailyResultsSeed()?.done ?? {},
+  );
   const [showHowTo, setShowHowTo] = useState(false);
   const [decades, setDecades] = useState<number[]>([]);
   const [lineup, setLineup] = useState<(LineupEntry | null)[]>(
@@ -139,11 +157,17 @@ export default function Home() {
   // The 7-day strip's "View all" reveals the full back-catalogue (DailyArchive).
   const [archiveOpen, setArchiveOpen] = useState(false);
   // Today's standing among everyone who played it (null until played / loaded).
-  const [dailyRank, setDailyRank] = useState<{ rank: number; total: number } | null>(null);
+  const [dailyRank, setDailyRank] = useState<DailyRank | null>(
+    () => readDailyResultsSeed()?.rank ?? null,
+  );
   // Whether today's completion has resolved (results fetched, or no account to
   // fetch for). Until then we hold a stable placeholder so the daily block can't
-  // flash "Play" and then flip to your result once the fetch lands.
-  const [dailyLoaded, setDailyLoaded] = useState(false);
+  // flash "Play" and then flip to your result once the fetch lands. Seeds true when
+  // a prior in-session fetch left cached results (stale-while-revalidate), so a
+  // remount paints them immediately while the background refetch confirms them.
+  const [dailyLoaded, setDailyLoaded] = useState(
+    () => readDailyResultsSeed() != null,
+  );
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const attemptedDaily = useRef<string | undefined>(undefined);
@@ -222,10 +246,12 @@ export default function Home() {
     setBooting(true);
     try {
       if (type === "daily") {
+        // Always send an explicit Pacific date so the request is CDN-cache-keyed
+        // by day (and can't serve a stale board across midnight). The server only
+        // caches /api/daily when given a valid explicit date.
+        const requestDate = dateOverride ?? pacificDate();
         const res = await fetch(
-          dateOverride
-            ? `/api/daily?date=${dateOverride}&includePlayers=1&mode=hoopiq`
-            : "/api/daily?includePlayers=1&mode=hoopiq",
+          `/api/daily?date=${requestDate}&includePlayers=1&mode=hoopiq`,
         );
         if (!res.ok) throw new Error("load failed");
         const { date, slots, benchSlot, rosters } = (await res.json()) as {
@@ -419,6 +445,18 @@ export default function Home() {
       setDailyLoaded(true);
     }
   }, []);
+
+  // Mirror the resolved completion state into the module cache so a later remount
+  // (Home → /tournament → Home) can paint it immediately instead of the skeleton.
+  // Keyed by the current account; skipped until loaded and when signed out, so we
+  // never cache the empty pre-fetch state. Covers every setter of dailyDone/Rank,
+  // not just refreshDailyResults (e.g. the post-completion refresh).
+  useEffect(() => {
+    if (!dailyLoaded) return;
+    const u = getSavedUser();
+    if (!u) return;
+    setCachedDailyResults(u.username, dailyDone, dailyRank);
+  }, [dailyDone, dailyRank, dailyLoaded]);
 
   // Deep link: /?d=YYYY-MM-DD (from a shared daily link) starts that day's
   // challenge once, gating on login like any other daily.
