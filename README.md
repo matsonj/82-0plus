@@ -143,10 +143,12 @@ npx tsx scripts/tuneTournament.ts [N] [seedKey]
   times/month at ~265ms). `app_cache` (owned by `MOTHERDUCK_RW_TOKEN`) materializes
   it once and builds the downstream rollups — `player_season_stats` (the card),
   `player_index` (+ a `debut` column that retires the per-submit debut query) and
-  `team_decade_weights` (the slot-machine weights). Rebuilt by a daily Vercel cron
-  (`/api/cron/refresh-cache`, see `vercel.json`) with a lazy stale-while-revalidate
-  backstop; `cache_meta` tracks a cheap source fingerprint so an unchanged source
-  skips the multi-second rebuild. The source NBA tables stay read-only.
+  `team_decade_weights` (the slot-machine weights). Self-refreshing: a lazy
+  stale-while-revalidate check (gated to once/hour per instance, fired in the
+  background via `after()` on a cache miss) rebuilds when the source changed;
+  `cache_meta` tracks a cheap source fingerprint so an unchanged source skips the
+  multi-second rebuild. The source NBA tables stay read-only. (`npx tsx
+  scripts/buildCache.ts` builds it by hand.)
 - `lib/scoring.ts` — the roster→record model (GQ talent + construction
   adjustments → net rating → wins)
 - `app/api/{decades,slot,players,simulate,daily,team-decades,og}/route.ts` —
