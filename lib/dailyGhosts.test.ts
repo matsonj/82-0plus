@@ -17,7 +17,7 @@ function mkPlayer(team: string, decade: number, pos: string): IndexedPlayer {
     gp: 70, mpg: 32,
     pts: 20, reb: 6, ast: 5, stl: 1, blk: 0.5,
     fga: 15, fg3a: 4, fg3m: 1.5, fta: 5, tov: 2, fgm: 7, ftm: 4,
-    tsplus: 1, height_in: 79, pos, all_def: 0,
+    tsplus: 1, height_in: 79, pos, all_def: 0, debut: decade + 2,
   };
 }
 

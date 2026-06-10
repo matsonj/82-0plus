@@ -1,30 +1,40 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getPlayerSeasonHistory } from "@/lib/queries";
-import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
+import { scheduleCacheRefresh } from "@/lib/appCache";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 // Career-by-season history for one player (entity_id) → the Classic-mode player
-// card. Read-only, already-public box stats + era-aware median Game Quality.
+// card. The data is global/public, so the response is CDN-cached. We use a SHORT
+// s-maxage + long stale-while-revalidate: the CDN always serves instantly, but
+// background-revalidates within ~10 min — so once a cache rebuild lands, the fresh
+// data propagates quickly instead of being pinned behind a day-long CDN entry
+// built from the stale snapshot. Served from the app_cache rollup (sub-ms); a
+// gated, non-blocking freshness check on the (cheap, background) revalidation
+// keeps app_cache warm. This is the app's single hottest query — caching it here
+// keeps the bulk of the carousel's ±2 prefetch traffic off the function and DB.
+// (No session-hint cookie here: the response is shared/public, and the data comes
+// from app_cache via the RW pool, so read-pool affinity is irrelevant.)
 export async function GET(req: NextRequest) {
-  const sessionHint = getSessionHint(req);
-  const queryOptions = { sessionHint: sessionHint.value };
+  const id = req.nextUrl.searchParams.get("id") ?? "";
+  if (!id || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+    return NextResponse.json({ error: "invalid player id" }, { status: 400 });
+  }
   try {
-    const id = req.nextUrl.searchParams.get("id") ?? "";
-    if (!id || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
-      return jsonWithSessionHint(
-        sessionHint,
-        { error: "invalid player id" },
-        { status: 400 },
-      );
-    }
-    const seasons = await getPlayerSeasonHistory(id, queryOptions);
-    return jsonWithSessionHint(sessionHint, { seasons });
+    const seasons = await getPlayerSeasonHistory(id);
+    scheduleCacheRefresh(); // background (after()), runs only on a cache MISS
+    return NextResponse.json(
+      { seasons },
+      {
+        headers: {
+          "Cache-Control":
+            "public, s-maxage=600, stale-while-revalidate=86400",
+        },
+      },
+    );
   } catch (err) {
     console.error("[/api/player]", err);
-    return jsonWithSessionHint(
-      sessionHint,
+    return NextResponse.json(
       { error: "Couldn't load that player right now." },
       { status: 500 },
     );

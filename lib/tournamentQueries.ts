@@ -95,38 +95,26 @@ export function getStatNorms(options: QueryOptions = {}): Promise<StatNorms> {
 
 // ── Debut seasons (age proxy) ────────────────────────────────────────────────
 
-interface DebutRow {
-  entity_id: string;
-  debut: number;
-}
-
 /**
- * MIN(season_year) per entity_id from box_scores → schedule (Regular Season,
- * FullGame). Powers the age proxy (ageAtPeak = best_season − debut_season) until
- * a real age/birthdate field exists. Returns a Map of entity_id → debut year.
+ * Career debut season (MIN Regular-Season year) per entity_id. Powers the age
+ * proxy (ageAtPeak = best_season − debut_season) until a real age/birthdate
+ * field exists. Derived in-memory from the cached player index — which now
+ * carries a `debut` column — so it costs no DB round-trip. Returns a Map of
+ * entity_id → debut year (missing entries fall back to NEUTRAL_EXP at the call site).
  */
 export async function getDebutSeasons(
   entityIds: string[],
   options: QueryOptions = {},
 ): Promise<Map<string, number>> {
-  const ids = [...new Set(entityIds)].filter((id) => id);
-  if (ids.length === 0) return new Map();
-  // A parameterized IN (...) list — the DuckDB pg endpoint doesn't bind a
-  // Postgres array literal to `= ANY($1)` reliably, so expand to $1,$2,….
-  const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
-  const rows = await query<DebutRow>(
-    `SELECT b.entity_id AS entity_id, MIN(s.season_year) AS debut
-       FROM ${DB}.box_scores b
-       JOIN ${DB}.schedule s USING (game_id)
-      WHERE b.period = 'FullGame'
-        AND s.season_type = 'Regular Season'
-        AND b.entity_id IN (${placeholders})
-      GROUP BY 1`,
-    ids,
-    options,
-  );
+  const ids = new Set(entityIds.filter((id) => id));
+  if (ids.size === 0) return new Map();
+  const index = await getPlayerIndex(options);
   const map = new Map<string, number>();
-  for (const r of rows) map.set(r.entity_id, r.debut);
+  for (const p of index) {
+    if (ids.has(p.entity_id) && p.debut != null && !map.has(p.entity_id)) {
+      map.set(p.entity_id, p.debut);
+    }
+  }
   return map;
 }
 

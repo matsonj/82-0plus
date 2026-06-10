@@ -133,10 +133,22 @@ npx tsx scripts/tuneTournament.ts [N] [seedKey]
   MotherDuck's PostgreSQL endpoint. Pool cache entries are keyed by
   `session_hint`; `MOTHERDUCK_PG_POOL_MAX` and `MOTHERDUCK_PG_POOL_CACHE_MAX`
   tune local Node connection reuse, not the MotherDuck read-scaling pool size.
-- `lib/queries.ts` — decades, season-weighted team pool, peak-season player list.
-  Reads the materialized `nba_box_scores_v2.main.player_index` table for fast cold
-  starts (falls back to live compute if missing) — refresh it after backfilling
-  box scores.
+- `lib/queries.ts` — decades, season-weighted team pool, peak-season player list,
+  player-card season history. Hot reads are served from the self-managed
+  `app_cache` database (see `lib/appCache.ts`), each falling back to a live query
+  if the cache isn't built yet.
+- `lib/appCache.ts` — self-managed derived-data cache. The `game_quality` VIEW does
+  a within-week round-robin self-join over ~1.46M box-score rows, so recomputing it
+  per request was the app's dominant latency (the player card alone ran it ~39k
+  times/month at ~265ms). `app_cache` (owned by `MOTHERDUCK_RW_TOKEN`) materializes
+  it once and builds the downstream rollups — `player_season_stats` (the card),
+  `player_index` (+ a `debut` column that retires the per-submit debut query) and
+  `team_decade_weights` (the slot-machine weights). Self-refreshing: a lazy
+  stale-while-revalidate check (gated to once/hour per instance, fired in the
+  background via `after()` on a cache miss) rebuilds when the source changed;
+  `cache_meta` tracks a cheap source fingerprint so an unchanged source skips the
+  multi-second rebuild. The source NBA tables stay read-only. (`npx tsx
+  scripts/buildCache.ts` builds it by hand.)
 - `lib/scoring.ts` — the roster→record model (GQ talent + construction
   adjustments → net rating → wins)
 - `app/api/{decades,slot,players,simulate,daily,team-decades,og}/route.ts` —

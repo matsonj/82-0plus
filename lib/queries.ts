@@ -1,4 +1,5 @@
 import { query, type QueryOptions } from "./motherduck";
+import { ACDB, readCache, isCacheReady, scheduleCacheRefresh } from "./appCache";
 import { eligiblePositions, positionRank } from "./positions";
 import type { GameMode, PublicPlayer, SimPick, SimRosterLine } from "./types";
 import type { ScoringPlayer } from "./scoring";
@@ -45,6 +46,7 @@ export interface IndexedPlayer {
   height_in: number; // real height in inches (default ~league avg if bio missing)
   pos: string | null; // real basketball-reference position (null → derive from box line)
   all_def: number; // All-Defensive team on best_season: 1 (1st), 2 (2nd), 0 (none)
+  debut: number; // career first Regular-Season year (powers the age proxy; was a separate query)
 }
 
 /**
@@ -91,12 +93,48 @@ export async function getPlayableTeams(
   );
 }
 
-/** Teams that appear in a decade, with a weight = number of seasons present. */
+/** Weight = number of distinct seasons a team appears in a decade. */
+export interface TeamWeight {
+  team: string;
+  weight: number;
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __team_weights__: Promise<Map<number, TeamWeight[]> | null> | undefined;
+}
+
+/** Whole `team_decade_weights` table loaded once (decade → weight-desc teams).
+ *  Resolves null if the cache table is missing/empty so callers fall back live. */
+function getTeamWeightsCache(): Promise<Map<number, TeamWeight[]> | null> {
+  if (!globalThis.__team_weights__) {
+    globalThis.__team_weights__ = (async () => {
+      const rows = await readCache<{ decade: number } & TeamWeight>(
+        `SELECT decade, team, weight FROM ${ACDB}.team_decade_weights ORDER BY weight DESC`,
+      );
+      if (rows.length === 0) return null;
+      const byDecade = new Map<number, TeamWeight[]>();
+      for (const r of rows) {
+        const list = byDecade.get(r.decade) ?? [];
+        list.push({ team: r.team, weight: r.weight });
+        byDecade.set(r.decade, list);
+      }
+      return byDecade;
+    })().catch(() => null); // cache not built yet → fall back to the live query
+  }
+  return globalThis.__team_weights__;
+}
+
+/** Teams that appear in a decade, with a weight = number of seasons present.
+ *  Served from the in-memory cache; falls back to the live view if unbuilt. */
 export async function getTeamWeights(
   decade: number,
   options: QueryOptions = {},
-): Promise<{ team: string; weight: number }[]> {
-  return query<{ team: string; weight: number }>(
+): Promise<TeamWeight[]> {
+  const cache = await getTeamWeightsCache();
+  if (cache) return cache.get(decade) ?? [];
+  globalThis.__team_weights__ = undefined; // null result isn't cached → retry next call
+  return query<TeamWeight>(
     `SELECT b.team_abbreviation AS team,
             count(DISTINCT s.season_year) AS weight
        FROM ${DB}.box_scores b
@@ -117,28 +155,32 @@ declare global {
 }
 
 /**
- * Read the precomputed index. Prefers the materialized
- * `nba_box_scores_v2.main.player_index` table (a fast SELECT — refresh it after
- * a backfill with the CREATE OR REPLACE of computePlayerIndexLive's SQL), and
- * falls back to computing it live if the table is missing or empty.
+ * Read the precomputed index. Prefers the self-managed `app_cache.main.player_index`
+ * table (a fast SELECT, refreshed by lib/appCache), and falls back to computing it
+ * live against the view if the cache is missing or empty.
+ *
+ * Nearly every route except /api/player funnels through here, so this is also
+ * where the cache reconciles: scheduleCacheRefresh() registers a gated
+ * (≤1×/hour/process), non-blocking check via after() that drops stale warm
+ * globals + rebuilds when the source changed — so any route process self-heals,
+ * not just ones that hit /api/player.
  */
 export function getPlayerIndex(
   options: QueryOptions = {},
 ): Promise<IndexedPlayer[]> {
+  scheduleCacheRefresh();
   if (!globalThis.__player_index__) {
     globalThis.__player_index__ = (async () => {
       try {
-        const rows = await query<IndexedPlayer>(
+        const rows = await readCache<IndexedPlayer>(
           `SELECT entity_id, player_name, team, decade, best_season, value, gp, mpg,
                   pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m, fgm, ftm, tsplus,
-                  height_in, pos, all_def
-             FROM ${DB}.player_index`,
-          [],
-          options,
+                  height_in, pos, all_def, debut
+             FROM ${ACDB}.player_index`,
         );
         if (rows.length > 0) return rows;
       } catch {
-        // table missing → fall through to live compute
+        // cache missing → fall through to live compute
       }
       return computePlayerIndexLive(options);
     })().catch((err) => {
@@ -191,6 +233,14 @@ function computePlayerIndexLive(
           WHERE b.period = 'FullGame' AND s.season_type = 'Regular Season'
           GROUP BY 1
        ),
+       -- Career first Regular-Season year per entity (powers the age proxy).
+       debut_cte AS (
+         SELECT b.entity_id, MIN(s.season_year) AS debut
+           FROM ${DB}.box_scores b
+           JOIN ${DB}.schedule s USING (game_id)
+          WHERE b.period = 'FullGame' AND s.season_type = 'Regular Season'
+          GROUP BY 1
+       ),
        ranked AS (
          SELECT *,
                 row_number() OVER (
@@ -239,9 +289,11 @@ function computePlayerIndexLive(
               -- Real height/position (b-ref) + All-Defense on the card's season.
               COALESCE(pb.height_in, 79) AS height_in,
               pb.pos AS pos,
-              COALESCE(ad.all_team, 0) AS all_def
+              COALESCE(ad.all_team, 0) AS all_def,
+              dc.debut AS debut
          FROM ranked r
          JOIN league_ts lt ON lt.season_year = r.season_year
+         LEFT JOIN debut_cte dc ON dc.entity_id = r.entity_id
          LEFT JOIN ${DB}.player_bio pb ON pb.entity_id = r.entity_id
          LEFT JOIN ${DB}.all_defense ad ON ad.entity_id = r.entity_id AND ad.season_year = r.season_year
         WHERE rn = 1`,
@@ -273,14 +325,35 @@ export interface PlayerSeasonRow {
 /**
  * Full career-by-season history for ONE player (by entity_id): median Game Quality
  * and the nine box categories per game, season by season. Powers the Classic-mode
- * player card. Reads `game_quality` directly (not the cached index), so it always
- * reflects the live era-aware view. Seasons are merged across teams (a traded-
- * mid-year player gets one combined row), oldest first.
+ * player card. Served from the `app_cache.player_season_stats` rollup (refreshed
+ * daily from the era-aware view), falling back to the live view if unbuilt.
+ * Seasons are merged across teams (a traded-mid-year player gets one combined
+ * row), oldest first.
  */
 export async function getPlayerSeasonHistory(
   entityId: string,
   options: QueryOptions = {},
 ): Promise<PlayerSeasonRow[]> {
+  // Fast path: the pre-aggregated rollup (sub-ms indexed lookup). Falls back to
+  // the live view if the cache isn't built yet (then it's empty for this id).
+  try {
+    const cached = await readCache<PlayerSeasonRow>(
+      `SELECT season, team, gq, usg, gp, pts, reb, ast, stl, blk,
+              fg_pct, ft_pct, tov, fg3m, all_def
+         FROM ${ACDB}.player_season_stats
+        WHERE entity_id = $1
+        ORDER BY season`,
+      [entityId],
+    );
+    if (cached.length > 0) return cached;
+    // A built cache returning no rows means this id has no qualifying (>=5-game)
+    // seasons — exactly what the live view would return — so don't pay the
+    // self-join. Only fall through when the cache isn't built yet; this stops
+    // random valid-format ids from bypassing the cache into the expensive view.
+    if (await isCacheReady()) return cached;
+  } catch {
+    // cache unavailable → fall through to the live view
+  }
   return query<PlayerSeasonRow>(
     `SELECT s.season_year AS season,
             mode(b.team_abbreviation) AS team,
