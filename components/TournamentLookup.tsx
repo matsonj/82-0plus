@@ -9,6 +9,7 @@ import type {
   TournamentRunResponse,
   TournamentMode,
   BracketPlayer,
+  MyPrivateRow,
 } from "@/lib/types";
 import {
   validateName,
@@ -21,37 +22,13 @@ import { TournamentResults } from "@/components/TournamentResults";
 import { TierBadge } from "@/components/TierBadge";
 import { PrivateTournamentCreate } from "@/components/private/PrivateTournamentCreate";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
+import { getCachedTeams, patchCachedTeams } from "@/lib/tournamentTeamsCache";
 import {
   reachedRoundLabel,
   formatPrivateEntryStatus,
   formatTournamentStatus,
   formatSignedMargin,
 } from "@/lib/tournamentLabels";
-
-// One private tournament row from POST /api/private-tournament/my — the full
-// list of tournaments the account has an entry in (newest first), INCLUDING
-// viewed-completed ones (unlike /notifications). `needsAttention` drives the
-// unread dot.
-interface MyPrivateRow {
-  tournamentId: string;
-  name: string;
-  mode: string;
-  modeLabel: string;
-  size: number;
-  status: "open" | "completed";
-  championName: string | null;
-  expiresAt: string;
-  finalizedAt: string | null;
-  viewedFinalAt: string | null;
-  entryStatus: string;
-  finalRecordW: number | null;
-  finalRecordL: number | null;
-  finalStatus: string | null;
-  provisionalRecordW: number | null;
-  provisionalRecordL: number | null;
-  provisionalStatus: string | null;
-  needsAttention: boolean;
-}
 
 // The My-Teams filters. daily/hoopiq/classic filter the existing team list by
 // TournamentMode; "private" swaps to the private-tournament feed; "all" clears the
@@ -380,6 +357,7 @@ export function TournamentLookup({
         }
         const data = (await res.json()) as TournamentLookupResponse;
         saveUser({ username: uname, pin: upin }); // stay logged in
+        patchCachedTeams(uname, upin, { lookup: data }); // SWR seed for remounts
         setLookup(data);
         setPage(0);
         setView("list");
@@ -423,6 +401,7 @@ export function TournamentLookup({
         }
         const data = (await res.json()) as { tournaments: MyPrivateRow[] };
         saveUser({ username: uname, pin: upin }); // stay logged in
+        patchCachedTeams(uname, upin, { privateRows: data.tournaments ?? [] });
         setPrivateRows(data.tournaments ?? []);
         if (boot) {
           setTab("private");
@@ -455,6 +434,33 @@ export function TournamentLookup({
     }
     setName(saved.username);
     setPin(saved.pin);
+
+    // Stale-while-revalidate: if an earlier in-session visit left this account's
+    // list cached, paint it immediately (skip the booting loader) and refetch
+    // quietly in the background. This kills the list flash on Home <-> /tournament
+    // navigation. A cold load (no cached entry) still blocks on the first fetch.
+    const cached = getCachedTeams(saved.username, saved.pin);
+    const seeded =
+      initialTab === "private" ? cached?.privateRows != null : cached?.lookup != null;
+    if (seeded) {
+      if (initialTab === "private") {
+        setPrivateRows(cached!.privateRows);
+        setTab("private");
+      } else {
+        setLookup(cached!.lookup);
+      }
+      setPage(0);
+      setView("list");
+      setBootingSession(false);
+      // Revalidate without the loader gate (silent for the team lookup).
+      if (initialTab === "private") {
+        void loadPrivate(saved.username, saved.pin, true);
+      } else {
+        void runLookup(saved.username, saved.pin, true);
+      }
+      return;
+    }
+
     const boot =
       initialTab === "private"
         ? loadPrivate(saved.username, saved.pin, true)
@@ -499,6 +505,7 @@ export function TournamentLookup({
       }
       const data = (await res.json()) as { tournaments: MyPrivateRow[] };
       saveUser({ username: name, pin }); // stay logged in
+      patchCachedTeams(name, pin, { privateRows: data.tournaments ?? [] });
       setPrivateRows(data.tournaments ?? []);
       setTab("private");
       setPage(0);
