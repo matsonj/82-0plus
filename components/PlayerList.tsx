@@ -159,6 +159,14 @@ export function PlayerList({
         className="w-full border-2 border-[var(--md-ink)] bg-[var(--md-white)] px-3 py-2 font-display text-sm outline-none focus:bg-[var(--md-paper)]"
       />
 
+      {/* Ranked/Daily hide stats, so the roster's order isn't self-evident the
+          way Classic's sort chips make it. A small caption signals the MPG sort. */}
+      {mode !== "classic" && status === "ok" && rows.length > 0 && (
+        <div className="px-0.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+          ↓ Sorted by minutes per game
+        </div>
+      )}
+
       {mode === "classic" && status === "ok" && (
         <div className="flex flex-wrap items-center gap-1">
           {POS_FILTERS.map((p) => (
