@@ -70,12 +70,11 @@ export type CellStyle = {
   annotate: Annotate;
 };
 
-// Understated palette — a soft mint for played days, light enough for black numerals
-// and fresher than the deep teal. Opaque (teal-bright washed onto white) so it sits
-// cleanly over the strip's chain line. Plain white for missed, faint dashed for
-// out-of-window. Gridlines are paper-3, like a printed scorecard; "today" is the only
-// accent (yellow border).
-export const PLAYED_FILL = "#C8F3EE"; // --md-teal-bright @ ~32% over white
+// Played days take the sky blue from the Private Tournament button (opaque, so it
+// sits cleanly over the strip's chain line and black numerals stay legible). Plain
+// white for missed, faint dashed for out-of-window. Gridlines are paper-3, like a
+// printed scorecard; "today" is the only other accent (yellow border).
+export const PLAYED_FILL = "var(--md-sky)"; // #6fc2ff
 const GRID = "#E1D6CB"; // --md-paper-3
 const FAINT = "#B8AB9C";
 const DASH = "#C9BCAE";

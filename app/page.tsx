@@ -374,7 +374,9 @@ export default function Home() {
           // The server owns the gate now, so drop any stale same-device lock.
           clearPendingDaily(date, u);
           setDailyChecking(false);
-          window.location.assign(`/d/${date}`);
+          // Open THAT day's tournament in-app (your bracket, your result) — the
+          // /d/ share page is only for links shared between players.
+          window.location.assign(`/tournament?daily=${date}`);
           return;
         }
         // No server record. If THIS account has an unconfirmed completion for the
@@ -387,7 +389,7 @@ export default function Home() {
           const outcome = await flushPendingDaily(date);
           setDailyChecking(false);
           if (outcome === "saved") {
-            window.location.assign(`/d/${date}`);
+            window.location.assign(`/tournament?daily=${date}`);
             return;
           }
           if (outcome === "pending") {
