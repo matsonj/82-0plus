@@ -51,18 +51,25 @@ interface TeamSummaryRow {
   daily_date: string | null;
   created_at: string | Date;
   roster_display: unknown;
+  season_w: number | null; // actual reg-season wins (daily only, via daily_results)
+  season_l: number | null;
 }
 
-/** All memorialized teams for a user, newest first (lookup detail list). */
+/** All memorialized teams for a user, newest first (lookup detail list). The
+ *  daily_results join surfaces the actual 82-game record for daily teams (kept in
+ *  lockstep with the RW twin getUserTeams). */
 export async function getUserTeamsRO(
   userId: string,
 ): Promise<TournamentTeamSummary[]> {
   const rows = await queryTournamentRO<TeamSummaryRow>(
-    `SELECT team_id, team_name, mode, record_w, record_l, realized_margin, reached_round,
-            champion_name, seed_net, daily_date, created_at, roster_display
-       FROM ${RO_DB}.teams
-      WHERE user_id = $1
-      ORDER BY created_at DESC`,
+    `SELECT t.team_id, t.team_name, t.mode, t.record_w, t.record_l, t.realized_margin,
+            t.reached_round, t.champion_name, t.seed_net, t.daily_date, t.created_at,
+            t.roster_display, dr.wins AS season_w, dr.losses AS season_l
+       FROM ${RO_DB}.teams t
+       LEFT JOIN ${RO_DB}.daily_results dr
+         ON dr.user_id = t.user_id AND dr.daily_date = t.daily_date
+      WHERE t.user_id = $1
+      ORDER BY t.created_at DESC`,
     [userId],
   );
   return rows.map((r) => {
@@ -80,6 +87,8 @@ export async function getUserTeamsRO(
       reachedRound: r.reached_round,
       championName: r.champion_name,
       seedNet: Number.isFinite(r.seed_net) ? r.seed_net : 0,
+      seasonW: r.season_w ?? null,
+      seasonL: r.season_l ?? null,
       dailyDate: r.daily_date ?? null,
       createdAt:
         r.created_at instanceof Date

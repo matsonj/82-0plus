@@ -13,10 +13,12 @@ import { MOTHERDUCK_URL } from "@/lib/site";
 export default function TournamentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; daily?: string }>;
 }) {
-  const { tab } = use(searchParams);
+  const { tab, daily } = use(searchParams);
   const initialTab = tab === "private" ? ("private" as const) : undefined;
+  // `?daily=YYYY-MM-DD` (from a home-calendar click) auto-opens that day's bracket.
+  const initialDaily = /^\d{4}-\d{2}-\d{2}$/.test(daily ?? "") ? daily : undefined;
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
       <div className="md-sunbeam" />
@@ -39,7 +41,11 @@ export default function TournamentPage({
         </p>
 
         <div className="mt-8 w-full max-w-md">
-          <TournamentLookup onBack={undefined} initialTab={initialTab} />
+          <TournamentLookup
+            onBack={undefined}
+            initialTab={initialTab}
+            initialDaily={initialDaily}
+          />
         </div>
 
         <Link

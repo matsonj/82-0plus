@@ -13,6 +13,7 @@ const TEAL = "#16AA98";
 const CORAL = "#FF7169";
 const ORANGE = "#A45916";
 const MUTED = "#818181";
+const YELLOW = "#FFDE00";
 
 const W = 1200;
 const H = 630;
@@ -22,6 +23,12 @@ const fontsPromise = Promise.all([
   readFile(join(process.cwd(), "assets/fonts/SpaceMono-Regular.ttf")),
   readFile(join(process.cwd(), "assets/fonts/SpaceMono-Bold.ttf")),
 ]);
+
+// A real glossy basketball (Fluent emoji, bundled locally) — next/og's default
+// emoji renderer only produces flat twemoji line-art, so we embed the PNG.
+const ballPromise = readFile(
+  join(process.cwd(), "assets/emoji/basketball-3d.png"),
+).then((b) => `data:image/png;base64,${b.toString("base64")}`);
 
 function clampName(name: string): string {
   return name.length > 24 ? name.slice(0, 23) + "…" : name;
@@ -35,10 +42,88 @@ function reachedPhrase(r: number): string {
 }
 
 export async function GET(request: Request) {
-  const code = new URL(request.url).searchParams.get("r");
+  const params = new URL(request.url).searchParams;
+  const code = params.get("r");
   const data = code ? decodeShare(code) : null;
 
   const [regular, bold] = await fontsPromise;
+
+  // Homepage marketing card — the unfurl when daily82.com itself is shared.
+  // Leads with the hook ("new challenges daily") rather than a season result.
+  if (params.get("v") === "home") {
+    const ballSrc = await ballPromise;
+    return new ImageResponse(
+      (
+        <div
+          style={{
+            width: "100%", height: "100%", display: "flex", flexDirection: "column",
+            backgroundColor: PAPER, color: INK, fontFamily: "Space Mono", padding: 36,
+          }}
+        >
+          <div
+            style={{
+              display: "flex", flexDirection: "column", flex: 1,
+              border: `8px solid ${INK}`, padding: "40px 52px",
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <div style={{ display: "flex", fontSize: 40, fontWeight: 700 }}>🦆 82-0+</div>
+            </div>
+
+            {/* Hero — headline left, ball right, vertically centered in the free space */}
+            <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <div style={{ display: "flex", fontSize: 70, fontWeight: 700, lineHeight: 1.02 }}>
+                  BUILD AN
+                </div>
+                <div style={{ display: "flex", fontSize: 70, fontWeight: 700, lineHeight: 1.02 }}>
+                  UNDEFEATED
+                </div>
+                <div style={{ display: "flex", fontSize: 70, fontWeight: 700, lineHeight: 1.02 }}>
+                  NBA SEASON
+                </div>
+                <div style={{ display: "flex", marginTop: 26 }}>
+                  <div
+                    style={{
+                      display: "flex", alignItems: "center", backgroundColor: YELLOW,
+                      border: `5px solid ${INK}`, padding: "9px 22px",
+                      fontSize: 36, fontWeight: 700, boxShadow: `8px 8px 0 ${INK}`,
+                    }}
+                  >
+                    🗓 NEW CHALLENGES DAILY
+                  </div>
+                </div>
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={ballSrc} width={232} height={232} alt="" style={{ marginLeft: 24 }} />
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                borderTop: `3px solid ${PAPER_3}`, paddingTop: 20,
+              }}
+            >
+              <div style={{ display: "flex", fontSize: 22, color: MUTED }}>
+                Draft an all-time five across the decades · chase 82–0
+              </div>
+              <div style={{ display: "flex", fontSize: 22, fontWeight: 700 }}>daily82.com</div>
+            </div>
+          </div>
+        </div>
+      ),
+      {
+        width: W, height: H,
+        fonts: [
+          { name: "Space Mono", data: regular, weight: 400, style: "normal" },
+          { name: "Space Mono", data: bold, weight: 700, style: "normal" },
+        ],
+        headers: { "Cache-Control": "public, immutable, no-transform, max-age=31536000" },
+      },
+    );
+  }
 
   // Fallback card when the payload is missing/corrupt — still on-brand.
   const wins = data?.w ?? 0;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
@@ -8,7 +8,6 @@ import type {
   TournamentTeamSummary,
   TournamentRunResponse,
   TournamentMode,
-  BracketPlayer,
   MyPrivateRow,
 } from "@/lib/types";
 import {
@@ -23,6 +22,7 @@ import { TierBadge } from "@/components/TierBadge";
 import { PrivateTournamentCreate } from "@/components/private/PrivateTournamentCreate";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
 import { getCachedTeams, setCachedTeams } from "@/lib/tournamentTeamsCache";
+import { regWinsFromSeedNet } from "@/lib/tier";
 import {
   reachedRoundLabel,
   formatPrivateEntryStatus,
@@ -56,27 +56,68 @@ function MarginTag({ value }: { value: number }) {
   );
 }
 
-// One roster line: name (+ [C] for captain) and a subtle "team 'season".
-function RosterLine({ p }: { p: BracketPlayer }) {
+// Net rating with its "net" tag, teal/coral by sign.
+function NetStat({ value }: { value: number }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 py-0.5 font-display text-[12px]">
-      <span className="min-w-0 truncate">
-        {p.name}
-        {p.captain ? (
-          <span className="ml-1 inline-block border border-[var(--md-ink)] bg-[var(--md-yellow)] px-1 text-[8px] font-bold uppercase leading-tight tracking-wide align-middle">
-            C
-          </span>
-        ) : null}
-      </span>
-      <span className="shrink-0 text-[11px] text-[var(--md-orange-deep)]">
-        {p.team} &rsquo;{String(p.season).slice(2)}
-      </span>
+    <div className="mt-0.5 flex items-baseline gap-1">
+      <MarginTag value={value} />
+      <span className="font-display text-[10px] text-[var(--md-ink-muted)]">net</span>
     </div>
   );
 }
 
-// A single memorialized team. The card body opens the bracket; a separate
-// "Show roster" toggle reveals the five (captain flagged) + sixth man inline.
+// One reg-season / playoffs stat column: a small header, the big record, the net.
+function StatBlock({
+  label,
+  w,
+  l,
+  net,
+  tint,
+}: {
+  label: string;
+  w: number;
+  l: number;
+  net: number;
+  tint?: boolean;
+}) {
+  return (
+    <div
+      className={`flex-1 px-4 py-3 ${tint ? "border-l-2 border-[var(--md-ink)] bg-[var(--md-paper)]" : ""}`}
+    >
+      <div className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+        {label}
+      </div>
+      <div className="mt-1 font-display text-2xl font-bold tabular-nums leading-none">
+        {w}&ndash;{l}
+      </div>
+      <NetStat value={net} />
+    </div>
+  );
+}
+
+// The actual 82-game record for daily teams (from daily_results); ranked/classic
+// have no stored season record, so fall back to the seed-net projection.
+function regSeasonRecord(team: TournamentTeamSummary): { w: number; l: number } {
+  if (team.seasonW != null && team.seasonL != null) {
+    return { w: team.seasonW, l: team.seasonL };
+  }
+  const w = regWinsFromSeedNet(team.seedNet);
+  return { w, l: 82 - w };
+}
+
+// "2026-06-11" → "Jun 11" (plain calendar date, no TZ shift).
+function shortDay(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+// A single memorialized run. The WHOLE card is the click target — it opens the
+// bracket. Header (name + dated mode pill), a reg-season | playoffs split, and an
+// accent footer carrying the outcome + a "View bracket" cue (orange for champions).
 function TeamRow({
   team,
   onOpen,
@@ -87,96 +128,69 @@ function TeamRow({
   loading: boolean;
 }) {
   const isChampion = team.reachedRound === 4;
-  const [showRoster, setShowRoster] = useState(false);
+  const reg = regSeasonRecord(team);
+  // The Daily pill carries the date it's for; Ranked/Classic keep a plain label.
+  const pill =
+    team.mode === "daily"
+      ? {
+          className: "md-capsule md-capsule--sky",
+          text: team.dailyDate ? `Daily · ${shortDay(team.dailyDate)}` : "Daily",
+        }
+      : team.mode === "hoopiq"
+        ? { className: "md-capsule md-capsule--ink", text: "Ranked" }
+        : { className: "md-capsule", text: "Classic" };
   return (
-    <div className="md-card md-card--lift flex w-full flex-col gap-2 p-4">
-      <button
-        type="button"
-        onClick={onOpen}
-        disabled={loading}
-        className="flex w-full flex-col gap-2 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px] disabled:opacity-60"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <span className="font-display text-lg font-bold leading-tight break-words">
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={loading}
+      className="md-card md-card--lift flex w-full flex-col overflow-hidden p-0 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px] disabled:opacity-60"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 px-4 pt-4">
+        <div className="min-w-0">
+          <div className="font-display text-lg font-bold leading-tight break-words">
             {team.teamName}
-          </span>
-          <span className="font-display text-xs text-[var(--md-ink-muted)] whitespace-nowrap">
-            {new Date(team.createdAt).toLocaleDateString()}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Daily is "Open" — tier-less — so no tier badge for daily teams. */}
-          {team.mode !== "daily" && <TierBadge seedNet={team.seedNet} size="capsule" />}
-          {team.mode === "daily" ? (
-            <span className="md-capsule md-capsule--sky">Daily</span>
-          ) : team.mode === "hoopiq" ? (
-            <span className="md-capsule md-capsule--ink">Ranked</span>
-          ) : (
-            <span className="md-capsule">Classic</span>
-          )}
-          {isChampion && (
-            <span className="md-capsule md-capsule--teal">🏆 Champion</span>
-          )}
-        </div>
-
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="font-display text-3xl font-bold tabular-nums">
-            {team.recordW}&ndash;{team.recordL}
-          </span>
-          <MarginTag value={team.realizedMargin} />
-        </div>
-
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <span className="font-display text-sm font-bold">
-            {reachedRoundLabel(team.reachedRound)}
-          </span>
-          {isChampion ? (
-            <span className="font-display text-sm text-[var(--md-teal)]">
-              🏆 You won it all
-            </span>
-          ) : (
-            <span className="font-display text-sm text-[var(--md-ink-muted)]">
-              Won by {team.championName}
-            </span>
-          )}
-        </div>
-
-        {loading && (
-          <div className="font-display text-xs text-[var(--md-ink-muted)]">
-            Loading bracket…
           </div>
-        )}
-      </button>
-
-      {team.roster && team.roster.length > 0 && (
-        <div className="border-t-2 border-dashed border-[var(--md-ink)] pt-2">
-          <button
-            type="button"
-            className="font-display text-[12px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-            onClick={() => setShowRoster((v) => !v)}
-          >
-            {showRoster ? "Hide roster" : "Show roster"}
-          </button>
-          {showRoster && (
-            <div className="mt-2">
-              {team.roster.map((p, i) => (
-                <RosterLine key={`${p.team}-${p.name}-${i}`} p={p} />
-              ))}
-              {team.sixthMan && (
-                <>
-                  <div className="my-1 border-t border-[var(--md-paper-3)]" />
-                  <div className="font-display text-[9px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                    Sixth Man
-                  </div>
-                  <RosterLine p={team.sixthMan} />
-                </>
-              )}
-            </div>
-          )}
+          <div className="font-display text-xs text-[var(--md-ink-muted)]">
+            Full season run
+          </div>
         </div>
-      )}
-    </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {team.mode !== "daily" && (
+            <TierBadge seedNet={team.seedNet} size="capsule" />
+          )}
+          <span className={pill.className}>{pill.text}</span>
+        </div>
+      </div>
+
+      {/* Regular season | Playoffs */}
+      <div className="mt-3 flex border-y-2 border-[var(--md-ink)]">
+        <StatBlock label="Reg season" w={reg.w} l={reg.l} net={team.seedNet} />
+        <StatBlock
+          label="Playoffs"
+          w={team.recordW}
+          l={team.recordL}
+          net={team.realizedMargin}
+          tint
+        />
+      </div>
+
+      {/* Footer: outcome + click cue. Orange for champions, yellow otherwise. */}
+      <div
+        className="flex items-center justify-between gap-3 px-4 py-2.5"
+        style={{ background: isChampion ? "var(--md-orange)" : "var(--md-yellow)" }}
+      >
+        <span className="min-w-0 truncate font-display text-sm font-bold">
+          {isChampion
+            ? "🏆 Champion"
+            : `${reachedRoundLabel(team.reachedRound)} · Won by ${team.championName}`}
+        </span>
+        <span className="shrink-0 font-display text-xs font-bold">
+          {loading ? "Loading…" : "View bracket →"}
+        </span>
+      </div>
+    </button>
   );
 }
 
@@ -275,13 +289,19 @@ type View = "form" | "list" | "team";
 export function TournamentLookup({
   onBack,
   initialTab,
+  initialDaily,
 }: {
   onBack?: () => void;
   initialTab?: Tab;
+  // Auto-open the team for this daily date (YYYY-MM-DD) once the list loads — used
+  // when arriving from a home-calendar date click (/tournament?daily=…).
+  initialDaily?: string;
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>("form");
-  const [tab, setTab] = useState<Tab>(initialTab ?? "daily");
+  // Filter off by default — land on the unfiltered "all" list unless a caller
+  // explicitly deep-links to a specific tab.
+  const [tab, setTab] = useState<Tab>(initialTab ?? "all");
   // Private-tab state.
   const [privateRows, setPrivateRows] = useState<MyPrivateRow[] | null>(null);
   const [privateLoading, setPrivateLoading] = useState(false);
@@ -316,6 +336,7 @@ export function TournamentLookup({
   const [listError, setListError] = useState<string | null>(null);
   const [page, setPage] = useState(0); // teams-list page (10 per page)
   const TEAMS_PER_PAGE = 10;
+  const autoOpenedDaily = useRef(false); // one-shot guard for ?daily= deep-link
 
   const nameCheck = validateName(name);
   const pinOk = validatePin(pin);
@@ -440,8 +461,14 @@ export function TournamentLookup({
     // team-list flash on Home <-> /tournament navigation. The private tab is NOT
     // seeded — its provisional standings are volatile, so it always re-fetches
     // fresh (see lib/tournamentTeamsCache). A cold load blocks on the first fetch.
+    // Skip the SWR seed for a `?daily=` deep link: the auto-open effect decides
+    // "no matching team → /d fallback" off this list, and a stale cache could miss
+    // a tournament the player just entered. Blocking on the fresh lookup makes that
+    // decision correct.
     const cachedLookup =
-      initialTab === "private" ? null : getCachedTeams(saved.username, saved.pin);
+      initialTab === "private" || initialDaily
+        ? null
+        : getCachedTeams(saved.username, saved.pin);
     if (cachedLookup) {
       setLookup(cachedLookup);
       setPage(0);
@@ -456,7 +483,7 @@ export function TournamentLookup({
         ? loadPrivate(saved.username, saved.pin, true)
         : runLookup(saved.username, saved.pin, true);
     boot.finally(() => setBootingSession(false));
-  }, [runLookup, loadPrivate, initialTab]);
+  }, [runLookup, loadPrivate, initialTab, initialDaily]);
 
   const logOut = () => {
     clearUser();
@@ -590,6 +617,24 @@ export function TournamentLookup({
       setLoadingTeamId(null);
     }
   };
+
+  // Deep-link from a home-calendar date: once the teams list has loaded, open that
+  // day's tournament automatically (one-shot, guarded by the ref). Finishing a daily
+  // only writes daily_results — the tournament team exists only if the player also
+  // entered the bracket. So if there's no matching team, fall back to that day's
+  // stored daily result page rather than stranding them on the unfiltered list.
+  useEffect(() => {
+    if (autoOpenedDaily.current || !initialDaily || !lookup) return;
+    autoOpenedDaily.current = true;
+    const match = lookup.teams.find((t) => t.dailyDate === initialDaily);
+    if (match) {
+      void openTeam(match.teamId);
+    } else {
+      window.location.replace(`/d/${initialDaily}`);
+    }
+    // One-shot, fenced by the ref; openTeam re-running on identity would no-op.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lookup, initialDaily]);
 
   // ---- Team detail view: a single run; reset returns to the list. ----
   if (view === "team" && run) {

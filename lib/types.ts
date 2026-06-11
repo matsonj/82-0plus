@@ -283,7 +283,11 @@ export interface TournamentTeamSummary {
   realizedMargin: number; // avg point margin in the playoffs, e.g. +5.2
   championName: string;
   reachedRound: number; // 0 = lost R1 … 4 = champion
-  seedNet: number; // seeding net rating (drives the tier badge)
+  seedNet: number; // seeding net rating (drives the tier badge) — the reg-season net
+  // Actual simulated regular-season record (out of 82). Populated for daily teams
+  // from daily_results; null for ranked/classic (derive from seedNet instead).
+  seasonW?: number | null;
+  seasonL?: number | null;
   dailyDate?: string | null; // YYYY-MM-DD for mode='daily'; null otherwise
   createdAt: string; // ISO timestamp
   roster?: BracketPlayer[]; // the five starters (quick peek)

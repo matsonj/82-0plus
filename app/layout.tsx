@@ -23,15 +23,24 @@ export const metadata: Metadata = {
   openGraph: {
     title: "82-0+ · Can you build the perfect season?",
     description:
-      "Draft a 5-man roster across the decades and see if it can go 82-0.",
+      "New challenges daily. Draft a 5-man roster across the decades and see if it can go 82-0.",
     type: "website",
     siteName: "82-0+",
+    images: [
+      {
+        url: "/api/og?v=home",
+        width: 1200,
+        height: 630,
+        alt: "82-0+ · Build an undefeated season — new challenges daily",
+      },
+    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "82-0+ · Can you build the perfect season?",
     description:
-      "Draft a 5-man roster across the decades and see if it can go 82-0.",
+      "New challenges daily. Draft a 5-man roster across the decades and see if it can go 82-0.",
+    images: ["/api/og?v=home"],
   },
 };
 
