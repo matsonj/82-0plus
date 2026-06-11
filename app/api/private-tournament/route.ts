@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
+import { jsonPublicCacheable } from "@/lib/publicCache";
 import { isExpired, needsAttention } from "@/lib/privateTournament";
 import {
   getPrivateEntry,
@@ -74,7 +75,14 @@ export async function GET(req: NextRequest) {
       const bracket = tournament.finalBracketJson as BracketResult | null;
       // Completed view: rosters are no longer secret — the stored bracket carries
       // each team's display roster. Surface per-entry final standings + names.
-      return jsonWithSessionHint(sessionHint, {
+      //
+      // "completed" is a terminal, immutable, credential-free state (no `you`), so
+      // this 200 is CDN-cached and drops the session-hint cookie — share links to
+      // finished tournaments are the long tail of traffic here. Only this branch
+      // caches: the "open" lobby and the 503 lazy-finalize path stay dynamic.
+      // Tradeoff (accepted): if a host DELETEs a finished tournament, the edge can
+      // keep serving it until the stale window (~1 day) lapses.
+      return jsonPublicCacheable({
         status: "completed",
         tournamentId: id,
         name: tournament.name,

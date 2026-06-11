@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getPlayableTeams } from "@/lib/queries";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
+import { jsonPublicCacheable } from "@/lib/publicCache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,9 @@ export async function GET(req: NextRequest) {
     const playable = await getPlayableTeams(decade, queryOptions);
     const teams = [...playable].sort();
 
-    return jsonWithSessionHint(sessionHint, { teams });
+    // The playable-team set for a decade is global/public: CDN-cache it and drop
+    // the session-hint cookie. Invalid-param/error responses stay uncached.
+    return jsonPublicCacheable({ teams });
   } catch (err) {
     console.error("[/api/private-tournament/teams]", err);
     return jsonWithSessionHint(

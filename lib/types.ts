@@ -295,3 +295,28 @@ export interface TournamentLookupResponse {
   name: string; // the user handle (normalized)
   teams: TournamentTeamSummary[];
 }
+
+/** One private tournament row from POST /api/private-tournament/my — the full
+ *  list of tournaments the account has an entry in (newest first), INCLUDING
+ *  viewed-completed ones (unlike /notifications). `needsAttention` drives the
+ *  unread dot. */
+export interface MyPrivateRow {
+  tournamentId: string;
+  name: string;
+  mode: string;
+  modeLabel: string;
+  size: number;
+  status: "open" | "completed";
+  championName: string | null;
+  expiresAt: string;
+  finalizedAt: string | null;
+  viewedFinalAt: string | null;
+  entryStatus: string;
+  finalRecordW: number | null;
+  finalRecordL: number | null;
+  finalStatus: string | null;
+  provisionalRecordW: number | null;
+  provisionalRecordL: number | null;
+  provisionalStatus: string | null;
+  needsAttention: boolean;
+}

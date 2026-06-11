@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPlayerSeasonHistory } from "@/lib/queries";
 import { scheduleCacheRefresh } from "@/lib/appCache";
+import { jsonPublicCacheable } from "@/lib/publicCache";
 
 export const runtime = "nodejs";
 
 // Career-by-season history for one player (entity_id) → the Classic-mode player
-// card. The data is global/public, so the response is CDN-cached. We use a SHORT
-// s-maxage + long stale-while-revalidate: the CDN always serves instantly, but
-// background-revalidates within ~10 min — so once a cache rebuild lands, the fresh
-// data propagates quickly instead of being pinned behind a day-long CDN entry
-// built from the stale snapshot. Served from the app_cache rollup (sub-ms); a
+// card. The data is global/public, so the response is CDN-cached via
+// jsonPublicCacheable (short edge freshness + long stale-while-revalidate): the
+// CDN always serves instantly, but background-revalidates within ~10 min — so once
+// a cache rebuild lands, the fresh data propagates quickly instead of being pinned
+// behind a day-long CDN entry built from the stale snapshot. Served from the
+// app_cache rollup (sub-ms); a
 // gated, non-blocking freshness check on the (cheap, background) revalidation
 // keeps app_cache warm. This is the app's single hottest query — caching it here
 // keeps the bulk of the carousel's ±2 prefetch traffic off the function and DB.
@@ -23,15 +25,7 @@ export async function GET(req: NextRequest) {
   try {
     const seasons = await getPlayerSeasonHistory(id);
     scheduleCacheRefresh(); // background (after()), runs only on a cache MISS
-    return NextResponse.json(
-      { seasons },
-      {
-        headers: {
-          "Cache-Control":
-            "public, s-maxage=600, stale-while-revalidate=86400",
-        },
-      },
-    );
+    return jsonPublicCacheable({ seasons });
   } catch (err) {
     console.error("[/api/player]", err);
     return NextResponse.json(

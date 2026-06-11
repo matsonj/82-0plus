@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
+import { jsonPublicCacheable } from "@/lib/publicCache";
 import { getTeamBracketRO } from "@/lib/tournamentReadQueries";
 import { deriveYou, stripBreakdown } from "@/lib/tournamentRun";
 import type { BracketResult, TournamentRunResponse } from "@/lib/types";
@@ -55,8 +56,9 @@ export async function GET(req: NextRequest) {
 
     const you = deriveYou(bracket, `team:${id}`);
     const out = DEBUG ? bracket : stripBreakdown(bracket);
-    return jsonWithSessionHint(
-      sessionHint,
+    // A finalized team bracket is immutable historical data, so the 200 is
+    // CDN-cached and drops the session-hint cookie. Error paths stay uncached.
+    return jsonPublicCacheable(
       {
         bracket: out,
         you,
