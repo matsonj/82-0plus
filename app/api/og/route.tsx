@@ -103,7 +103,7 @@ export async function GET(request: Request) {
               <div style={{ display: "flex", fontSize: 30, fontWeight: 700, color: marginColor }}>
                 {tn.n >= 0 ? "+" : ""}{tn.n.toFixed(1)} playoff margin
               </div>
-              <div style={{ display: "flex", fontSize: 22, color: MUTED }}>82-0plus.vercel.app</div>
+              <div style={{ display: "flex", fontSize: 22, color: MUTED }}>daily82.com</div>
             </div>
           </div>
         </div>
@@ -224,7 +224,7 @@ export async function GET(request: Request) {
             }}
           >
             <div style={{ display: "flex" }}>Powered by MotherDuck Game Quality</div>
-            <div style={{ display: "flex" }}>82-0plus.vercel.app</div>
+            <div style={{ display: "flex" }}>daily82.com</div>
           </div>
         </div>
       </div>
