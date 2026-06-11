@@ -119,7 +119,7 @@ export async function buildShareImage(
   ctx.textAlign = "center";
   ctx.fillStyle = muted;
   ctx.font = f(34, "normal");
-  ctx.fillText("82-0plus.vercel.app", W / 2, H - 70);
+  ctx.fillText("daily82.com", W / 2, H - 70);
 
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/png"));
 }
@@ -340,7 +340,7 @@ export async function buildTournamentShareImage(args: {
   ctx.textAlign = "center";
   ctx.fillStyle = muted;
   ctx.font = f(30, "normal");
-  ctx.fillText("82-0plus.vercel.app", W / 2, H - 56);
+  ctx.fillText("daily82.com", W / 2, H - 56);
 
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/png"));
 }
