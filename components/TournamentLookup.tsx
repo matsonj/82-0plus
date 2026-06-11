@@ -22,7 +22,7 @@ import { TournamentResults } from "@/components/TournamentResults";
 import { TierBadge } from "@/components/TierBadge";
 import { PrivateTournamentCreate } from "@/components/private/PrivateTournamentCreate";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
-import { getCachedTeams, patchCachedTeams } from "@/lib/tournamentTeamsCache";
+import { getCachedTeams, setCachedTeams } from "@/lib/tournamentTeamsCache";
 import {
   reachedRoundLabel,
   formatPrivateEntryStatus,
@@ -357,7 +357,7 @@ export function TournamentLookup({
         }
         const data = (await res.json()) as TournamentLookupResponse;
         saveUser({ username: uname, pin: upin }); // stay logged in
-        patchCachedTeams(uname, upin, { lookup: data }); // SWR seed for remounts
+        setCachedTeams(uname, upin, data); // SWR seed for remounts
         setLookup(data);
         setPage(0);
         setView("list");
@@ -401,7 +401,6 @@ export function TournamentLookup({
         }
         const data = (await res.json()) as { tournaments: MyPrivateRow[] };
         saveUser({ username: uname, pin: upin }); // stay logged in
-        patchCachedTeams(uname, upin, { privateRows: data.tournaments ?? [] });
         setPrivateRows(data.tournaments ?? []);
         if (boot) {
           setTab("private");
@@ -435,29 +434,20 @@ export function TournamentLookup({
     setName(saved.username);
     setPin(saved.pin);
 
-    // Stale-while-revalidate: if an earlier in-session visit left this account's
-    // list cached, paint it immediately (skip the booting loader) and refetch
-    // quietly in the background. This kills the list flash on Home <-> /tournament
-    // navigation. A cold load (no cached entry) still blocks on the first fetch.
-    const cached = getCachedTeams(saved.username, saved.pin);
-    const seeded =
-      initialTab === "private" ? cached?.privateRows != null : cached?.lookup != null;
-    if (seeded) {
-      if (initialTab === "private") {
-        setPrivateRows(cached!.privateRows);
-        setTab("private");
-      } else {
-        setLookup(cached!.lookup);
-      }
+    // Stale-while-revalidate for the (immutable) team lookup: if an earlier
+    // in-session visit cached this account's teams, paint them immediately (skip
+    // the booting loader) and revalidate quietly in the background. This kills the
+    // team-list flash on Home <-> /tournament navigation. The private tab is NOT
+    // seeded — its provisional standings are volatile, so it always re-fetches
+    // fresh (see lib/tournamentTeamsCache). A cold load blocks on the first fetch.
+    const cachedLookup =
+      initialTab === "private" ? null : getCachedTeams(saved.username, saved.pin);
+    if (cachedLookup) {
+      setLookup(cachedLookup);
       setPage(0);
       setView("list");
       setBootingSession(false);
-      // Revalidate without the loader gate (silent for the team lookup).
-      if (initialTab === "private") {
-        void loadPrivate(saved.username, saved.pin, true);
-      } else {
-        void runLookup(saved.username, saved.pin, true);
-      }
+      void runLookup(saved.username, saved.pin, true); // silent revalidate
       return;
     }
 
@@ -505,7 +495,6 @@ export function TournamentLookup({
       }
       const data = (await res.json()) as { tournaments: MyPrivateRow[] };
       saveUser({ username: name, pin }); // stay logged in
-      patchCachedTeams(name, pin, { privateRows: data.tournaments ?? [] });
       setPrivateRows(data.tournaments ?? []);
       setTab("private");
       setPage(0);
