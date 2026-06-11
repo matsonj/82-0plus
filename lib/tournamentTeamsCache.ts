@@ -1,4 +1,5 @@
 import type { TournamentLookupResponse, MyPrivateRow } from "@/lib/types";
+import { accountTag } from "@/lib/dailyPending";
 
 // Client-only, in-memory (module singleton) cache of a signed-in account's My
 // Teams data: the legacy team lookup (Daily/Ranked/Classic teams) and the private
@@ -9,8 +10,9 @@ import type { TournamentLookupResponse, MyPrivateRow } from "@/lib/types";
 // loader until the first POST resolves.
 //
 // Account identity is (name, PIN) — the same name with a different PIN is a
-// DIFFERENT account — so we key on both (JSON.stringify keeps the two fields
-// unambiguous). The credentialed POSTs (/api/tournament/lookup,
+// DIFFERENT account — so we key on accountTag, the shared (normalized name, PIN)
+// namespace from dailyPending (matches the server identity boundary; hashes the
+// PIN rather than storing it raw). The credentialed POSTs (/api/tournament/lookup,
 // /api/private-tournament/my) remain the source of truth; this is only a render
 // hint to remove the navigation flash. See [[dailyResultsCache]] for the sibling
 // pattern on the daily-results menu state.
@@ -22,15 +24,11 @@ interface CachedTeams {
 
 const cache = new Map<string, CachedTeams>();
 
-function accountKey(username: string, pin: string): string {
-  return JSON.stringify([username, pin]);
-}
-
 export function getCachedTeams(
   username: string,
   pin: string,
 ): CachedTeams | null {
-  return cache.get(accountKey(username, pin)) ?? null;
+  return cache.get(accountTag(username, pin)) ?? null;
 }
 
 // Patch one or both slots, preserving whichever isn't provided — the lookup and
@@ -41,7 +39,7 @@ export function patchCachedTeams(
   pin: string,
   patch: Partial<CachedTeams>,
 ): void {
-  const key = accountKey(username, pin);
+  const key = accountTag(username, pin);
   const prev = cache.get(key) ?? { lookup: null, privateRows: null };
   cache.set(key, { ...prev, ...patch });
 }

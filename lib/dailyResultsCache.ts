@@ -6,14 +6,17 @@
 // background, instead of flashing the loading skeleton. A genuine cold load (empty
 // cache) still shows the skeleton until the first /api/daily/results fetch lands.
 //
-// Keyed by username so switching accounts never paints the wrong results. The
-// server (/api/daily/results, a credentialed POST) remains the source of truth;
-// this is only a render hint that avoids the foreground flash between navigations.
+// Keyed by accountTag (normalized name + PIN) so switching accounts never paints
+// the wrong results. The server (/api/daily/results, a credentialed POST) remains
+// the source of truth; this is only a render hint that avoids the foreground flash
+// between navigations.
 //
 // Why a module singleton and not the Next router cache: the router cache preserves
 // RSC payloads per route, not a client component's useState across unmount, and
 // this data comes from a client fetch — so the value must live outside the
 // component to bridge the remount.
+
+import { accountTag } from "@/lib/dailyPending";
 
 export interface DailyResultEntry {
   wins: number;
@@ -37,18 +40,16 @@ export interface CachedDailyResults {
 const cache = new Map<string, CachedDailyResults>();
 
 // Account identity is (name, PIN), not the name alone — the same name with a
-// different PIN is a DIFFERENT account. Key on both so one account can never paint
-// another same-name account's cached results. JSON.stringify keeps the two fields
-// unambiguous (no delimiter a name or PIN could forge).
-function accountKey(username: string, pin: string): string {
-  return JSON.stringify([username, pin]);
-}
+// different PIN is a DIFFERENT account, so one account must never paint another
+// same-name account's cached results. Key on accountTag, the shared (normalized
+// name, PIN) namespace used by dailyPending: it matches the server's identity
+// boundary (name normalization) and hashes the PIN rather than storing it raw.
 
 export function getCachedDailyResults(
   username: string,
   pin: string,
 ): CachedDailyResults | null {
-  return cache.get(accountKey(username, pin)) ?? null;
+  return cache.get(accountTag(username, pin)) ?? null;
 }
 
 export function setCachedDailyResults(
@@ -57,5 +58,5 @@ export function setCachedDailyResults(
   done: DailyDoneMap,
   rank: DailyRank | null,
 ): void {
-  cache.set(accountKey(username, pin), { done, rank });
+  cache.set(accountTag(username, pin), { done, rank });
 }
