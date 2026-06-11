@@ -613,15 +613,20 @@ export function TournamentLookup({
   };
 
   // Deep-link from a home-calendar date: once the teams list has loaded, open that
-  // day's tournament automatically (one-shot, guarded by the ref).
+  // day's tournament automatically (one-shot, guarded by the ref). Finishing a daily
+  // only writes daily_results — the tournament team exists only if the player also
+  // entered the bracket. So if there's no matching team, fall back to that day's
+  // stored daily result page rather than stranding them on the unfiltered list.
   useEffect(() => {
     if (autoOpenedDaily.current || !initialDaily || !lookup) return;
-    const match = lookup.teams.find((t) => t.dailyDate === initialDaily);
-    if (!match) return;
     autoOpenedDaily.current = true;
-    void openTeam(match.teamId);
-    // openTeam is a one-shot here, fenced by the ref; re-running on its identity
-    // would just no-op against the guard.
+    const match = lookup.teams.find((t) => t.dailyDate === initialDaily);
+    if (match) {
+      void openTeam(match.teamId);
+    } else {
+      window.location.replace(`/d/${initialDaily}`);
+    }
+    // One-shot, fenced by the ref; openTeam re-running on identity would no-op.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lookup, initialDaily]);
 
