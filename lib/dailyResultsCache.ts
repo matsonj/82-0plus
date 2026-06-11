@@ -1,10 +1,16 @@
 // Client-only, in-memory (module singleton) cache of a signed-in account's daily
-// completion map + today's rank. It survives client-side route navigation — which
-// unmounts and remounts the homepage (e.g. Home → /tournament → Home) — but NOT a
-// full page reload. That's exactly the lifetime stale-while-revalidate wants: on a
-// remount we paint the last-known results immediately and refetch in the
-// background, instead of flashing the loading skeleton. A genuine cold load (empty
-// cache) still shows the skeleton until the first /api/daily/results fetch lands.
+// completion map. It survives client-side route navigation — which unmounts and
+// remounts the homepage (e.g. Home → /tournament → Home) — but NOT a full page
+// reload. That's exactly the lifetime stale-while-revalidate wants: on a remount we
+// paint the last-known record immediately and refetch in the background, instead of
+// flashing the loading skeleton. A genuine cold load (empty cache) still shows the
+// skeleton until the first /api/daily/results fetch lands.
+//
+// We cache ONLY the completion record (W–L–margin per played day), which is
+// immutable once a day is played. Today's RANK is deliberately NOT cached: it
+// moves as other players finish, so it must come fresh from the server on every
+// load rather than be painted from a stale snapshot. The page seeds the record
+// from here and lets the background fetch populate the rank.
 //
 // Keyed by accountTag (normalized name + PIN) so switching accounts never paints
 // the wrong results. The server (/api/daily/results, a credentialed POST) remains
@@ -27,36 +33,32 @@ export interface DailyResultEntry {
 
 export type DailyDoneMap = Record<string, DailyResultEntry>;
 
+// Today's standing among everyone who played it. NOT part of the cache (see the
+// file header) — defined here only because it's the daily-results shape the page's
+// rank state is typed against.
 export interface DailyRank {
   rank: number;
   total: number;
 }
 
-export interface CachedDailyResults {
-  done: DailyDoneMap;
-  rank: DailyRank | null;
-}
-
-const cache = new Map<string, CachedDailyResults>();
-
 // Account identity is (name, PIN), not the name alone — the same name with a
 // different PIN is a DIFFERENT account, so one account must never paint another
-// same-name account's cached results. Key on accountTag, the shared (normalized
+// same-name account's cached record. Key on accountTag, the shared (normalized
 // name, PIN) namespace used by dailyPending: it matches the server's identity
 // boundary (name normalization) and hashes the PIN rather than storing it raw.
+const cache = new Map<string, DailyDoneMap>();
 
-export function getCachedDailyResults(
+export function getCachedDailyDone(
   username: string,
   pin: string,
-): CachedDailyResults | null {
+): DailyDoneMap | null {
   return cache.get(accountTag(username, pin)) ?? null;
 }
 
-export function setCachedDailyResults(
+export function setCachedDailyDone(
   username: string,
   pin: string,
   done: DailyDoneMap,
-  rank: DailyRank | null,
 ): void {
-  cache.set(accountTag(username, pin), { done, rank });
+  cache.set(accountTag(username, pin), done);
 }
