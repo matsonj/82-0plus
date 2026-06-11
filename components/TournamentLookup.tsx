@@ -461,8 +461,14 @@ export function TournamentLookup({
     // team-list flash on Home <-> /tournament navigation. The private tab is NOT
     // seeded — its provisional standings are volatile, so it always re-fetches
     // fresh (see lib/tournamentTeamsCache). A cold load blocks on the first fetch.
+    // Skip the SWR seed for a `?daily=` deep link: the auto-open effect decides
+    // "no matching team → /d fallback" off this list, and a stale cache could miss
+    // a tournament the player just entered. Blocking on the fresh lookup makes that
+    // decision correct.
     const cachedLookup =
-      initialTab === "private" ? null : getCachedTeams(saved.username, saved.pin);
+      initialTab === "private" || initialDaily
+        ? null
+        : getCachedTeams(saved.username, saved.pin);
     if (cachedLookup) {
       setLookup(cachedLookup);
       setPage(0);
@@ -477,7 +483,7 @@ export function TournamentLookup({
         ? loadPrivate(saved.username, saved.pin, true)
         : runLookup(saved.username, saved.pin, true);
     boot.finally(() => setBootingSession(false));
-  }, [runLookup, loadPrivate, initialTab]);
+  }, [runLookup, loadPrivate, initialTab, initialDaily]);
 
   const logOut = () => {
     clearUser();
