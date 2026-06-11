@@ -36,16 +36,26 @@ export interface CachedDailyResults {
 
 const cache = new Map<string, CachedDailyResults>();
 
+// Account identity is (name, PIN), not the name alone — the same name with a
+// different PIN is a DIFFERENT account. Key on both so one account can never paint
+// another same-name account's cached results. JSON.stringify keeps the two fields
+// unambiguous (no delimiter a name or PIN could forge).
+function accountKey(username: string, pin: string): string {
+  return JSON.stringify([username, pin]);
+}
+
 export function getCachedDailyResults(
   username: string,
+  pin: string,
 ): CachedDailyResults | null {
-  return cache.get(username) ?? null;
+  return cache.get(accountKey(username, pin)) ?? null;
 }
 
 export function setCachedDailyResults(
   username: string,
+  pin: string,
   done: DailyDoneMap,
   rank: DailyRank | null,
 ): void {
-  cache.set(username, { done, rank });
+  cache.set(accountKey(username, pin), { done, rank });
 }

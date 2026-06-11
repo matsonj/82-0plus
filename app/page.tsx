@@ -96,7 +96,7 @@ function pickWeightedDecade(pool: number[], usage: Record<number, number>): numb
 function readDailyResultsSeed() {
   if (typeof window === "undefined") return null;
   const u = getSavedUser();
-  return u ? getCachedDailyResults(u.username) : null;
+  return u ? getCachedDailyResults(u.username, u.pin) : null;
 }
 
 export default function Home() {
@@ -455,7 +455,7 @@ export default function Home() {
     if (!dailyLoaded) return;
     const u = getSavedUser();
     if (!u) return;
-    setCachedDailyResults(u.username, dailyDone, dailyRank);
+    setCachedDailyResults(u.username, u.pin, dailyDone, dailyRank);
   }, [dailyDone, dailyRank, dailyLoaded]);
 
   // Deep link: /?d=YYYY-MM-DD (from a shared daily link) starts that day's
