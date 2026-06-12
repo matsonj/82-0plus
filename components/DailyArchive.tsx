@@ -14,7 +14,7 @@ import {
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-/** The net-rating "score", optionally ringed: a single circle for a perfect 82-0,
+/** The net-rating "score", optionally ringed: a single circle for a top-10% finish,
  *  a double circle for a champion — the Masters-scorecard convention. `gap` is the
  *  cell fill, so the double ring reads as a clean concentric circle. */
 function Score({
@@ -71,7 +71,7 @@ const CircleSwatch = ({ double }: { double?: boolean }) => (
 
 /** The Daily archive: the last ~30 daily challenges as a compact scorecard grid,
  *  opened via the 7-day strip's "View all" toggle (`open` is parent-controlled). Each
- *  cell shows that day's net rating; an 82-0 is circled, a champion double-circled
+ *  cell shows that day's net rating; a top-10% finish is circled, a champion double-circled
  *  (shared language with the strip via lib/dailyHistory). A finished day taps through
  *  to review it; an unplayed, in-window day offers play. The click still routes
  *  through playDaily, so the server stays the gate even if this map is stale. */
@@ -91,12 +91,12 @@ export function DailyArchive({
   const summary = useMemo(() => {
     const window = recentDailyDates();
     let played = 0;
-    let trophies = 0; // perfect 82-0 seasons
+    let trophies = 0; // tournament-bracket championships
     for (const d of window) {
       const r = results[d];
       if (!r) continue;
       played++;
-      if (r.perfect) trophies++;
+      if (r.champion) trophies++;
     }
     return { played, total: window.length, trophies };
   }, [results]);
@@ -137,7 +137,7 @@ export function DailyArchive({
         </div>
         <div className="flex items-center gap-1.5">
           <CircleSwatch />
-          <span className="font-display text-[11px] text-[var(--md-ink-muted)]">82-0</span>
+          <span className="font-display text-[11px] text-[var(--md-ink-muted)]">Top 10%</span>
         </div>
         <div className="flex items-center gap-1.5">
           <CircleSwatch double />

@@ -179,13 +179,28 @@ export interface DailyResultLite {
   losses: number;
   margin: number;
   perfect: boolean;
+  /** That day's team won its daily tournament bracket (luck of the draw). */
+  champion: boolean;
+  /** Finished in the top 10% of the day's field (only counted when ≥10 played). */
+  top10: boolean;
 }
+
+// Top-10% (the single ring) is only awarded when the field was at least this deep —
+// a percentile is meaningless in a handful of entries and would ring you for playing
+// nearly alone.
+const TOP10_MIN_FIELD = 10;
 
 /**
  * All of an account's daily completions on/after `since` (a YYYY-MM-DD floor;
  * defaults to none). Drives the menu's "already played" state across devices —
  * the home card for today and the archive list both read from this, so a finished
  * day shows its result instead of "Play" without an N+1 of per-date lookups.
+ *
+ * Two scorecard flags are derived per day in the same pass:
+ *  - champion: the day's team WON its daily tournament bracket (teams.reached_round
+ *    = 4). This is a bracket outcome — luck of the draw, independent of field rank.
+ *  - top10: finished in the top 10% of that day's field (rank ≤ ceil(0.10·field)),
+ *    gated on a field of at least TOP10_MIN_FIELD.
  */
 export async function listDailyResults(
   userId: string,
@@ -193,11 +208,28 @@ export async function listDailyResults(
 ): Promise<DailyResultLite[]> {
   await ensureSchema();
   const rows = await queryRW<{
-    daily_date: string; wins: number; losses: number; margin: number; perfect: boolean;
+    daily_date: string; wins: number; losses: number; margin: number;
+    perfect: boolean; champion: boolean; top10: boolean;
   }>(
-    `SELECT daily_date, wins, losses, margin, perfect
-       FROM ${TDB}.daily_results
-      WHERE user_id = $1 ${since ? "AND daily_date >= $2" : ""}`,
+    // Rank every entry within its day (same order as the leaderboard), then for
+    // this user pull the bracket outcome via a dup-safe correlated subquery.
+    `WITH ranked AS (
+       SELECT user_id, daily_date, wins, losses, margin, perfect,
+              RANK()   OVER (PARTITION BY daily_date ORDER BY wins DESC, margin DESC) AS rnk,
+              COUNT(*) OVER (PARTITION BY daily_date) AS field
+         FROM ${TDB}.daily_results
+     )
+     SELECT r.daily_date, r.wins, r.losses, r.margin, r.perfect,
+            COALESCE((
+              SELECT bool_or(t.reached_round = 4)
+                FROM ${TDB}.teams t
+               WHERE t.user_id = r.user_id
+                 AND t.daily_date = r.daily_date
+                 AND t.mode = 'daily'
+            ), FALSE) AS champion,
+            (r.field >= ${TOP10_MIN_FIELD} AND r.rnk <= ceil(0.10 * r.field)) AS top10
+       FROM ranked r
+      WHERE r.user_id = $1 ${since ? "AND r.daily_date >= $2" : ""}`,
     since ? [userId, since] : [userId],
   );
   return rows.map((r) => ({
@@ -206,6 +238,8 @@ export async function listDailyResults(
     losses: r.losses,
     margin: r.margin,
     perfect: !!r.perfect,
+    champion: !!r.champion,
+    top10: !!r.top10,
   }));
 }
 
