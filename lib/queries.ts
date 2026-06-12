@@ -78,6 +78,40 @@ export async function getDecades(
     .sort((a, b) => a - b);
 }
 
+/** One browsable (team, decade) pair with its drafted-eligible player count. */
+export interface TeamDecadeCombo {
+  team: string;
+  decade: number;
+  count: number;
+}
+
+/**
+ * Every (team, decade) combo that clears MIN_PLAYERS_PER_COMBO — the full set the
+ * Player Cards browser lets you flip through. Unlike getDecades, this is NOT gated
+ * on a decade having ≥ MIN_PLAYABLE_TEAMS_PER_DECADE: browsing a thin old-era combo
+ * is fine (there's no random roll to skew), so every combo with a real roster shows.
+ * Sorted newest decade first, then team A→Z.
+ */
+export async function getTeamDecadeCombos(
+  options: QueryOptions = {},
+): Promise<TeamDecadeCombo[]> {
+  const index = await getPlayerIndex(options);
+  const counts = new Map<string, number>(); // "team|decade" → player count
+  for (const p of index) {
+    const k = `${p.team}|${p.decade}`;
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const combos: TeamDecadeCombo[] = [];
+  for (const [k, count] of counts) {
+    if (count < MIN_PLAYERS_PER_COMBO) continue;
+    const [team, decade] = k.split("|");
+    combos.push({ team, decade: Number(decade), count });
+  }
+  return combos.sort(
+    (a, b) => b.decade - a.decade || a.team.localeCompare(b.team),
+  );
+}
+
 /** Teams in a decade with enough players to be offered (≥ MIN_PLAYERS_PER_COMBO). */
 export async function getPlayableTeams(
   decade: number,

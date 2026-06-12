@@ -57,20 +57,24 @@ export function PlayerList({
   mode,
   players,
   playersMode = null,
-  allowRespin,
-  draftable,
-  onPick,
-  onNoneEligible,
+  allowRespin = false,
+  draftable = () => true,
+  onPick = () => {},
+  onNoneEligible = () => {},
+  browse = false,
 }: {
   team: string;
   decade: number;
   mode: GameMode;
   players?: PublicPlayer[] | null;
   playersMode?: GameMode | null;
-  allowRespin: boolean;
-  draftable: (p: PublicPlayer) => boolean;
-  onPick: (p: PublicPlayer) => void;
-  onNoneEligible: () => void;
+  allowRespin?: boolean;
+  draftable?: (p: PublicPlayer) => boolean;
+  onPick?: (p: PublicPlayer) => void;
+  onNoneEligible?: () => void;
+  // Read-only browse (Player Cards): every row opens the player's career card
+  // instead of drafting — no slots, no Pick/Draft, no respin.
+  browse?: boolean;
 }) {
   const [all, setAll] = useState<PublicPlayer[]>([]);
   const [status, setStatus] = useState<Status>("loading");
@@ -247,28 +251,36 @@ export function PlayerList({
           rows.map((p, i) => {
             // Greyed + unclickable when the player can't fill any open slot —
             // shown rather than hidden so you can see who's on the roster.
-            const eligible = draftable(p);
+            // Browse (Player Cards) keeps every row live so it opens the card;
+            // drafting greys rows that can't fill an open slot.
+            const eligible = browse ? true : draftable(p);
             return (
             <div
               key={p.entity_id}
               className="flex items-stretch border-b border-[var(--md-paper-3)]"
             >
             <button
-              onClick={() => onPick(p)}
+              onClick={() => (browse ? setCardIndex(i) : onPick(p))}
               disabled={!eligible}
-              title={eligible ? undefined : "No open slot fits his position"}
+              title={
+                browse
+                  ? "View career card"
+                  : eligible
+                    ? undefined
+                    : "No open slot fits his position"
+              }
               className={`flex flex-1 items-center justify-between gap-3 px-3 py-2 text-left transition-colors ${
                 eligible
                   ? "hover:bg-[var(--md-yellow)]"
                   : "cursor-not-allowed opacity-40"
               }`}
             >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-display text-xs text-[var(--md-ink-muted)]">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="shrink-0 font-display text-xs text-[var(--md-ink-muted)]">
                     {i + 1}.
                   </span>
-                  <span className="flex gap-0.5">
+                  <span className="flex shrink-0 gap-0.5">
                     {p.positions.map((r) => (
                       <span
                         key={r}
@@ -279,15 +291,19 @@ export function PlayerList({
                       </span>
                     ))}
                   </span>
-                  <span className="truncate font-display text-sm font-bold">
+                  <span className="min-w-0 truncate font-display text-sm font-bold">
                     {p.player_name}
-                    {p.allDef === 1 ? (
-                      <span title="All-Defense 1st Team"> 🥇</span>
-                    ) : p.allDef === 2 ? (
-                      <span title="All-Defense 2nd Team"> 🥈</span>
-                    ) : null}
                   </span>
-                  <span className="font-display text-xs text-[var(--md-ink-muted)]">
+                  {p.allDef === 1 ? (
+                    <span className="shrink-0" title="All-Defense 1st Team">
+                      🥇
+                    </span>
+                  ) : p.allDef === 2 ? (
+                    <span className="shrink-0" title="All-Defense 2nd Team">
+                      🥈
+                    </span>
+                  ) : null}
+                  <span className="shrink-0 font-display text-xs text-[var(--md-ink-muted)]">
                     &rsquo;{String(p.best_season).slice(2)}
                   </span>
                 </div>
@@ -314,8 +330,9 @@ export function PlayerList({
               </div>
             </button>
             {/* Classic only: open the player's career card (stats are hidden in
-                Ranked/Daily, so the card would be a spoiler there). */}
-            {mode === "classic" && (
+                Ranked/Daily, so the card would be a spoiler there). In browse the
+                whole row already opens the card, so the glyph would be redundant. */}
+            {mode === "classic" && !browse && (
               <button
                 type="button"
                 onClick={() => setCardIndex(i)}
@@ -338,14 +355,19 @@ export function PlayerList({
           players={cardPlayers}
           index={cardIndex}
           onClose={() => setCardIndex(null)}
-          canDraft={(i) => !!rows[i] && draftable(rows[i])}
-          onDraft={(i) => {
-            const row = rows[i];
-            if (row && draftable(row)) {
-              onPick(row);
-              setCardIndex(null);
-            }
-          }}
+          // Browse is read-only: no Draft button on the card.
+          canDraft={browse ? undefined : (i) => !!rows[i] && draftable(rows[i])}
+          onDraft={
+            browse
+              ? undefined
+              : (i) => {
+                  const row = rows[i];
+                  if (row && draftable(row)) {
+                    onPick(row);
+                    setCardIndex(null);
+                  }
+                }
+          }
         />
       )}
     </div>

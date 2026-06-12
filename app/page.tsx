@@ -1098,6 +1098,12 @@ export default function Home() {
                 How to play
               </button>
               <Link
+                href="/cards"
+                className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+              >
+                Player cards
+              </Link>
+              <Link
                 href="/tournament"
                 className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
               >
@@ -1190,6 +1196,12 @@ export default function Home() {
               >
                 How to play
               </button>
+              <Link
+                href="/cards"
+                className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+              >
+                Player cards
+              </Link>
               <Link
                 href="/tournament"
                 className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
