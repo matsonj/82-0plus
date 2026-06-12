@@ -197,8 +197,14 @@ const TOP10_MIN_FIELD = 10;
  * day shows its result instead of "Play" without an N+1 of per-date lookups.
  *
  * Two scorecard flags are derived per day in the same pass:
- *  - champion: the day's team WON its daily tournament bracket (teams.reached_round
- *    = 4). This is a bracket outcome — luck of the draw, independent of field rank.
+ *  - champion: the team RECORDED for that daily WON its tournament bracket
+ *    (reached_round = 4). A daily can have several mode='daily' entries (each
+ *    replay drafts the same team+era slots with different players and can be
+ *    entered into its own bracket), so we must NOT credit any-entry-that-won —
+ *    that would falsely crown a different replay. The recorded daily_results
+ *    (INSERT OR IGNORE: first completion wins) is written at completion, then the
+ *    tournament is entered seconds later in the SAME session, so the canonical
+ *    entry is the earliest `teams` row created at/after the result's timestamp.
  *  - top10: finished in the top 10% of that day's field (rank ≤ ceil(0.10·field)),
  *    gated on a field of at least TOP10_MIN_FIELD.
  */
@@ -211,21 +217,25 @@ export async function listDailyResults(
     daily_date: string; wins: number; losses: number; margin: number;
     perfect: boolean; champion: boolean; top10: boolean;
   }>(
-    // Rank every entry within its day (same order as the leaderboard), then for
-    // this user pull the bracket outcome via a dup-safe correlated subquery.
+    // Rank every entry within its day (same order as the leaderboard), then pull
+    // the bracket outcome of the entry from the SAME session as the recorded
+    // result (earliest teams row created at/after daily_results.created_at).
     `WITH ranked AS (
-       SELECT user_id, daily_date, wins, losses, margin, perfect,
+       SELECT user_id, daily_date, wins, losses, margin, perfect, created_at,
               RANK()   OVER (PARTITION BY daily_date ORDER BY wins DESC, margin DESC) AS rnk,
               COUNT(*) OVER (PARTITION BY daily_date) AS field
          FROM ${TDB}.daily_results
      )
      SELECT r.daily_date, r.wins, r.losses, r.margin, r.perfect,
             COALESCE((
-              SELECT bool_or(t.reached_round = 4)
+              SELECT t.reached_round = 4
                 FROM ${TDB}.teams t
                WHERE t.user_id = r.user_id
                  AND t.daily_date = r.daily_date
                  AND t.mode = 'daily'
+                 AND t.created_at >= r.created_at
+               ORDER BY t.created_at
+               LIMIT 1
             ), FALSE) AS champion,
             (r.field >= ${TOP10_MIN_FIELD} AND r.rnk <= ceil(0.10 * r.field)) AS top10
        FROM ranked r
