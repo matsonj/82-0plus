@@ -32,6 +32,20 @@ interface NotifResponse {
 // feed is cheap and a stale-by-a-minute dot is fine).
 const POLL_MS = 60_000;
 
+// A one-off "what's new" note surfaced in the alerts panel. It pops the bell and
+// shows for any visitor who hasn't seen it yet — until they OPEN the panel (which
+// marks it seen) OR until it expires, whichever comes first. Bump `id` for the
+// next changelog; the old localStorage key is then naturally ignored.
+const CHANGELOG = {
+  id: "2026-06-12-team-tuning",
+  label: "Changelog · 6/12/2026",
+  text: "Tuned team building — nerfed posts, buffed wings & guards.",
+  // 7 days after publish, at Pacific midnight (≈ 2026-06-19 07:00 UTC). After
+  // this it never shows again, even for someone who never opened the panel.
+  expires: Date.parse("2026-06-19T07:00:00Z"),
+} as const;
+const CHANGELOG_KEY = `changelog-seen:${CHANGELOG.id}`;
+
 // The shared site header. Logo + an optional contextual right slot + a
 // private-tournament indicator. `right` is for genuinely useful per-page context
 // (e.g. the live Classic/Ranked badge while drafting) — not decorative pills.
@@ -41,6 +55,11 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
   const onMyTeams = pathname === "/tournament";
   const [notif, setNotif] = useState<NotifResponse | null>(null);
   const [open, setOpen] = useState(false);
+  // Changelog: `unread` pops the bell + survives reloads (localStorage); `viewing`
+  // keeps the note rendered for the session in which it was first opened, so it
+  // doesn't vanish the instant the panel opens.
+  const [changelogUnread, setChangelogUnread] = useState(false);
+  const [changelogViewing, setChangelogViewing] = useState(false);
   // Guards against overlapping polls (visibility + interval can fire together).
   const inFlight = useRef(false);
 
@@ -84,10 +103,43 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
     };
   }, [poll]);
 
+  // Surface the changelog on mount for anyone who hasn't seen it and isn't past
+  // the 7-day window. Reads localStorage, so it runs client-side only.
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(CHANGELOG_KEY) && Date.now() < CHANGELOG.expires) {
+        setChangelogUnread(true);
+      }
+    } catch {
+      /* localStorage unavailable (private mode) — just skip the changelog */
+    }
+  }, []);
+
+  // Opening the panel counts as "seeing" the changelog: persist it (so it never
+  // pops again) but keep it visible for this open session.
+  const openPanel = useCallback(() => {
+    setOpen(true);
+    if (changelogUnread) {
+      setChangelogViewing(true);
+      setChangelogUnread(false);
+      try {
+        localStorage.setItem(CHANGELOG_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [changelogUnread]);
+  const closePanel = useCallback(() => {
+    setOpen(false);
+    setChangelogViewing(false);
+  }, []);
+
   const pending = notif?.pending ?? [];
   const completed = notif?.completedUnviewed ?? [];
   const count = pending.length + completed.length;
   const any = !!notif?.any;
+  // The bell pops for private activity OR an unseen changelog.
+  const pop = any || changelogUnread;
 
   return (
     <header className="relative z-20 flex items-center justify-between py-4 sm:py-5">
@@ -118,12 +170,8 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
         <div className="relative">
           <button
             type="button"
-            aria-label={
-              any
-                ? "Private tournament alerts (new activity)"
-                : "Private tournament alerts"
-            }
-            onClick={() => setOpen((o) => !o)}
+            aria-label={pop ? "Alerts (new activity)" : "Alerts"}
+            onClick={() => (open ? closePanel() : openPanel())}
             className="relative flex h-8 w-8 items-center justify-center border-2 border-[var(--md-ink)] bg-[var(--md-white)] transition-transform hover:-translate-y-0.5"
             style={{ cursor: "pointer" }}
           >
@@ -132,8 +180,8 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
               className="font-display leading-none transition-colors"
               style={{
                 fontSize: 18,
-                fontWeight: any ? 700 : 400,
-                color: any ? "var(--md-coral)" : "var(--md-ink-muted)",
+                fontWeight: pop ? 700 : 400,
+                color: pop ? "var(--md-coral)" : "var(--md-ink-muted)",
               }}
             >
               ✶
@@ -147,36 +195,55 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
             >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Private tournaments
+                  Alerts
                 </span>
                 <button
                   type="button"
                   aria-label="Close"
-                  onClick={() => setOpen(false)}
+                  onClick={closePanel}
                   className="font-display text-sm text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
                 >
                   ✕
                 </button>
               </div>
 
-              {!getSavedUser() ? (
-                <p className="text-[12px] text-[var(--md-ink-muted)]">
-                  Enter a private tournament to see alerts here.
-                </p>
-              ) : count === 0 ? (
-                <p className="text-[12px] text-[var(--md-ink-muted)]">
-                  Nothing needs your attention right now.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {pending.map((t) => (
-                    <NotifRow key={t.tournamentId} t={t} kind="pending" />
-                  ))}
-                  {completed.map((t) => (
-                    <NotifRow key={t.tournamentId} t={t} kind="completed" />
-                  ))}
+              {changelogViewing && (
+                <div
+                  className="md-card mb-2 flex flex-col gap-0.5 p-2"
+                  style={{ background: "var(--md-paper-2)" }}
+                >
+                  <span className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-blue)]">
+                    {CHANGELOG.label}
+                  </span>
+                  <span className="text-[12px] leading-snug text-[var(--md-ink)]">
+                    {CHANGELOG.text}
+                  </span>
                 </div>
               )}
+
+              <span className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                Private tournaments
+              </span>
+              <div className="mt-1">
+                {!getSavedUser() ? (
+                  <p className="text-[12px] text-[var(--md-ink-muted)]">
+                    Enter a private tournament to see alerts here.
+                  </p>
+                ) : count === 0 ? (
+                  <p className="text-[12px] text-[var(--md-ink-muted)]">
+                    Nothing needs your attention right now.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {pending.map((t) => (
+                      <NotifRow key={t.tournamentId} t={t} kind="pending" />
+                    ))}
+                    {completed.map((t) => (
+                      <NotifRow key={t.tournamentId} t={t} kind="completed" />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
