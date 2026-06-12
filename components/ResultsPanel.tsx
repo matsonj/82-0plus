@@ -282,13 +282,13 @@ export function ResultsPanel({
         {roster.map((r, i) => {
           const body = (
             <>
-              <span>
+              <span className="min-w-0 break-words">
                 <span className="text-[var(--md-orange-deep)]">{r.team}</span> &rsquo;
                 {String(r.best_season).slice(2)} · {r.player_name}
                 {mode === "classic" &&
                   (r.allDef === 1 ? " 🥇" : r.allDef === 2 ? " 🥈" : "")}
               </span>
-              <span className="text-[var(--md-ink-muted)]">
+              <span className="shrink-0 whitespace-nowrap text-[var(--md-ink-muted)]">
                 {r.pts}/{r.reb}/{r.ast}{" "}
                 <span className="text-[var(--md-teal)]">[{r.gq}]</span>
               </span>

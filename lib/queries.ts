@@ -14,6 +14,10 @@ const DB = "nba_box_scores_v2.main";
 // appear in the slot machine (keeps thin combos out of the rotation).
 const MIN_PLAYERS_PER_COMBO = 10;
 
+// The top-by-minutes roster a combo actually OFFERS. /api/players, the offered-id
+// proof, and the Player Cards count all cap here so they agree on the visible set.
+const MAX_OFFERED_PER_COMBO = 60;
+
 // A decade must have at least this many *playable* teams before it's offered in
 // rolls. Without it, a decade with only 2 qualifying teams (e.g. the 1950s:
 // BOS + SYR) makes one team appear ~50% of the time. Decades auto-return once
@@ -76,6 +80,47 @@ export async function getDecades(
     .filter(([, teams]) => teams >= MIN_PLAYABLE_TEAMS_PER_DECADE)
     .map(([decade]) => decade)
     .sort((a, b) => a - b);
+}
+
+/** One browsable (team, decade) pair with its drafted-eligible player count. */
+export interface TeamDecadeCombo {
+  team: string;
+  decade: number;
+  count: number;
+}
+
+/**
+ * Every (team, decade) combo that clears MIN_PLAYERS_PER_COMBO — the full set the
+ * Player Cards browser lets you flip through. Unlike getDecades, this is NOT gated
+ * on a decade having ≥ MIN_PLAYABLE_TEAMS_PER_DECADE: browsing a thin old-era combo
+ * is fine (there's no random roll to skew), so every combo with a real roster shows.
+ * Sorted newest decade first, then team A→Z.
+ */
+export async function getTeamDecadeCombos(
+  options: QueryOptions = {},
+): Promise<TeamDecadeCombo[]> {
+  const index = await getPlayerIndex(options);
+  const counts = new Map<string, number>(); // "team|decade" → player count
+  for (const p of index) {
+    const k = `${p.team}|${p.decade}`;
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const combos: TeamDecadeCombo[] = [];
+  for (const [k, count] of counts) {
+    if (count < MIN_PLAYERS_PER_COMBO) continue;
+    const [team, decade] = k.split("|");
+    // Report the visible count: /api/players only serves the top
+    // MAX_OFFERED_PER_COMBO by minutes, so a deeper roster mustn't advertise
+    // players the browser can never show.
+    combos.push({
+      team,
+      decade: Number(decade),
+      count: Math.min(count, MAX_OFFERED_PER_COMBO),
+    });
+  }
+  return combos.sort(
+    (a, b) => b.decade - a.decade || a.team.localeCompare(b.team),
+  );
 }
 
 /** Teams in a decade with enough players to be offered (≥ MIN_PLAYERS_PER_COMBO). */
@@ -424,7 +469,7 @@ export async function getPlayers(
   return index
     .filter((p) => p.team === team && p.decade === decade)
     .sort((a, b) => b.mpg - a.mpg)
-    .slice(0, 60)
+    .slice(0, MAX_OFFERED_PER_COMBO)
     .map((p) => toPublic(p, mode));
 }
 
@@ -441,9 +486,75 @@ export async function getOfferedIds(
     index
       .filter((p) => p.team === team && p.decade === decade)
       .sort((a, b) => b.mpg - a.mpg)
-      .slice(0, 60)
+      .slice(0, MAX_OFFERED_PER_COMBO)
       .map((p) => p.entity_id),
   );
+}
+
+/** One Player Cards search hit: a player on a specific browsable team+era. */
+export interface PlayerComboMatch {
+  entity_id: string;
+  player_name: string;
+  team: string;
+  decade: number;
+  best_season: number;
+}
+
+// Accent-fold + lowercase so "jokic" matches "Jokić" (mirrors PlayerList's filter).
+const foldName = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+/**
+ * Player-name search for the Player Cards browser. Returns the (player, team, era)
+ * cards a name matches — but only where the player is actually in that combo's
+ * OFFERED set (top MAX_OFFERED_PER_COMBO by minutes), so every hit links to a
+ * roster the player really appears on. Ranked name-prefix first, then most recent.
+ */
+export async function searchPlayerCombos(
+  q: string,
+  options: QueryOptions = {},
+): Promise<PlayerComboMatch[]> {
+  const nq = foldName(q.trim());
+  if (nq.length < 2) return [];
+  const index = await getPlayerIndex(options);
+  const matches = index.filter((p) => foldName(p.player_name).includes(nq));
+  if (matches.length === 0) return [];
+
+  // Keep only matches inside their combo's visible top-N (the roster you'd land on).
+  const neededCombos = new Set(matches.map((m) => `${m.team}|${m.decade}`));
+  const byCombo = new Map<string, IndexedPlayer[]>();
+  for (const p of index) {
+    const k = `${p.team}|${p.decade}`;
+    if (!neededCombos.has(k)) continue;
+    (byCombo.get(k) ?? byCombo.set(k, []).get(k)!).push(p);
+  }
+  const offered = new Set<string>();
+  for (const [k, list] of byCombo) {
+    list.sort((a, b) => b.mpg - a.mpg);
+    for (const p of list.slice(0, MAX_OFFERED_PER_COMBO)) {
+      offered.add(`${p.entity_id}|${k}`);
+    }
+  }
+
+  return matches
+    .filter((m) => offered.has(`${m.entity_id}|${m.team}|${m.decade}`))
+    .sort((a, b) => {
+      const aPre = foldName(a.player_name).startsWith(nq) ? 1 : 0;
+      const bPre = foldName(b.player_name).startsWith(nq) ? 1 : 0;
+      return (
+        bPre - aPre ||
+        b.best_season - a.best_season ||
+        a.player_name.localeCompare(b.player_name)
+      );
+    })
+    .slice(0, 40)
+    .map((p) => ({
+      entity_id: p.entity_id,
+      player_name: p.player_name,
+      team: p.team,
+      decade: p.decade,
+      best_season: p.best_season,
+    }));
 }
 
 /** Decades where a team has enough players to be offered (for the decade skip). */
