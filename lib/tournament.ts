@@ -67,8 +67,11 @@ export const TOURNAMENT_CONFIG = {
 
   // Size edge: net per inch of summed-starter-height advantage vs the opponent,
   // capped both directions (zero-sum — what one team gains the other loses).
-  HEIGHT_PER_INCH: 0.15,
-  HEIGHT_CAP: 3.0,
+  // Trimmed hard by the calibration harness (was 0.15 / 3.0): the per-game height
+  // edge was letting tall stacks convert ~88% of bracket titles; at 0.06 / 1.25
+  // it's ~31% (fair ≈ 25%) without dropping elite bigs below excellent.
+  HEIGHT_PER_INCH: 0.06,
+  HEIGHT_CAP: 1.25,
 
   // Game-score buff — the one reward for TEAM COMPOSITION, so it's the strongest
   // matchup buff and it SCALES with how decisively you win the 8-category pairwise
@@ -127,7 +130,15 @@ export const TOURNAMENT_CONFIG = {
   MAX_GAME_TOTAL: 258,
 } as const;
 
-export type TournamentConfig = typeof TOURNAMENT_CONFIG;
+// Widen the numeric knobs from their `as const` literals to `number` so the
+// calibration harness can override individual constants (e.g. HEIGHT_PER_INCH)
+// while the frozen runtime default above is unchanged. Non-numeric knobs (e.g.
+// SERIES_RECOVERY_PCT: Record<number, number>) keep their declared types.
+export type TournamentConfig = {
+  -readonly [K in keyof typeof TOURNAMENT_CONFIG]: (typeof TOURNAMENT_CONFIG)[K] extends number
+    ? number
+    : (typeof TOURNAMENT_CONFIG)[K];
+};
 
 // ---------------------------------------------------------------------------
 // Small helpers (mirrors scoring.ts style).
