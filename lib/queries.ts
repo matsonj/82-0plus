@@ -491,6 +491,72 @@ export async function getOfferedIds(
   );
 }
 
+/** One Player Cards search hit: a player on a specific browsable team+era. */
+export interface PlayerComboMatch {
+  entity_id: string;
+  player_name: string;
+  team: string;
+  decade: number;
+  best_season: number;
+}
+
+// Accent-fold + lowercase so "jokic" matches "Jokić" (mirrors PlayerList's filter).
+const foldName = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+/**
+ * Player-name search for the Player Cards browser. Returns the (player, team, era)
+ * cards a name matches — but only where the player is actually in that combo's
+ * OFFERED set (top MAX_OFFERED_PER_COMBO by minutes), so every hit links to a
+ * roster the player really appears on. Ranked name-prefix first, then most recent.
+ */
+export async function searchPlayerCombos(
+  q: string,
+  options: QueryOptions = {},
+): Promise<PlayerComboMatch[]> {
+  const nq = foldName(q.trim());
+  if (nq.length < 2) return [];
+  const index = await getPlayerIndex(options);
+  const matches = index.filter((p) => foldName(p.player_name).includes(nq));
+  if (matches.length === 0) return [];
+
+  // Keep only matches inside their combo's visible top-N (the roster you'd land on).
+  const neededCombos = new Set(matches.map((m) => `${m.team}|${m.decade}`));
+  const byCombo = new Map<string, IndexedPlayer[]>();
+  for (const p of index) {
+    const k = `${p.team}|${p.decade}`;
+    if (!neededCombos.has(k)) continue;
+    (byCombo.get(k) ?? byCombo.set(k, []).get(k)!).push(p);
+  }
+  const offered = new Set<string>();
+  for (const [k, list] of byCombo) {
+    list.sort((a, b) => b.mpg - a.mpg);
+    for (const p of list.slice(0, MAX_OFFERED_PER_COMBO)) {
+      offered.add(`${p.entity_id}|${k}`);
+    }
+  }
+
+  return matches
+    .filter((m) => offered.has(`${m.entity_id}|${m.team}|${m.decade}`))
+    .sort((a, b) => {
+      const aPre = foldName(a.player_name).startsWith(nq) ? 1 : 0;
+      const bPre = foldName(b.player_name).startsWith(nq) ? 1 : 0;
+      return (
+        bPre - aPre ||
+        b.best_season - a.best_season ||
+        a.player_name.localeCompare(b.player_name)
+      );
+    })
+    .slice(0, 40)
+    .map((p) => ({
+      entity_id: p.entity_id,
+      player_name: p.player_name,
+      team: p.team,
+      decade: p.decade,
+      best_season: p.best_season,
+    }));
+}
+
 /** Decades where a team has enough players to be offered (for the decade skip). */
 export async function getTeamDecades(
   team: string,

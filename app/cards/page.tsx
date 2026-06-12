@@ -12,6 +12,14 @@ interface Combo {
   count: number;
 }
 
+interface PlayerMatch {
+  entity_id: string;
+  player_name: string;
+  team: string;
+  decade: number;
+  best_season: number;
+}
+
 type Status = "loading" | "ok" | "error";
 
 // Read-only Player Cards browser, three levels deep:
@@ -21,13 +29,16 @@ type Status = "loading" | "ok" | "error";
 export default function CardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ team?: string; decade?: string }>;
+  searchParams: Promise<{ team?: string; decade?: string; player?: string }>;
 }) {
-  const { team, decade } = use(searchParams);
+  const { team, decade, player } = use(searchParams);
   const teamValid = !!team && /^[A-Z]{3}$/.test(team);
   const decadeNum = Number(decade);
   const decadeValid =
     Number.isInteger(decadeNum) && decadeNum >= 1900 && decadeNum <= 2100;
+  const openEntityId = /^[A-Za-z0-9_-]{1,64}$/.test(player ?? "")
+    ? player!
+    : null;
 
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
@@ -36,7 +47,7 @@ export default function CardsPage({
       <GlobalHeader />
 
       {teamValid && decadeValid ? (
-        <TeamRoster team={team!} decade={decadeNum} />
+        <TeamRoster team={team!} decade={decadeNum} openEntityId={openEntityId} />
       ) : teamValid ? (
         <TeamStack team={team!} />
       ) : (
@@ -89,6 +100,30 @@ function useCombos() {
   return { combos, status };
 }
 
+// Debounced player-name search. Returns [] until the query is ≥2 chars.
+function usePlayerSearch(q: string): PlayerMatch[] {
+  const nq = q.trim();
+  const [matches, setMatches] = useState<PlayerMatch[]>([]);
+  useEffect(() => {
+    if (nq.length < 2) {
+      setMatches([]);
+      return;
+    }
+    let active = true;
+    const t = setTimeout(() => {
+      fetch(`/api/player-search?q=${encodeURIComponent(nq)}`)
+        .then((r) => (r.ok ? r.json() : { matches: [] }))
+        .then((d) => active && setMatches(d.matches ?? []))
+        .catch(() => active && setMatches([]));
+    }, 180);
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+  }, [nq]);
+  return matches;
+}
+
 interface Stack {
   team: string;
   decades: number[]; // newest → oldest
@@ -99,6 +134,7 @@ interface Stack {
 function StacksGrid() {
   const { combos, status } = useCombos();
   const [q, setQ] = useState("");
+  const playerMatches = usePlayerSearch(q);
 
   const stacks = useMemo<Stack[]>(() => {
     const byTeam = new Map<string, number[]>();
@@ -147,7 +183,7 @@ function StacksGrid() {
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search a team or year (e.g. LAL or 1996)…"
+        placeholder="Search a team, player, or year (e.g. LAL, Jokić, 1996)…"
         className="mt-6 w-full border-2 border-[var(--md-ink)] bg-[var(--md-white)] px-3 py-2 font-display text-sm outline-none focus:bg-[var(--md-paper)]"
       />
 
@@ -161,17 +197,53 @@ function StacksGrid() {
           Couldn&rsquo;t load the league right now.
         </div>
       )}
-      {status === "ok" && filtered.length === 0 && (
-        <div className="mt-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
-          No teams match &ldquo;{q}&rdquo;.
+      {status === "ok" &&
+        q.trim().length > 0 &&
+        filtered.length === 0 &&
+        playerMatches.length === 0 && (
+          <div className="mt-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
+            Nothing matches &ldquo;{q}&rdquo;.
+          </div>
+        )}
+
+      {/* Player-name hits — each opens that player's card on their team+era roster. */}
+      {status === "ok" && playerMatches.length > 0 && (
+        <div className="mt-6">
+          <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+            Players
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {playerMatches.map((m) => (
+              <Link
+                key={`${m.entity_id}|${m.team}|${m.decade}`}
+                href={`/cards?team=${m.team}&decade=${m.decade}&player=${m.entity_id}`}
+                className="md-card md-card--lift flex items-center justify-between gap-2 p-3 text-left transition-transform hover:-translate-y-0.5"
+              >
+                <span className="min-w-0 truncate font-display text-sm font-bold">
+                  {m.player_name}
+                </span>
+                <span className="shrink-0 font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  <span className="text-[var(--md-orange-deep)]">{m.team}</span>{" "}
+                  &rsquo;{String(m.best_season).slice(2)}
+                </span>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 
       {status === "ok" && filtered.length > 0 && (
-        <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 md:grid-cols-4">
-          {filtered.map((s) => (
-            <CardStack key={s.team} team={s.team} eras={s.eras} />
-          ))}
+        <div className="mt-6">
+          {playerMatches.length > 0 && (
+            <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+              Teams
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 md:grid-cols-4">
+            {filtered.map((s) => (
+              <CardStack key={s.team} team={s.team} eras={s.eras} />
+            ))}
+          </div>
         </div>
       )}
 
@@ -290,7 +362,15 @@ function TeamStack({ team }: { team: string }) {
 }
 
 // A single era's roster: the shared Classic list in browse mode.
-function TeamRoster({ team, decade }: { team: string; decade: number }) {
+function TeamRoster({
+  team,
+  decade,
+  openEntityId,
+}: {
+  team: string;
+  decade: number;
+  openEntityId: string | null;
+}) {
   return (
     <section className="relative z-10 mt-6 flex flex-col sm:mt-8">
       <Link
@@ -312,7 +392,13 @@ function TeamRoster({ team, decade }: { team: string; decade: number }) {
       </p>
 
       <div className="mt-4">
-        <PlayerList team={team} decade={decade} mode="classic" browse />
+        <PlayerList
+          team={team}
+          decade={decade}
+          mode="classic"
+          browse
+          openEntityId={openEntityId}
+        />
       </div>
     </section>
   );
