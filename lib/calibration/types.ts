@@ -82,6 +82,7 @@ export interface HydratedTeam {
   sixthManAge: number;
   heightTotal: number; // sum of all six real heights
   starterMeta: PlayerMeta[]; // the five starters, slot order
+  sixthMeta: PlayerMeta; // the bench player (affects region affinity + appearances)
 }
 
 /** A field ready to replay: an ordered set of teams + a deterministic seed key

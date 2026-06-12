@@ -90,12 +90,14 @@ interface BucketEdge {
 }
 
 function bucketRates(
-  rows: { value: number; hit: boolean }[],
+  rows: { value: number; hit: boolean | null }[],
   edges: BucketEdge[],
 ): BucketRate[] {
   return edges.map((e, i) => {
     const lo = i === 0 ? -Infinity : edges[i - 1].max;
-    const inB = rows.filter((r) => r.value >= lo && r.value < e.max);
+    // `hit === null` means "no edge" (a tie) — excluded so it's neither a win
+    // nor a loss for the higher-value team.
+    const inB = rows.filter((r) => r.value >= lo && r.value < e.max && r.hit !== null);
     return {
       bucket: e.label,
       count: inB.length,

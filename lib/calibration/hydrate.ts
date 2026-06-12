@@ -150,6 +150,7 @@ export function hydrateTeamFromPool(
       sixthManAge,
       heightTotal,
       starterMeta: starterRows.map(metaOf),
+      sixthMeta: metaOf(sixthRow),
     };
   } catch {
     return null;

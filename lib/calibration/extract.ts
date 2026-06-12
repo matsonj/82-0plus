@@ -17,8 +17,8 @@
 import { simulateRoster } from "../scoring";
 import { simulateBracket, type TournamentTeam } from "../tournament";
 import { deriveRecord } from "../tournamentRun";
-import type { BracketResult, GameBreakdown, StatNorms } from "../types";
-import type { HydratedTeam, ReplayField } from "./types";
+import type { BracketPlayer, BracketResult, GameBreakdown, StatNorms } from "../types";
+import type { HydratedTeam, PlayerMeta, ReplayField } from "./types";
 import type { ResolvedCandidate } from "./types";
 
 // ── raw observation rows ─────────────────────────────────────────────────────
@@ -42,11 +42,12 @@ export interface TeamRatingRow {
 export interface GameRow {
   homeWon: boolean;
   seedNetAbsDiff: number;
-  higherSeedWon: boolean;
+  // `null` = no edge (the two values tied) → excluded from that bucket's rate.
+  higherSeedWon: boolean | null;
   heightEdgeAbsDiff: number; // |heightBuff(home) − heightBuff(away)|
-  higherHeightWon: boolean;
+  higherHeightWon: boolean | null;
   gameScoreAbsDiff: number; // |gameScoreBuff(home) − gameScoreBuff(away)|
-  higherGameScoreWon: boolean;
+  higherGameScoreWon: boolean | null;
   flipMods: string[];
 }
 
@@ -107,8 +108,20 @@ function adjFrom(b: GameBreakdown): number {
   );
 }
 
-/** Build a TournamentTeam from a hydrated team + its candidate-recomputed seedNet. */
+const toBracketPlayer = (m: PlayerMeta): BracketPlayer => ({
+  name: m.name,
+  team: m.team,
+  season: m.season,
+});
+
+/** Build a TournamentTeam from a hydrated team + its candidate-recomputed seedNet.
+ *  `roster` (captain flagged) and `sixthManInfo` MUST be threaded through: the
+ *  engine's seeding reads them via regionScore to assign conferences by region
+ *  affinity, so omitting them would bias every replayed bracket path. */
 function toTournamentTeam(team: HydratedTeam, seedNet: number): TournamentTeam {
+  const roster: BracketPlayer[] = team.starterMeta.map((m, i) =>
+    i === team.captainSlot ? { ...toBracketPlayer(m), captain: true } : toBracketPlayer(m),
+  );
   return {
     id: team.id,
     name: team.name,
@@ -119,6 +132,8 @@ function toTournamentTeam(team: HydratedTeam, seedNet: number): TournamentTeam {
     ageAtPeak: team.ageAtPeak,
     sixthManAge: team.sixthManAge,
     seedNet,
+    roster,
+    sixthManInfo: toBracketPlayer(team.sixthMeta),
   };
 }
 
@@ -235,14 +250,19 @@ function extractGames(bracket: BracketResult, out: GameRow[]): void {
           if (h >= a !== baseWinnerHome) flipMods.push(m);
         }
 
+        // Strict edge: a tie (equal values) is "no edge" → null, so it's excluded
+        // from that bucket's rate rather than scored as a win for the winner.
+        const edge = (winVal: number, loseVal: number): boolean | null =>
+          winVal === loseVal ? null : winVal > loseVal;
+
         out.push({
           homeWon,
           seedNetAbsDiff: Math.abs(hb.seedNet - ab.seedNet),
-          higherSeedWon: winB.seedNet >= loseB.seedNet,
+          higherSeedWon: edge(winB.seedNet, loseB.seedNet),
           heightEdgeAbsDiff: Math.abs(hb.heightBuff - ab.heightBuff),
-          higherHeightWon: winB.heightBuff >= loseB.heightBuff,
+          higherHeightWon: edge(winB.heightBuff, loseB.heightBuff),
           gameScoreAbsDiff: Math.abs(hb.gameScoreBuff - ab.gameScoreBuff),
-          higherGameScoreWon: winB.gameScoreBuff >= loseB.gameScoreBuff,
+          higherGameScoreWon: edge(winB.gameScoreBuff, loseB.gameScoreBuff),
           flipMods,
         });
       }
@@ -256,17 +276,20 @@ function accumulatePlayers(
   isFinalist: boolean,
   players: Map<string, PlayerAggMut>,
 ): void {
-  for (const m of team.starterMeta) {
-    let agg = players.get(m.entity_id);
+  // Keyed by player-SEASON (entity|team|season), not bare entity_id, so e.g.
+  // Kareem '72 and '77 don't collapse. Sixth men count too — they play games.
+  for (const m of [...team.starterMeta, team.sixthMeta]) {
+    const key = `${m.entity_id}|${m.team}|${m.season}`;
+    let agg = players.get(key);
     if (!agg) {
       agg = {
         entity_id: m.entity_id,
-        name: m.name,
+        name: `${m.name} (${m.team} '${String(m.season).slice(-2)})`,
         appearances: 0,
         championAppearances: 0,
         deepRunAppearances: 0,
       };
-      players.set(m.entity_id, agg);
+      players.set(key, agg);
     }
     agg.appearances++;
     if (isChampion) agg.championAppearances++;
