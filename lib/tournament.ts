@@ -127,7 +127,15 @@ export const TOURNAMENT_CONFIG = {
   MAX_GAME_TOTAL: 258,
 } as const;
 
-export type TournamentConfig = typeof TOURNAMENT_CONFIG;
+// Widen the numeric knobs from their `as const` literals to `number` so the
+// calibration harness can override individual constants (e.g. HEIGHT_PER_INCH)
+// while the frozen runtime default above is unchanged. Non-numeric knobs (e.g.
+// SERIES_RECOVERY_PCT: Record<number, number>) keep their declared types.
+export type TournamentConfig = {
+  -readonly [K in keyof typeof TOURNAMENT_CONFIG]: (typeof TOURNAMENT_CONFIG)[K] extends number
+    ? number
+    : (typeof TOURNAMENT_CONFIG)[K];
+};
 
 // ---------------------------------------------------------------------------
 // Small helpers (mirrors scoring.ts style).

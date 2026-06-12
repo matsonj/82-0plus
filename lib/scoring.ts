@@ -147,7 +147,15 @@ export const SCORING_CONFIG = {
   //   low-volume 3P% doesn't brand a good shooter (Wilkins/Majerle) a non-shooter.
 } as const;
 
-export type ScoringConfig = typeof SCORING_CONFIG;
+// The runtime default above is `as const` (narrow literal types), but the
+// calibration harness needs to override individual numeric knobs. Widen every
+// numeric field to `number` so a candidate config (`{...SCORING_CONFIG, X: y}`)
+// type-checks, without touching the frozen runtime default.
+export type ScoringConfig = {
+  -readonly [K in keyof typeof SCORING_CONFIG]: (typeof SCORING_CONFIG)[K] extends number
+    ? number
+    : (typeof SCORING_CONFIG)[K];
+};
 
 const clamp = (x: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, x));

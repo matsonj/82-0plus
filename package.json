@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
-    "bench": "node scripts/benchmark.mjs"
+    "bench": "node scripts/benchmark.mjs",
+    "calibrate:tournament": "npx tsx scripts/calibrateTournament.ts"
   },
   "dependencies": {
     "next": "16.2.7",
