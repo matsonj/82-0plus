@@ -137,7 +137,10 @@ export function PlayerList({
     return filtered;
   }, [all, q, sortKey, posFilter, mode]);
 
-  const noneEligible = status === "ok" && available.length === 0;
+  // The "no one fits your open slots → respin/rearrange" prompt is draft-only.
+  // In browse there are no slots, so an empty roster (e.g. a stale/typed combo
+  // URL) falls through to the neutral empty-state below instead.
+  const noneEligible = !browse && status === "ok" && available.length === 0;
 
   // The carousel scans the currently displayed rows (same order/index).
   const cardPlayers = useMemo<CardPlayer[]>(
@@ -244,7 +247,10 @@ export function PlayerList({
         )}
         {status === "ok" && !noneEligible && rows.length === 0 && (
           <div className="px-3 py-6 text-center font-display text-sm text-[var(--md-ink-muted)]">
-            No {posFilter === "all" ? "" : `${posFilter} `}players match.
+            {all.length === 0
+              ? // Empty roster — e.g. a stale/typed combo URL with no such team+era.
+                `No roster on record for ${team} in the ${decade}s.`
+              : `No ${posFilter === "all" ? "" : `${posFilter} `}players match.`}
           </div>
         )}
         {status === "ok" &&

@@ -14,6 +14,10 @@ const DB = "nba_box_scores_v2.main";
 // appear in the slot machine (keeps thin combos out of the rotation).
 const MIN_PLAYERS_PER_COMBO = 10;
 
+// The top-by-minutes roster a combo actually OFFERS. /api/players, the offered-id
+// proof, and the Player Cards count all cap here so they agree on the visible set.
+const MAX_OFFERED_PER_COMBO = 60;
+
 // A decade must have at least this many *playable* teams before it's offered in
 // rolls. Without it, a decade with only 2 qualifying teams (e.g. the 1950s:
 // BOS + SYR) makes one team appear ~50% of the time. Decades auto-return once
@@ -105,7 +109,14 @@ export async function getTeamDecadeCombos(
   for (const [k, count] of counts) {
     if (count < MIN_PLAYERS_PER_COMBO) continue;
     const [team, decade] = k.split("|");
-    combos.push({ team, decade: Number(decade), count });
+    // Report the visible count: /api/players only serves the top
+    // MAX_OFFERED_PER_COMBO by minutes, so a deeper roster mustn't advertise
+    // players the browser can never show.
+    combos.push({
+      team,
+      decade: Number(decade),
+      count: Math.min(count, MAX_OFFERED_PER_COMBO),
+    });
   }
   return combos.sort(
     (a, b) => b.decade - a.decade || a.team.localeCompare(b.team),
@@ -458,7 +469,7 @@ export async function getPlayers(
   return index
     .filter((p) => p.team === team && p.decade === decade)
     .sort((a, b) => b.mpg - a.mpg)
-    .slice(0, 60)
+    .slice(0, MAX_OFFERED_PER_COMBO)
     .map((p) => toPublic(p, mode));
 }
 
@@ -475,7 +486,7 @@ export async function getOfferedIds(
     index
       .filter((p) => p.team === team && p.decade === decade)
       .sort((a, b) => b.mpg - a.mpg)
-      .slice(0, 60)
+      .slice(0, MAX_OFFERED_PER_COMBO)
       .map((p) => p.entity_id),
   );
 }
