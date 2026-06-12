@@ -45,8 +45,13 @@ function comboMatches(
   playerCombos: Set<string>,
 ): boolean {
   if (!nq) return true;
+  // A full 4-digit year matches its decade bucket (1996 → the 1990s). Partial
+  // digits still substring-match the decade label below ("199" → 1990).
+  const year = /^\d{4}$/.test(nq) ? Number(nq) : NaN;
+  const yearInDecade = Number.isInteger(year) && decade === year - (year % 10);
   return (
     team.toLowerCase().includes(nq) ||
+    yearInDecade ||
     `${decade}`.includes(nq) ||
     `${decade}s`.includes(nq) ||
     playerCombos.has(`${team}|${decade}`)
@@ -62,14 +67,27 @@ function comboMatches(
 export default function CardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ team?: string; decade?: string; q?: string }>;
+  // A repeated param (?q=a&q=b) arrives as string[], so accept both shapes and
+  // collapse to the first value before any string ops.
+  searchParams: Promise<{
+    team?: string | string[];
+    decade?: string | string[];
+    q?: string | string[];
+  }>;
 }) {
-  const { team, decade, q } = use(searchParams);
-  const teamValid = !!team && /^[A-Z]{3}$/.test(team);
+  const sp = use(searchParams);
+  const first = (v: string | string[] | undefined): string =>
+    (Array.isArray(v) ? v[0] : v) ?? "";
+  const team = first(sp.team);
+  const decade = first(sp.decade);
+  const teamValid = /^[A-Z]{3}$/.test(team);
   const decadeNum = Number(decade);
   const decadeValid =
-    Number.isInteger(decadeNum) && decadeNum >= 1900 && decadeNum <= 2100;
-  const query = (q ?? "").slice(0, 64);
+    decade !== "" &&
+    Number.isInteger(decadeNum) &&
+    decadeNum >= 1900 &&
+    decadeNum <= 2100;
+  const query = first(sp.q).slice(0, 64);
 
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
@@ -78,9 +96,9 @@ export default function CardsPage({
       <GlobalHeader />
 
       {teamValid && decadeValid ? (
-        <TeamRoster team={team!} decade={decadeNum} query={query} />
+        <TeamRoster team={team} decade={decadeNum} query={query} />
       ) : teamValid ? (
-        <TeamStack team={team!} query={query} />
+        <TeamStack team={team} query={query} />
       ) : (
         <StacksGrid initialQuery={query} />
       )}
