@@ -4,7 +4,7 @@ import { SCORING_CONFIG } from "../scoring";
 import { TOURNAMENT_CONFIG } from "../tournament";
 
 describe("candidate configs", () => {
-  it("registers all seven v1 candidates including current", () => {
+  it("registers the candidate set including current and the round-2 aggressive configs", () => {
     expect(allCandidateNames()).toEqual([
       "current",
       "reduce-matchup-height",
@@ -13,6 +13,9 @@ describe("candidate configs", () => {
       "creation-synergy",
       "combined-lite",
       "combined-strong",
+      "height-edge-min",
+      "combined-max",
+      "combined-max-floor",
     ]);
   });
 

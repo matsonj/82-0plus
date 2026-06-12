@@ -107,6 +107,66 @@ export const CANDIDATES: CandidateConfig[] = [
     },
     tournamentOverrides: { HEIGHT_PER_INCH: 0.1, HEIGHT_CAP: 2.0 },
   },
+
+  // ── Round 2: pull the levers harder. combined-strong only halved the
+  //    tall-stack tournament share (≈57%, fair ≈25%), so these push the two
+  //    mechanisms that keep bigs on top: the tournament per-game height edge,
+  //    and the penalty floor that rescues bad-fit-but-talented stacks (keeping
+  //    their seedNet — hence their seed — high). The last one deliberately
+  //    overshoots to find the over-correction boundary (the realism floor).
+  {
+    name: "height-edge-min",
+    description:
+      "Isolate the tournament lever: nearly remove the per-game height edge (HEIGHT_PER_INCH 0.15→0.06, HEIGHT_CAP 3.0→1.0), nothing else.",
+    scoringOverrides: {},
+    tournamentOverrides: { HEIGHT_PER_INCH: 0.06, HEIGHT_CAP: 1.0 },
+  },
+  {
+    name: "combined-max",
+    description:
+      "combined-strong pushed harder on every lever — deeper height trim, smaller size/defense boosts, heavier frontcourt tax, more creation reward, and a looser floor so construction penalties actually bite seedNet.",
+    scoringOverrides: {
+      SIZE_MAX_PEN: 2,
+      DEF_HEIGHT_1ST: 1,
+      DEF_HEIGHT_2ND: 0.5,
+      DEF_MARGIN_1ST: 0.75,
+      DEF_MARGIN_2ND: 0.4,
+      DEF_MARGIN_CAP: 2,
+      NO_GUARD_PEN: 16,
+      SKEW_PEN: 7,
+      OUTSIDE_PEN_2: 9,
+      OUTSIDE_PEN_3PLUS: 26,
+      SYNERGY_FRAC: 0.22,
+      BALLHOG_MAX_PEN: 18,
+      ASSIST_RATE_TARGET: 0.5,
+      FLOOR_TALENT_SHARE: 0.3,
+      MAX_FIT_PENALTY: 24,
+    },
+    tournamentOverrides: { HEIGHT_PER_INCH: 0.06, HEIGHT_CAP: 1.25 },
+  },
+  {
+    name: "combined-max-floor",
+    description:
+      "combined-max plus a much lower penalty floor (FLOOR_TALENT_SHARE 0.5→0.25, MAX_FIT_PENALTY 15→30) so frontcourt stacks lose seed, not just games. Intentionally aggressive — expected to test the realism floor (bigs must stay excellent).",
+    scoringOverrides: {
+      SIZE_MAX_PEN: 2,
+      DEF_HEIGHT_1ST: 1,
+      DEF_HEIGHT_2ND: 0.5,
+      DEF_MARGIN_1ST: 0.75,
+      DEF_MARGIN_2ND: 0.4,
+      DEF_MARGIN_CAP: 2,
+      NO_GUARD_PEN: 16,
+      SKEW_PEN: 7,
+      OUTSIDE_PEN_2: 9,
+      OUTSIDE_PEN_3PLUS: 26,
+      SYNERGY_FRAC: 0.22,
+      BALLHOG_MAX_PEN: 18,
+      ASSIST_RATE_TARGET: 0.5,
+      FLOOR_TALENT_SHARE: 0.25,
+      MAX_FIT_PENALTY: 30,
+    },
+    tournamentOverrides: { HEIGHT_PER_INCH: 0.06, HEIGHT_CAP: 1.25 },
+  },
 ];
 
 /** Merge a candidate's partial overrides onto the live defaults. The defaults
