@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { GameMode, PublicPlayer } from "@/lib/types";
 import type { Role } from "@/lib/positions";
 import { PlayerCardCarousel, CardGlyph, type CardPlayer } from "@/components/PlayerCard";
@@ -62,7 +62,6 @@ export function PlayerList({
   onPick = () => {},
   onNoneEligible = () => {},
   browse = false,
-  openEntityId = null,
 }: {
   team: string;
   decade: number;
@@ -76,9 +75,6 @@ export function PlayerList({
   // Read-only browse (Player Cards): every row opens the player's career card
   // instead of drafting — no slots, no Pick/Draft, no respin.
   browse?: boolean;
-  // Browse only: auto-open this player's card once the roster loads (deep link
-  // from player-name search). Reopens only when the id itself changes.
-  openEntityId?: string | null;
 }) {
   const [all, setAll] = useState<PublicPlayer[]>([]);
   const [status, setStatus] = useState<Status>("loading");
@@ -160,20 +156,6 @@ export function PlayerList({
       })),
     [rows, team],
   );
-
-  // Deep link from player search: open the named player's card once the roster
-  // is loaded. Guarded by a ref so closing the card (or paging the carousel)
-  // doesn't reopen it — only a new openEntityId triggers another auto-open.
-  const autoOpenedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!browse || !openEntityId || status !== "ok") return;
-    if (autoOpenedRef.current === openEntityId) return;
-    const idx = rows.findIndex((p) => p.entity_id === openEntityId);
-    if (idx >= 0) {
-      autoOpenedRef.current = openEntityId;
-      setCardIndex(idx);
-    }
-  }, [browse, openEntityId, status, rows]);
 
   return (
     <div className="flex flex-col gap-2">

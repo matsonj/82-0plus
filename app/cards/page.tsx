@@ -29,16 +29,13 @@ type Status = "loading" | "ok" | "error";
 export default function CardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ team?: string; decade?: string; player?: string }>;
+  searchParams: Promise<{ team?: string; decade?: string }>;
 }) {
-  const { team, decade, player } = use(searchParams);
+  const { team, decade } = use(searchParams);
   const teamValid = !!team && /^[A-Z]{3}$/.test(team);
   const decadeNum = Number(decade);
   const decadeValid =
     Number.isInteger(decadeNum) && decadeNum >= 1900 && decadeNum <= 2100;
-  const openEntityId = /^[A-Za-z0-9_-]{1,64}$/.test(player ?? "")
-    ? player!
-    : null;
 
   return (
     <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
@@ -47,7 +44,7 @@ export default function CardsPage({
       <GlobalHeader />
 
       {teamValid && decadeValid ? (
-        <TeamRoster team={team!} decade={decadeNum} openEntityId={openEntityId} />
+        <TeamRoster team={team!} decade={decadeNum} />
       ) : teamValid ? (
         <TeamStack team={team!} />
       ) : (
@@ -100,28 +97,32 @@ function useCombos() {
   return { combos, status };
 }
 
-// Debounced player-name search. Returns [] until the query is ≥2 chars.
-function usePlayerSearch(q: string): PlayerMatch[] {
+// Debounced player-name search. `searching` is true while a ≥2-char query is
+// in flight, so the grid can hold off its "nothing matches" message.
+function usePlayerSearch(q: string): { matches: PlayerMatch[]; searching: boolean } {
   const nq = q.trim();
   const [matches, setMatches] = useState<PlayerMatch[]>([]);
+  const [searching, setSearching] = useState(false);
   useEffect(() => {
     if (nq.length < 2) {
       setMatches([]);
+      setSearching(false);
       return;
     }
     let active = true;
+    setSearching(true);
     const t = setTimeout(() => {
       fetch(`/api/player-search?q=${encodeURIComponent(nq)}`)
         .then((r) => (r.ok ? r.json() : { matches: [] }))
-        .then((d) => active && setMatches(d.matches ?? []))
-        .catch(() => active && setMatches([]));
+        .then((d) => active && (setMatches(d.matches ?? []), setSearching(false)))
+        .catch(() => active && (setMatches([]), setSearching(false)));
     }, 180);
     return () => {
       active = false;
       clearTimeout(t);
     };
   }, [nq]);
-  return matches;
+  return { matches, searching };
 }
 
 interface Stack {
@@ -134,7 +135,12 @@ interface Stack {
 function StacksGrid() {
   const { combos, status } = useCombos();
   const [q, setQ] = useState("");
-  const playerMatches = usePlayerSearch(q);
+  const { matches: playerMatches, searching } = usePlayerSearch(q);
+  // Teams a name query hits — used to keep their stacks in the filtered grid.
+  const playerTeams = useMemo(
+    () => new Set(playerMatches.map((m) => m.team)),
+    [playerMatches],
+  );
 
   const stacks = useMemo<Stack[]>(() => {
     const byTeam = new Map<string, number[]>();
@@ -155,15 +161,15 @@ function StacksGrid() {
   const filtered = useMemo(() => {
     const nq = q.trim().toLowerCase();
     if (!nq) return stacks;
-    // Match the team code, or any era a year query falls in (e.g. "1996" → 1990s).
+    // Match the team code, any era a year query falls in (e.g. "1996" → 1990s),
+    // or a team a matched player played for (so a name narrows to his stacks).
     return stacks.filter(
       (s) =>
         s.team.toLowerCase().includes(nq) ||
-        s.decades.some(
-          (d) => `${d}`.includes(nq) || `${d}s`.includes(nq),
-        ),
+        s.decades.some((d) => `${d}`.includes(nq) || `${d}s`.includes(nq)) ||
+        playerTeams.has(s.team),
     );
-  }, [stacks, q]);
+  }, [stacks, q, playerTeams]);
 
   return (
     <section className="relative z-10 mt-6 flex flex-col sm:mt-8">
@@ -200,50 +206,17 @@ function StacksGrid() {
       {status === "ok" &&
         q.trim().length > 0 &&
         filtered.length === 0 &&
-        playerMatches.length === 0 && (
+        !searching && (
           <div className="mt-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
             Nothing matches &ldquo;{q}&rdquo;.
           </div>
         )}
 
-      {/* Player-name hits — each opens that player's card on their team+era roster. */}
-      {status === "ok" && playerMatches.length > 0 && (
-        <div className="mt-6">
-          <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Players
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {playerMatches.map((m) => (
-              <Link
-                key={`${m.entity_id}|${m.team}|${m.decade}`}
-                href={`/cards?team=${m.team}&decade=${m.decade}&player=${m.entity_id}`}
-                className="md-card md-card--lift flex items-center justify-between gap-2 p-3 text-left transition-transform hover:-translate-y-0.5"
-              >
-                <span className="min-w-0 truncate font-display text-sm font-bold">
-                  {m.player_name}
-                </span>
-                <span className="shrink-0 font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  <span className="text-[var(--md-orange-deep)]">{m.team}</span>{" "}
-                  &rsquo;{String(m.best_season).slice(2)}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
       {status === "ok" && filtered.length > 0 && (
-        <div className="mt-6">
-          {playerMatches.length > 0 && (
-            <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-              Teams
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 md:grid-cols-4">
-            {filtered.map((s) => (
-              <CardStack key={s.team} team={s.team} eras={s.eras} />
-            ))}
-          </div>
+        <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 md:grid-cols-4">
+          {filtered.map((s) => (
+            <CardStack key={s.team} team={s.team} eras={s.eras} />
+          ))}
         </div>
       )}
 
@@ -362,15 +335,7 @@ function TeamStack({ team }: { team: string }) {
 }
 
 // A single era's roster: the shared Classic list in browse mode.
-function TeamRoster({
-  team,
-  decade,
-  openEntityId,
-}: {
-  team: string;
-  decade: number;
-  openEntityId: string | null;
-}) {
+function TeamRoster({ team, decade }: { team: string; decade: number }) {
   return (
     <section className="relative z-10 mt-6 flex flex-col sm:mt-8">
       <Link
@@ -392,13 +357,7 @@ function TeamRoster({
       </p>
 
       <div className="mt-4">
-        <PlayerList
-          team={team}
-          decade={decade}
-          mode="classic"
-          browse
-          openEntityId={openEntityId}
-        />
+        <PlayerList team={team} decade={decade} mode="classic" browse />
       </div>
     </section>
   );
