@@ -4,30 +4,26 @@ import { SCORING_CONFIG } from "../scoring";
 import { TOURNAMENT_CONFIG } from "../tournament";
 
 describe("candidate configs", () => {
-  it("registers the candidate set including current and the round-2 aggressive configs", () => {
+  it("registers the post-adoption candidate set (live baseline + revert + stress tests)", () => {
     expect(allCandidateNames()).toEqual([
       "current",
-      "reduce-matchup-height",
-      "reduce-rating-size-defense",
-      "frontcourt-tax",
-      "creation-synergy",
-      "combined-lite",
-      "combined-strong",
+      "legacy-pre-calibration",
       "height-edge-min",
-      "combined-max",
       "combined-max-floor",
     ]);
   });
 
   it("merges overrides onto the live defaults", () => {
     const r = resolveCandidate(
-      CANDIDATES.find((c) => c.name === "reduce-matchup-height")!,
+      CANDIDATES.find((c) => c.name === "legacy-pre-calibration")!,
     );
-    expect(r.tournament.HEIGHT_PER_INCH).toBe(0.1);
-    expect(r.tournament.HEIGHT_CAP).toBe(2.0);
-    // an un-overridden tournament knob keeps its default
+    // the revert restores the pre-calibration height + size constants
+    expect(r.tournament.HEIGHT_PER_INCH).toBe(0.15);
+    expect(r.tournament.HEIGHT_CAP).toBe(3.0);
+    expect(r.scoring.SIZE_MAX_PEN).toBe(6);
+    // an un-overridden tournament knob keeps its (live) default
     expect(r.tournament.HOME_BUFF).toBe(TOURNAMENT_CONFIG.HOME_BUFF);
-    // scoring is untouched for this candidate
+    // an un-overridden scoring knob keeps its (live) default
     expect(r.scoring.NET_PER_GQ).toBe(SCORING_CONFIG.NET_PER_GQ);
   });
 
@@ -43,9 +39,9 @@ describe("candidate configs", () => {
     resolveCandidates(allCandidateNames());
     expect(JSON.stringify(SCORING_CONFIG)).toBe(beforeScoring);
     expect(JSON.stringify(TOURNAMENT_CONFIG)).toBe(beforeTourney);
-    // and the canonical defaults are exactly what we expect
-    expect(TOURNAMENT_CONFIG.HEIGHT_PER_INCH).toBe(0.15);
-    expect(TOURNAMENT_CONFIG.HEIGHT_CAP).toBe(3.0);
+    // and the canonical (adopted combined-max) defaults are exactly what we expect
+    expect(TOURNAMENT_CONFIG.HEIGHT_PER_INCH).toBe(0.06);
+    expect(TOURNAMENT_CONFIG.HEIGHT_CAP).toBe(1.25);
   });
 
   it("throws on an unknown candidate name", () => {

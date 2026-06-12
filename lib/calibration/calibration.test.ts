@@ -58,9 +58,11 @@ describe("replay + metric extraction", () => {
   });
 
   it("different scoring overrides change team ratings", () => {
-    const strong = resolveCandidate(CANDIDATES.find((c) => c.name === "combined-strong")!);
+    const legacy = resolveCandidate(
+      CANDIDATES.find((c) => c.name === "legacy-pre-calibration")!,
+    );
     const a = replayCandidate(current, fields, norms);
-    const b = replayCandidate(strong, fields, norms);
+    const b = replayCandidate(legacy, fields, norms);
     const netA = a.teamRatingRows.map((r) => r.netRating);
     const netB = b.teamRatingRows.map((r) => r.netRating);
     // same set of teams, but the overrides shift at least one net rating
@@ -76,7 +78,7 @@ describe("runCalibration + report rendering (fixture smoke)", () => {
     seed: "smoke",
     modes: ["classic"],
     outDir: "/tmp/ignored",
-    candidates: ["current", "reduce-matchup-height"],
+    candidates: ["current", "legacy-pre-calibration"],
   };
 
   it("produces a scored report for each candidate", () => {

@@ -67,8 +67,11 @@ export const TOURNAMENT_CONFIG = {
 
   // Size edge: net per inch of summed-starter-height advantage vs the opponent,
   // capped both directions (zero-sum — what one team gains the other loses).
-  HEIGHT_PER_INCH: 0.15,
-  HEIGHT_CAP: 3.0,
+  // Trimmed hard by the calibration harness (was 0.15 / 3.0): the per-game height
+  // edge was letting tall stacks convert ~88% of bracket titles; at 0.06 / 1.25
+  // it's ~31% (fair ≈ 25%) without dropping elite bigs below excellent.
+  HEIGHT_PER_INCH: 0.06,
+  HEIGHT_CAP: 1.25,
 
   // Game-score buff — the one reward for TEAM COMPOSITION, so it's the strongest
   // matchup buff and it SCALES with how decisively you win the 8-category pairwise

@@ -81,34 +81,42 @@ export const SCORING_CONFIG = {
   WINS_PER_NET: 2.7,
   BASE_WINS: 41,
 
+  // ── Calibration (combined-max tuning) ───────────────────────────────────────
+  // The construction constants below were retuned via scripts/calibrateTournament.ts
+  // to stop tall frontcourt stacks from dominating the bracket (~88% → ~31% of
+  // titles) while keeping elite bigs excellent (~66 projected wins): lighter
+  // size/defense reward, a heavier frontcourt tax, more creation/ball-movement
+  // upside, and a looser penalty floor so construction bites a stack's SEED, not
+  // just its games. Legacy (pre-calibration) values are noted inline.
+
   // Fit penalties, in net-rating points subtracted at their worst.
   USAGE_MAX_PEN: 20, // shot-overlap: stars must sacrifice usage to fit together
-  BALLHOG_MAX_PEN: 11, // iso-heavy, low assisted-FG%
+  BALLHOG_MAX_PEN: 18, // iso-heavy, low assisted-FG% (was 11 — reward ball movement)
   // Outside shooting (stepped): 0–1 non-shooters is fine, 2 hurts, 3+ is brutal.
-  OUTSIDE_PEN_2: 5, // exactly two non-shooters
-  OUTSIDE_PEN_3PLUS: 15, // three or more — the paint is hopelessly clogged
+  OUTSIDE_PEN_2: 9, // exactly two non-shooters (was 5)
+  OUTSIDE_PEN_3PLUS: 26, // three or more — the paint is hopelessly clogged (was 15)
 
   // Archetype-balance penalties (by REAL position).
-  NO_GUARD_PEN: 9, // no true ball-handler / perimeter defender
-  SKEW_PEN: 3, // per player beyond 3 sharing one position
+  NO_GUARD_PEN: 16, // no true ball-handler / perimeter defender (was 9)
+  SKEW_PEN: 7, // per player beyond 3 sharing one position (was 3)
 
   // Size (total real height of the five vs a threshold). All-Defense players add
   // effective inches (they defend bigger than they measure).
-  SIZE_MAX_PEN: 6, // worst-case penalty for a far-too-short lineup
+  SIZE_MAX_PEN: 2, // worst-case penalty for a far-too-short lineup (was 6)
   SIZE_TARGET_TOTAL: 393, // sum of 5 heights at/above which there's no penalty (~6'7" avg)
   SIZE_FLOOR_TOTAL: 373, // sum at/below which the full penalty applies (~6'2.6" avg)
-  DEF_HEIGHT_1ST: 4, // effective inches an All-Def 1st-teamer adds to team height
-  DEF_HEIGHT_2ND: 2, // … 2nd-teamer
+  DEF_HEIGHT_1ST: 1, // effective inches an All-Def 1st-teamer adds to team height (was 4)
+  DEF_HEIGHT_2ND: 0.5, // … 2nd-teamer (was 2)
 
   // Defense margin bonus (GQ undercounts defense): net rating added per All-Def
   // selection on the drafted season.
-  DEF_MARGIN_1ST: 1.5,
-  DEF_MARGIN_2ND: 0.75,
-  DEF_MARGIN_CAP: 5, // soft cap on the total defensive buff
+  DEF_MARGIN_1ST: 0.75, // (was 1.5)
+  DEF_MARGIN_2ND: 0.4, // (was 0.75)
+  DEF_MARGIN_CAP: 2, // soft cap on the total defensive buff (was 5)
 
   // Construction synergy: a well-spaced, ball-moving, non-overloaded AND balanced
   // roster amplifies talent — the upside that lets a great team reach 82-0.
-  SYNERGY_FRAC: 0.12, // up to +12% of base net rating
+  SYNERGY_FRAC: 0.22, // up to +22% of base net rating (was 0.12)
 
   // Talent-scaled penalty floor. The construction penalties stack additively and
   // could otherwise drag an elite-talent roster to ~0 wins. We floor the net so a
@@ -118,14 +126,14 @@ export const SCORING_CONFIG = {
   // 60-win mark); weaker rosters feel the full penalty. It is clamped below the AA
   // band so a penalized team can never reach S/AA — construction still gates the top.
   FLOOR_MIN_WINS: 60, // net at this win total is the floor's base for elite talent
-  FLOOR_TALENT_SHARE: 0.5, // each net point of talent past the 60-win mark lifts the floor by this
+  FLOOR_TALENT_SHARE: 0.3, // each net point of talent past the 60-win mark lifts the floor by this (was 0.5)
   FLOOR_MAX_WINS: 79, // the floor can never exceed the top of A tier (no floored AA/S)
   // Absolute cap on the construction ("Team fit") penalty, in net-rating points,
   // for ANY team. The talent-scaled floor above only rescues ELITE talent; this
   // backstop keeps a sub-elite-but-real roster (recognizable stars who happen to
   // fit poorly) from being cratered purely by construction. Penalties still bite
   // hard — they just can't subtract more than this much net.
-  MAX_FIT_PENALTY: 15,
+  MAX_FIT_PENALTY: 24, // (was 15 — let construction bite a stack's seed, not just games)
 
   // Fit targets.
   POSS_BUDGET_PER_SLOT: 22, // box-scale budget: possessions (fga + 0.44·fta + tov) one
@@ -138,7 +146,7 @@ export const SCORING_CONFIG = {
   //   full USAGE_MAX_PEN applies — 0.45 ⇒ ~145 possessions; quadratic ramp below it.
   USAGE_BOX_MIN: 0.6, // floor on the box usage-scale (heavy overload can't zero scoring)
   USAGE_BOX_MAX: 1.4, // cap on the box usage-scale (under-usage bump is bounded)
-  ASSIST_RATE_TARGET: 0.55, // assisted-FG% at/above which the ball-hog tax is zero
+  ASSIST_RATE_TARGET: 0.5, // assisted-FG% at/above which the ball-hog tax is zero (was 0.55)
   // Outside-shooting (spacing) thresholds.
   FT_LIABILITY_MAX: 0.65, // FT% at/below this → non-shooter (era-neutral touch tell)
   FG3_LIABILITY_MAX: 0.3, // 3P% below this → non-shooter (only if they shoot enough 3s)
