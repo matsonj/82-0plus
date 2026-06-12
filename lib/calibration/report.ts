@@ -154,29 +154,39 @@ function candidateSection(m: CalibrationMetrics): string {
   lines.push("");
 
   // Players + pairs.
+  const rate = (num: number, den: number) => (den > 0 ? pct(num / den) : "—");
   if (m.topPlayers.length) {
     lines.push("### Top player-seasons (by championships)");
     lines.push("");
     lines.push(
       table(
-        ["player", "appearances", "champs", "finals"],
+        ["player-season", "apps", "champs", "champ%", "finals", "final%"],
         m.topPlayers.map((p) => [
           p.name,
           p.appearances,
           p.championAppearances,
+          rate(p.championAppearances, p.appearances),
           p.deepRunAppearances,
+          rate(p.deepRunAppearances, p.appearances),
         ]),
       ),
     );
     lines.push("");
   }
   if (m.topPairs.length) {
-    lines.push("### Top pairs (by finals appearances)");
+    lines.push("### Top pairs (by championships)");
     lines.push("");
     lines.push(
       table(
-        ["pair", "finals"],
-        m.topPairs.map((p) => [p.names, p.deepRunCount]),
+        ["pair", "apps", "champs", "champ%", "finals", "final%"],
+        m.topPairs.map((p) => [
+          p.names,
+          p.appearances,
+          p.championAppearances,
+          rate(p.championAppearances, p.appearances),
+          p.deepRunAppearances,
+          rate(p.deepRunAppearances, p.appearances),
+        ]),
       ),
     );
     lines.push("");

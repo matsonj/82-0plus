@@ -363,8 +363,13 @@ function topPlayers(obs: CandidateObservations, n = 15): PlayerAgg[] {
 
 function topPairs(obs: CandidateObservations, n = 15): PairAgg[] {
   return [...obs.pairs.values()]
-    .filter((p) => p.deepRunCount >= 1)
-    .sort((a, b) => b.deepRunCount - a.deepRunCount)
+    .filter((p) => p.appearances >= 2) // drop one-off combos so rates mean something
+    .sort(
+      (a, b) =>
+        b.championAppearances - a.championAppearances ||
+        b.deepRunAppearances - a.deepRunAppearances ||
+        b.appearances - a.appearances,
+    )
     .slice(0, n);
 }
 

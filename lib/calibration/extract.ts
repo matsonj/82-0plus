@@ -72,7 +72,9 @@ export interface PairAggMut {
   a: string;
   b: string;
   names: string;
-  deepRunCount: number;
+  appearances: number;
+  championAppearances: number;
+  deepRunAppearances: number;
 }
 
 export interface CandidateObservations {
@@ -137,7 +139,12 @@ function toTournamentTeam(team: HydratedTeam, seedNet: number): TournamentTeam {
   };
 }
 
-const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+// Player-SEASON identity: distinguishes e.g. Kareem '72 from '77. Shared by the
+// player and pair aggregations so both are season-aware and rate-able.
+const seasonKey = (m: PlayerMeta) => `${m.entity_id}|${m.team}|${m.season}`;
+const seasonLabel = (m: PlayerMeta) =>
+  `${m.name} (${m.team} '${String(m.season).slice(-2)})`;
+const comboKey = (a: string, b: string) => (a < b ? `${a}#${b}` : `${b}#${a}`);
 
 /** Replay all fields under one candidate, returning flat observation rows. */
 export function replayCandidate(
@@ -222,7 +229,7 @@ export function replayCandidate(
         reachedRound: rec.reachedRound,
       });
       accumulatePlayers(ref.team, isChampion, isFinalist, players);
-      if (isFinalist) accumulatePairs(ref.team, pairs);
+      accumulatePairs(ref.team, isChampion, isFinalist, pairs);
     }
   }
 
@@ -279,12 +286,12 @@ function accumulatePlayers(
   // Keyed by player-SEASON (entity|team|season), not bare entity_id, so e.g.
   // Kareem '72 and '77 don't collapse. Sixth men count too — they play games.
   for (const m of [...team.starterMeta, team.sixthMeta]) {
-    const key = `${m.entity_id}|${m.team}|${m.season}`;
+    const key = seasonKey(m);
     let agg = players.get(key);
     if (!agg) {
       agg = {
         entity_id: m.entity_id,
-        name: `${m.name} (${m.team} '${String(m.season).slice(-2)})`,
+        name: seasonLabel(m),
         appearances: 0,
         championAppearances: 0,
         deepRunAppearances: 0,
@@ -297,22 +304,36 @@ function accumulatePlayers(
   }
 }
 
-function accumulatePairs(team: HydratedTeam, pairs: Map<string, PairAggMut>): void {
-  const m = team.starterMeta;
+function accumulatePairs(
+  team: HydratedTeam,
+  isChampion: boolean,
+  isFinalist: boolean,
+  pairs: Map<string, PairAggMut>,
+): void {
+  // Mirror player aggregation: every appearance (not just finalists), keyed by
+  // player-SEASON pairs so the report can show combo appearances + champ/finals
+  // RATES, not just raw finals counts. All six (starters + sixth) form combos.
+  const m = [...team.starterMeta, team.sixthMeta];
   for (let i = 0; i < m.length; i++) {
     for (let j = i + 1; j < m.length; j++) {
-      const key = pairKey(m[i].entity_id, m[j].entity_id);
+      const ka = seasonKey(m[i]);
+      const kb = seasonKey(m[j]);
+      const key = comboKey(ka, kb);
       let agg = pairs.get(key);
       if (!agg) {
         agg = {
-          a: m[i].entity_id,
-          b: m[j].entity_id,
-          names: `${m[i].name} & ${m[j].name}`,
-          deepRunCount: 0,
+          a: ka,
+          b: kb,
+          names: `${seasonLabel(m[i])} & ${seasonLabel(m[j])}`,
+          appearances: 0,
+          championAppearances: 0,
+          deepRunAppearances: 0,
         };
         pairs.set(key, agg);
       }
-      agg.deepRunCount++;
+      agg.appearances++;
+      if (isChampion) agg.championAppearances++;
+      if (isFinalist) agg.deepRunAppearances++;
     }
   }
 }

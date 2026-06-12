@@ -190,10 +190,12 @@ export interface PlayerAgg {
 }
 
 export interface PairAgg {
-  a: string; // entity_id
-  b: string; // entity_id
+  a: string; // player-season key (entity_id|team|season)
+  b: string; // player-season key
   names: string;
-  deepRunCount: number;
+  appearances: number;
+  championAppearances: number;
+  deepRunAppearances: number;
 }
 
 export interface GuardrailResult {
