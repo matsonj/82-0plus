@@ -199,12 +199,13 @@ const TOP10_MIN_FIELD = 10;
  * Two scorecard flags are derived per day in the same pass:
  *  - champion: the team RECORDED for that daily WON its tournament bracket
  *    (reached_round = 4). A daily can have several mode='daily' entries (each
- *    replay drafts the same team+era slots with different players and can be
- *    entered into its own bracket), so we must NOT credit any-entry-that-won —
- *    that would falsely crown a different replay. The recorded daily_results
- *    (INSERT OR IGNORE: first completion wins) is written at completion, then the
- *    tournament is entered seconds later in the SAME session, so the canonical
- *    entry is the earliest `teams` row created at/after the result's timestamp.
+ *    replay drafts the same team+era slots with different players and gets its
+ *    own bracket), so we must NOT credit any-entry-that-won — that would falsely
+ *    crown a different replay. We tie it durably to the RECORDED roster: match
+ *    daily_results.roster_json against teams.roster_display by a sorted
+ *    name|team|season starter signature (both store the same keys), and read the
+ *    bracket outcome of the earliest matching entry. No matching entry (never
+ *    entered, or only entered other rosters) stays non-champion.
  *  - top10: finished in the top 10% of that day's field (rank ≤ ceil(0.10·field)),
  *    gated on a field of at least TOP10_MIN_FIELD.
  */
@@ -213,18 +214,26 @@ export async function listDailyResults(
   since?: string,
 ): Promise<DailyResultLite[]> {
   await ensureSchema();
+  // Build a starter-set signature from a JSON roster array at `path` — sorted
+  // "name|team|season" keys, so two rosters compare equal regardless of slot order.
+  const rosterSig = (col: string, path: string) =>
+    `list_sort([json_extract_string(e, '$.name') || '|' ||
+                json_extract_string(e, '$.team') || '|' ||
+                json_extract_string(e, '$.season')
+                FOR e IN json_extract(${col}, '${path}')])`;
   const rows = await queryRW<{
     daily_date: string; wins: number; losses: number; margin: number;
     perfect: boolean; champion: boolean; top10: boolean;
   }>(
-    // Rank every entry within its day (same order as the leaderboard), then pull
-    // the bracket outcome of the entry from the SAME session as the recorded
-    // result (earliest teams row created at/after daily_results.created_at).
+    // Rank every entry within its day (same order as the leaderboard). The 30-day
+    // floor is applied INSIDE the CTE so the window functions only scan the
+    // replayable window, not all history — per-day rank/field are unaffected.
     `WITH ranked AS (
-       SELECT user_id, daily_date, wins, losses, margin, perfect, created_at,
+       SELECT user_id, daily_date, wins, losses, margin, perfect, roster_json,
               RANK()   OVER (PARTITION BY daily_date ORDER BY wins DESC, margin DESC) AS rnk,
               COUNT(*) OVER (PARTITION BY daily_date) AS field
          FROM ${TDB}.daily_results
+        ${since ? "WHERE daily_date >= $2" : ""}
      )
      SELECT r.daily_date, r.wins, r.losses, r.margin, r.perfect,
             COALESCE((
@@ -233,13 +242,14 @@ export async function listDailyResults(
                WHERE t.user_id = r.user_id
                  AND t.daily_date = r.daily_date
                  AND t.mode = 'daily'
-                 AND t.created_at >= r.created_at
+                 AND ${rosterSig("t.roster_display", "$.roster[*]")}
+                   = ${rosterSig("r.roster_json", "$[*]")}
                ORDER BY t.created_at
                LIMIT 1
             ), FALSE) AS champion,
             (r.field >= ${TOP10_MIN_FIELD} AND r.rnk <= ceil(0.10 * r.field)) AS top10
        FROM ranked r
-      WHERE r.user_id = $1 ${since ? "AND r.daily_date >= $2" : ""}`,
+      WHERE r.user_id = $1`,
     since ? [userId, since] : [userId],
   );
   return rows.map((r) => ({
