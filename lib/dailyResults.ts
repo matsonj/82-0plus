@@ -179,25 +179,77 @@ export interface DailyResultLite {
   losses: number;
   margin: number;
   perfect: boolean;
+  /** That day's team won its daily tournament bracket (luck of the draw). */
+  champion: boolean;
+  /** Finished in the top 10% of the day's field (only counted when ≥10 played). */
+  top10: boolean;
 }
+
+// Top-10% (the single ring) is only awarded when the field was at least this deep —
+// a percentile is meaningless in a handful of entries and would ring you for playing
+// nearly alone.
+const TOP10_MIN_FIELD = 10;
 
 /**
  * All of an account's daily completions on/after `since` (a YYYY-MM-DD floor;
  * defaults to none). Drives the menu's "already played" state across devices —
  * the home card for today and the archive list both read from this, so a finished
  * day shows its result instead of "Play" without an N+1 of per-date lookups.
+ *
+ * Two scorecard flags are derived per day in the same pass:
+ *  - champion: the team RECORDED for that daily WON its tournament bracket
+ *    (reached_round = 4). A daily can have several mode='daily' entries (each
+ *    replay drafts the same team+era slots with different players and gets its
+ *    own bracket), so we must NOT credit any-entry-that-won — that would falsely
+ *    crown a different replay. We tie it durably to the RECORDED roster: match
+ *    daily_results.roster_json against teams.roster_display by a sorted
+ *    name|team|season starter signature (both store the same keys), and read the
+ *    bracket outcome of the earliest matching entry. No matching entry (never
+ *    entered, or only entered other rosters) stays non-champion.
+ *  - top10: finished in the top 10% of that day's field (rank ≤ ceil(0.10·field)),
+ *    gated on a field of at least TOP10_MIN_FIELD.
  */
 export async function listDailyResults(
   userId: string,
   since?: string,
 ): Promise<DailyResultLite[]> {
   await ensureSchema();
+  // Build a starter-set signature from a JSON roster array at `path` — sorted
+  // "name|team|season" keys, so two rosters compare equal regardless of slot order.
+  const rosterSig = (col: string, path: string) =>
+    `list_sort([json_extract_string(e, '$.name') || '|' ||
+                json_extract_string(e, '$.team') || '|' ||
+                json_extract_string(e, '$.season')
+                FOR e IN json_extract(${col}, '${path}')])`;
   const rows = await queryRW<{
-    daily_date: string; wins: number; losses: number; margin: number; perfect: boolean;
+    daily_date: string; wins: number; losses: number; margin: number;
+    perfect: boolean; champion: boolean; top10: boolean;
   }>(
-    `SELECT daily_date, wins, losses, margin, perfect
-       FROM ${TDB}.daily_results
-      WHERE user_id = $1 ${since ? "AND daily_date >= $2" : ""}`,
+    // Rank every entry within its day (same order as the leaderboard). The 30-day
+    // floor is applied INSIDE the CTE so the window functions only scan the
+    // replayable window, not all history — per-day rank/field are unaffected.
+    `WITH ranked AS (
+       SELECT user_id, daily_date, wins, losses, margin, perfect, roster_json,
+              RANK()   OVER (PARTITION BY daily_date ORDER BY wins DESC, margin DESC) AS rnk,
+              COUNT(*) OVER (PARTITION BY daily_date) AS field
+         FROM ${TDB}.daily_results
+        ${since ? "WHERE daily_date >= $2" : ""}
+     )
+     SELECT r.daily_date, r.wins, r.losses, r.margin, r.perfect,
+            COALESCE((
+              SELECT t.reached_round = 4
+                FROM ${TDB}.teams t
+               WHERE t.user_id = r.user_id
+                 AND t.daily_date = r.daily_date
+                 AND t.mode = 'daily'
+                 AND ${rosterSig("t.roster_display", "$.roster[*]")}
+                   = ${rosterSig("r.roster_json", "$[*]")}
+               ORDER BY t.created_at
+               LIMIT 1
+            ), FALSE) AS champion,
+            (r.field >= ${TOP10_MIN_FIELD} AND r.rnk <= ceil(0.10 * r.field)) AS top10
+       FROM ranked r
+      WHERE r.user_id = $1`,
     since ? [userId, since] : [userId],
   );
   return rows.map((r) => ({
@@ -206,6 +258,8 @@ export async function listDailyResults(
     losses: r.losses,
     margin: r.margin,
     perfect: !!r.perfect,
+    champion: !!r.champion,
+    top10: !!r.top10,
   }));
 }
 

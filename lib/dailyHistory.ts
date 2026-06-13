@@ -3,7 +3,7 @@
 //
 // Visual model is a Masters-style scorecard: understated cells with black numerals
 // (the day's net rating is the "score"), and achievement shown by an annotation ring
-// — a single circle for an 82-0 perfect season, a double circle for a champion —
+// — a single circle for a top-10% finish, a double circle for a tournament champion —
 // rather than a loud fill. Played days carry a soft teal wash that black sits on top
 // of cleanly.
 
@@ -16,15 +16,17 @@ export type DayEntry = {
   losses: number;
   /** Net rating (the team's "score"). */
   margin?: number;
-  /** Went 82-0. */
+  /** Went 82-0 (kept for result messaging; no longer drives a ring). */
   perfect?: boolean;
-  /** Won the day's tournament bracket. */
+  /** Won the day's tournament bracket → double ring. */
   champion?: boolean;
+  /** Finished in the top 10% of the day's field → single ring. */
+  top10?: boolean;
 };
 
 export type DayState =
   | "played"
-  | "perfect"
+  | "top10"
   | "champion"
   | "missed"
   | "today"
@@ -44,7 +46,7 @@ export function dayState(
   // circle/double-circle flags the standout days.
   if (entry) {
     if (entry.champion) return "champion";
-    if (entry.perfect) return "perfect";
+    if (entry.top10) return "top10";
     return "played";
   }
   return date === today ? "today" : "missed";
@@ -66,7 +68,7 @@ export type CellStyle = {
   text: string;
   /** Colour for the small day-number in the corner. */
   day: string;
-  /** Ring drawn around the score: a perfect 82-0 (single) or a champion (double). */
+  /** Ring drawn around the score: a top-10% finish (single) or a champion (double). */
   annotate: Annotate;
 };
 
@@ -83,7 +85,7 @@ export function cellStyle(state: DayState): CellStyle {
   switch (state) {
     case "played":
       return { bg: PLAYED_FILL, border: `2px solid ${GRID}`, text: "var(--md-ink)", day: "var(--md-ink-muted)", annotate: "none" };
-    case "perfect":
+    case "top10":
       return { bg: PLAYED_FILL, border: `2px solid ${GRID}`, text: "var(--md-ink)", day: "var(--md-ink-muted)", annotate: "single" };
     case "champion":
       return { bg: PLAYED_FILL, border: `2px solid ${GRID}`, text: "var(--md-ink)", day: "var(--md-ink-muted)", annotate: "double" };

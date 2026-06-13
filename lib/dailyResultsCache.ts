@@ -29,6 +29,10 @@ export interface DailyResultEntry {
   losses: number;
   margin: number;
   perfect: boolean;
+  /** Won that day's daily tournament bracket → double ring on the scorecard. */
+  champion?: boolean;
+  /** Top 10% of the day's field → single ring on the scorecard. */
+  top10?: boolean;
 }
 
 export type DailyDoneMap = Record<string, DailyResultEntry>;

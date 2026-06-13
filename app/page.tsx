@@ -435,12 +435,18 @@ export default function Home() {
       });
       if (!res.ok) return;
       const { results, todayRank } = (await res.json()) as {
-        results: { date: string; wins: number; losses: number; margin: number; perfect: boolean }[];
+        results: {
+          date: string; wins: number; losses: number; margin: number;
+          perfect: boolean; champion: boolean; top10: boolean;
+        }[];
         todayRank: { rank: number; total: number } | null;
       };
-      const map: Record<string, { wins: number; losses: number; margin: number; perfect: boolean }> = {};
+      const map: DailyDoneMap = {};
       for (const r of results) {
-        map[r.date] = { wins: r.wins, losses: r.losses, margin: r.margin, perfect: r.perfect };
+        map[r.date] = {
+          wins: r.wins, losses: r.losses, margin: r.margin,
+          perfect: r.perfect, champion: r.champion, top10: r.top10,
+        };
       }
       setDailyDone(map);
       setDailyRank(todayRank ?? null);
