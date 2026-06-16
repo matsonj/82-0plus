@@ -14,45 +14,36 @@ import {
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-/** The net-rating "score", optionally ringed: a single circle for a top-10% finish,
- *  a double circle for a champion — the Masters-scorecard convention. `gap` is the
- *  cell fill, so the double ring reads as a clean concentric circle. */
-function Score({
-  value,
-  annotate,
-  color,
-  gap,
-}: {
-  value: string;
-  annotate: Annotate;
-  color: string;
-  gap: string;
-}) {
+/** The net-rating "score" — a plain, centred number ("+11", "0", "-4"). Achievement
+ *  is shown by a separate corner RingBadge rather than by ringing the score, so the
+ *  number stays legible even on a ~31px cell at a 320px viewport. */
+function Score({ value, color }: { value: string; color: string }) {
   if (!value) return null;
-  if (annotate === "none")
-    return (
-      <span className="font-display text-[12px] font-bold leading-none tabular-nums sm:text-[13px]" style={{ color }}>
-        {value}
-      </span>
-    );
-  // A small circle whose rings are drawn OUTWARD (thin box-shadow, gap = cell
-  // fill) — so the score text keeps the full circle interior and is never crowded
-  // onto a ring, even on a ~31px cell at a 320px viewport. The circle stays
-  // compact (24px) so its rings + the corner day-number both fit the smallest
-  // cells; it sizes up a touch at sm+ for the bigger grid.
+  return (
+    <span className="font-display text-[12px] font-bold leading-none tabular-nums sm:text-[13px]" style={{ color }}>
+      {value}
+    </span>
+  );
+}
+
+/** A small corner ring flagging a standout day — a single ring for a top-10%
+ *  finish, a double (concentric) ring for a tournament champion (the legend's
+ *  language). It sits in the cell corner, clear of the day-number (top) and the
+ *  centred score, so all three coexist even in the smallest cells. `gap` (the cell
+ *  fill) is the double ring's middle band, so it reads as concentric. */
+function RingBadge({ annotate, gap }: { annotate: Annotate; gap: string }) {
+  if (annotate === "none") return null;
   return (
     <span
-      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-display text-[11px] font-bold leading-none tabular-nums sm:h-7 sm:w-7 sm:text-[13px]"
+      aria-hidden
+      className="pointer-events-none absolute bottom-[3px] left-[3px] h-2 w-2 rounded-full sm:bottom-1 sm:left-1 sm:h-2.5 sm:w-2.5"
       style={{
-        color,
         boxShadow:
           annotate === "double"
             ? `0 0 0 1.5px var(--md-ink), 0 0 0 3px ${gap}, 0 0 0 4.5px var(--md-ink)`
             : "0 0 0 1.5px var(--md-ink)",
       }}
-    >
-      {value}
-    </span>
+    />
   );
 }
 
@@ -177,18 +168,22 @@ export function DailyArchive({
                       : "Play this day"
                   : undefined
               }
-              className="relative flex aspect-square items-center justify-center p-1 transition-transform enabled:hover:-translate-y-0.5 disabled:cursor-default"
+              className="relative flex aspect-square flex-col p-1 transition-transform enabled:hover:-translate-y-0.5 disabled:cursor-default"
               style={{ background: s.bg, border: s.border }}
             >
-              {/* Day number tucked into the corner so the ringed score gets the
-                  whole cell — keeps the champion double-ring clear of it on mobile. */}
+              {/* Day number on its own top row, the score centred below — they
+                  never collide, even in a ~31px cell. The achievement ring is a
+                  separate corner badge. */}
               <span
-                className="absolute right-1 top-1 font-display text-[9px] font-bold leading-none sm:text-[10px]"
+                className="text-right font-display text-[10px] font-bold leading-none"
                 style={{ color: s.day }}
               >
                 {c.day}
               </span>
-              <Score value={score} annotate={s.annotate} color={s.text} gap={s.bg} />
+              <span className="flex grow items-center justify-center">
+                <Score value={score} color={s.text} />
+              </span>
+              <RingBadge annotate={s.annotate} gap={s.bg} />
             </button>
           );
         })}
