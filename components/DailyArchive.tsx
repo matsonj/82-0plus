@@ -26,42 +26,65 @@ function Score({ value, color }: { value: string; color: string }) {
   );
 }
 
-/** A small ring flagging a standout day — a single ring for a top-10% finish, a
- *  double (concentric) ring for a tournament champion (the legend's language). It
- *  sits in the TOP-LEFT corner, inside the day-number row band and opposite the
- *  right-aligned day number, so it never touches the centred score below — the
- *  three coexist even in a ~31px cell at 320px. `gap` (the cell fill) is the double
- *  ring's middle band, so it reads as concentric. */
-function RingBadge({ annotate, gap }: { annotate: Annotate; gap: string }) {
-  if (annotate === "none") return null;
-  return (
-    <span
-      aria-hidden
-      className="pointer-events-none absolute left-[3px] top-[3px] h-1.5 w-1.5 rounded-full sm:left-1 sm:top-1 sm:h-2 sm:w-2"
-      style={{
-        boxShadow:
-          annotate === "double"
-            ? `0 0 0 1px var(--md-ink), 0 0 0 2px ${gap}, 0 0 0 3px var(--md-ink)`
-            : "0 0 0 1px var(--md-ink)",
-      }}
+// The standout-day glyph drawn inside the corner fold: a star for a top-10%
+// finish, a trophy for a tournament champion. Drawn on a 28×28 viewBox so it
+// scales crisply from a ~16px fold on a 320px cell up to the big desktop grid.
+function FoldGlyph({ champ }: { champ: boolean }) {
+  return champ ? (
+    <g fill="var(--md-ink)">
+      <path d="M4.3 2.8h7.2v2.1a3.6 3.6 0 0 1-7.2 0V2.8z" />
+      <path d="M3 3.4H1.4v.7a2 2 0 0 0 2 2" fill="none" stroke="var(--md-ink)" strokeWidth="1.1" />
+      <rect x="7.2" y="8.2" width="1.4" height="2.4" />
+      <rect x="5" y="10.6" width="5.8" height="1.7" />
+    </g>
+  ) : (
+    <path
+      d="M7.5 3.4l1.25 2.7 2.95.32-2.2 2 .64 2.9L7.5 11.8 4.86 13.3l.64-2.9-2.2-2 2.95-.32z"
+      fill="var(--md-white)"
     />
   );
 }
 
-const CircleSwatch = ({ double }: { double?: boolean }) => (
-  <span
-    className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full"
-    style={{
-      border: "2px solid var(--md-ink)",
-      boxShadow: double ? "0 0 0 1.5px var(--md-white), 0 0 0 3px var(--md-ink)" : undefined,
-    }}
-  />
-);
+/** A folded-corner ribbon flagging a standout day — an ink fold + white star for a
+ *  top-10% finish, a gold fold + trophy for a tournament champion. It hugs the
+ *  TOP-LEFT corner (opposite the right-aligned day number, above the centred score),
+ *  so all three coexist even in a ~31px cell at 320px. Colour alone (ink vs gold)
+ *  distinguishes the two; the glyph reinforces it as the cell grows. */
+function CornerFold({ annotate }: { annotate: Annotate }) {
+  if (annotate === "none") return null;
+  const champ = annotate === "double";
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 28 28"
+      className="pointer-events-none absolute left-0 top-0 h-4 w-4 sm:h-6 sm:w-6"
+    >
+      <path d="M0 0H28L0 28Z" fill={champ ? "var(--md-yellow)" : "var(--md-ink)"} />
+      <FoldGlyph champ={champ} />
+    </svg>
+  );
+}
+
+/** Legend swatch: a small played-cell square wearing the corner fold, so the key
+ *  matches what the calendar cells show. */
+function FoldSwatch({ champ }: { champ?: boolean }) {
+  return (
+    <span
+      className="relative inline-block h-3.5 w-3.5 shrink-0 overflow-hidden border border-[var(--md-paper-3)]"
+      style={{ background: PLAYED_FILL }}
+    >
+      <svg aria-hidden viewBox="0 0 28 28" className="absolute left-0 top-0 h-2.5 w-2.5">
+        <path d="M0 0H28L0 28Z" fill={champ ? "var(--md-yellow)" : "var(--md-ink)"} />
+        <FoldGlyph champ={!!champ} />
+      </svg>
+    </span>
+  );
+}
 
 /** The Daily archive: the last ~30 daily challenges as a compact scorecard grid,
  *  opened via the 7-day strip's "View all" toggle (`open` is parent-controlled). Each
- *  cell shows that day's net rating; a top-10% finish is circled, a champion double-circled
- *  (shared language with the strip via lib/dailyHistory). A finished day taps through
+ *  cell shows that day's net rating; a top-10% finish gets an ink corner fold, a
+ *  champion a gold one (shared language with lib/dailyHistory). A finished day taps through
  *  to review it; an unplayed, in-window day offers play. The click still routes
  *  through playDaily, so the server stays the gate even if this map is stale. */
 export function DailyArchive({
@@ -125,11 +148,11 @@ export function DailyArchive({
           <span className="font-display text-[11px] text-[var(--md-ink-muted)]">Net score</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <CircleSwatch />
+          <FoldSwatch />
           <span className="font-display text-[11px] text-[var(--md-ink-muted)]">Top 10%</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <CircleSwatch double />
+          <FoldSwatch champ />
           <span className="font-display text-[11px] text-[var(--md-ink-muted)]">Champion</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -173,8 +196,8 @@ export function DailyArchive({
               style={{ background: s.bg, border: s.border }}
             >
               {/* Day number on its own top row, the score centred below — they
-                  never collide, even in a ~31px cell. The achievement ring is a
-                  separate corner badge. */}
+                  never collide, even in a ~31px cell. The achievement is a corner
+                  fold hugging the opposite (top-left) corner. */}
               <span
                 className="text-right font-display text-[10px] font-bold leading-none"
                 style={{ color: s.day }}
@@ -184,7 +207,7 @@ export function DailyArchive({
               <span className="flex grow items-center justify-center">
                 <Score value={score} color={s.text} />
               </span>
-              <RingBadge annotate={s.annotate} gap={s.bg} />
+              <CornerFold annotate={s.annotate} />
             </button>
           );
         })}
