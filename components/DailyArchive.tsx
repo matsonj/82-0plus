@@ -26,22 +26,23 @@ function Score({ value, color }: { value: string; color: string }) {
   );
 }
 
-/** A small corner ring flagging a standout day — a single ring for a top-10%
- *  finish, a double (concentric) ring for a tournament champion (the legend's
- *  language). It sits in the cell corner, clear of the day-number (top) and the
- *  centred score, so all three coexist even in the smallest cells. `gap` (the cell
- *  fill) is the double ring's middle band, so it reads as concentric. */
+/** A small ring flagging a standout day — a single ring for a top-10% finish, a
+ *  double (concentric) ring for a tournament champion (the legend's language). It
+ *  sits in the TOP-LEFT corner, inside the day-number row band and opposite the
+ *  right-aligned day number, so it never touches the centred score below — the
+ *  three coexist even in a ~31px cell at 320px. `gap` (the cell fill) is the double
+ *  ring's middle band, so it reads as concentric. */
 function RingBadge({ annotate, gap }: { annotate: Annotate; gap: string }) {
   if (annotate === "none") return null;
   return (
     <span
       aria-hidden
-      className="pointer-events-none absolute bottom-[3px] left-[3px] h-2 w-2 rounded-full sm:bottom-1 sm:left-1 sm:h-2.5 sm:w-2.5"
+      className="pointer-events-none absolute left-[3px] top-[3px] h-1.5 w-1.5 rounded-full sm:left-1 sm:top-1 sm:h-2 sm:w-2"
       style={{
         boxShadow:
           annotate === "double"
-            ? `0 0 0 1.5px var(--md-ink), 0 0 0 3px ${gap}, 0 0 0 4.5px var(--md-ink)`
-            : "0 0 0 1.5px var(--md-ink)",
+            ? `0 0 0 1px var(--md-ink), 0 0 0 2px ${gap}, 0 0 0 3px var(--md-ink)`
+            : "0 0 0 1px var(--md-ink)",
       }}
     />
   );
