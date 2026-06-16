@@ -14,48 +14,37 @@ import {
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-/** The net-rating "score", optionally ringed: a single circle for a top-10% finish,
- *  a double circle for a champion — the Masters-scorecard convention. `gap` is the
- *  cell fill, so the double ring reads as a clean concentric circle. */
-function Score({
-  value,
-  annotate,
-  color,
-  gap,
-  size = 29,
-  font = 12,
-}: {
-  value: string;
-  annotate: Annotate;
-  color: string;
-  gap: string;
-  size?: number;
-  font?: number;
-}) {
+/** The net-rating "score" — a plain, centred number ("+11", "0", "-4"). Achievement
+ *  is shown by a separate corner RingBadge rather than by ringing the score, so the
+ *  number stays legible even on a ~31px cell at a 320px viewport. */
+function Score({ value, color }: { value: string; color: string }) {
   if (!value) return null;
-  if (annotate === "none")
-    return (
-      <span className="font-display font-bold tabular-nums" style={{ color, fontSize: font }}>
-        {value}
-      </span>
-    );
-  // Fixed square → a perfectly round circle regardless of how many digits the score
-  // has. The double ring uses the cell fill as the gap so it reads as concentric.
   return (
-    <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full font-display font-bold leading-none tabular-nums"
-      style={{
-        width: size,
-        height: size,
-        color,
-        fontSize: font,
-        border: "2px solid var(--md-ink)",
-        boxShadow:
-          annotate === "double" ? `0 0 0 2px ${gap}, 0 0 0 4px var(--md-ink)` : undefined,
-      }}
-    >
+    <span className="font-display text-[12px] font-bold leading-none tabular-nums sm:text-[13px]" style={{ color }}>
       {value}
     </span>
+  );
+}
+
+/** A small ring flagging a standout day — a single ring for a top-10% finish, a
+ *  double (concentric) ring for a tournament champion (the legend's language). It
+ *  sits in the TOP-LEFT corner, inside the day-number row band and opposite the
+ *  right-aligned day number, so it never touches the centred score below — the
+ *  three coexist even in a ~31px cell at 320px. `gap` (the cell fill) is the double
+ *  ring's middle band, so it reads as concentric. */
+function RingBadge({ annotate, gap }: { annotate: Annotate; gap: string }) {
+  if (annotate === "none") return null;
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute left-[3px] top-[3px] h-1.5 w-1.5 rounded-full sm:left-1 sm:top-1 sm:h-2 sm:w-2"
+      style={{
+        boxShadow:
+          annotate === "double"
+            ? `0 0 0 1px var(--md-ink), 0 0 0 2px ${gap}, 0 0 0 3px var(--md-ink)`
+            : "0 0 0 1px var(--md-ink)",
+      }}
+    />
   );
 }
 
@@ -180,9 +169,12 @@ export function DailyArchive({
                       : "Play this day"
                   : undefined
               }
-              className="flex aspect-square flex-col p-1 transition-transform enabled:hover:-translate-y-0.5 disabled:cursor-default"
+              className="relative flex aspect-square flex-col p-1 transition-transform enabled:hover:-translate-y-0.5 disabled:cursor-default"
               style={{ background: s.bg, border: s.border }}
             >
+              {/* Day number on its own top row, the score centred below — they
+                  never collide, even in a ~31px cell. The achievement ring is a
+                  separate corner badge. */}
               <span
                 className="text-right font-display text-[10px] font-bold leading-none"
                 style={{ color: s.day }}
@@ -190,8 +182,9 @@ export function DailyArchive({
                 {c.day}
               </span>
               <span className="flex grow items-center justify-center">
-                <Score value={score} annotate={s.annotate} color={s.text} gap={s.bg} />
+                <Score value={score} color={s.text} />
               </span>
+              <RingBadge annotate={s.annotate} gap={s.bg} />
             </button>
           );
         })}
