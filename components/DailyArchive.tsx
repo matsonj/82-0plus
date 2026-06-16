@@ -35,19 +35,20 @@ function Score({
         {value}
       </span>
     );
-  // A contained ring, centred in the cell. The double ring is drawn INSET (rings
-  // inside the circle, gap = cell fill) so its footprint is exactly the circle and
-  // never bleeds onto the corner day-number or cell edge — the outward variant
-  // overflowed the small mobile cells. Sizes up a touch at sm+ for the bigger grid.
+  // A small circle whose rings are drawn OUTWARD (thin box-shadow, gap = cell
+  // fill) — so the score text keeps the full circle interior and is never crowded
+  // onto a ring, even on a ~31px cell at a 320px viewport. The circle stays
+  // compact (24px) so its rings + the corner day-number both fit the smallest
+  // cells; it sizes up a touch at sm+ for the bigger grid.
   return (
     <span
-      className="inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2 border-[var(--md-ink)] font-display text-[11px] font-bold leading-none tabular-nums sm:h-[30px] sm:w-[30px] sm:text-[13px]"
+      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-display text-[11px] font-bold leading-none tabular-nums sm:h-7 sm:w-7 sm:text-[13px]"
       style={{
         color,
         boxShadow:
           annotate === "double"
-            ? `inset 0 0 0 1.5px ${gap}, inset 0 0 0 3px var(--md-ink)`
-            : undefined,
+            ? `0 0 0 1.5px var(--md-ink), 0 0 0 3px ${gap}, 0 0 0 4.5px var(--md-ink)`
+            : "0 0 0 1.5px var(--md-ink)",
       }}
     >
       {value}
