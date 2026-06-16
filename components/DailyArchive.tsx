@@ -22,36 +22,32 @@ function Score({
   annotate,
   color,
   gap,
-  size = 29,
-  font = 12,
 }: {
   value: string;
   annotate: Annotate;
   color: string;
   gap: string;
-  size?: number;
-  font?: number;
 }) {
   if (!value) return null;
   if (annotate === "none")
     return (
-      <span className="font-display font-bold tabular-nums" style={{ color, fontSize: font }}>
+      <span className="font-display text-[12px] font-bold leading-none tabular-nums sm:text-[13px]" style={{ color }}>
         {value}
       </span>
     );
-  // Fixed square → a perfectly round circle regardless of how many digits the score
-  // has. The double ring uses the cell fill as the gap so it reads as concentric.
+  // A contained ring, centred in the cell. The double ring is drawn INSET (rings
+  // inside the circle, gap = cell fill) so its footprint is exactly the circle and
+  // never bleeds onto the corner day-number or cell edge — the outward variant
+  // overflowed the small mobile cells. Sizes up a touch at sm+ for the bigger grid.
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full font-display font-bold leading-none tabular-nums"
+      className="inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2 border-[var(--md-ink)] font-display text-[11px] font-bold leading-none tabular-nums sm:h-[30px] sm:w-[30px] sm:text-[13px]"
       style={{
-        width: size,
-        height: size,
         color,
-        fontSize: font,
-        border: "2px solid var(--md-ink)",
         boxShadow:
-          annotate === "double" ? `0 0 0 2px ${gap}, 0 0 0 4px var(--md-ink)` : undefined,
+          annotate === "double"
+            ? `inset 0 0 0 1.5px ${gap}, inset 0 0 0 3px var(--md-ink)`
+            : undefined,
       }}
     >
       {value}
@@ -180,18 +176,18 @@ export function DailyArchive({
                       : "Play this day"
                   : undefined
               }
-              className="flex aspect-square flex-col p-1 transition-transform enabled:hover:-translate-y-0.5 disabled:cursor-default"
+              className="relative flex aspect-square items-center justify-center p-1 transition-transform enabled:hover:-translate-y-0.5 disabled:cursor-default"
               style={{ background: s.bg, border: s.border }}
             >
+              {/* Day number tucked into the corner so the ringed score gets the
+                  whole cell — keeps the champion double-ring clear of it on mobile. */}
               <span
-                className="text-right font-display text-[10px] font-bold leading-none"
+                className="absolute right-1 top-1 font-display text-[9px] font-bold leading-none sm:text-[10px]"
                 style={{ color: s.day }}
               >
                 {c.day}
               </span>
-              <span className="flex grow items-center justify-center">
-                <Score value={score} annotate={s.annotate} color={s.text} gap={s.bg} />
-              </span>
+              <Score value={score} annotate={s.annotate} color={s.text} gap={s.bg} />
             </button>
           );
         })}
