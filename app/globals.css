@@ -364,6 +364,25 @@ body {
   position: relative;
   overflow: hidden;
 }
+/* Edge-fade "drum" window: only while the strip is scrolling, fade the partial
+   neighbour symbols at the top/bottom so the centred symbol reads as the one in
+   the drum. Scoped to the spin so the LANDED result + snap-ring stay crisp. */
+.md-reel:has(.md-reel__strip) {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 20%,
+    #000 80%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 20%,
+    #000 80%,
+    transparent 100%
+  );
+}
 
 .md-reel__face {
   position: relative;
@@ -379,20 +398,25 @@ body {
   filter: none;
 }
 
-/* The strip is precomputed in React as [current, ...lead-in, target]. It rolls
-   once through full-height cells, then the landed face takes over. */
+/* The strip is precomputed in React as [current, ...lead-in, target]. Each cell
+   is --reel-cell of the window tall, so SEVERAL symbols stack inside the drum
+   (denser than one-per-window). The strip is anchored at the window centre
+   (top: 50%) and translated so the TARGET (last cell) ends up centred — this
+   centring math is window-height independent, so it holds at any --reel-cell.
+   The easing is a long ease-out: a fast blurred scroll that decelerates over a
+   long tail, so the last symbols crawl by and tease the result. */
 .md-reel__strip {
   position: absolute;
   left: 0;
   right: 0;
-  top: 0;
+  top: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: calc(var(--reel-count) * 100%);
+  height: calc(var(--reel-count) * var(--reel-cell, 1) * 100%);
   will-change: transform;
-  transform: translateY(calc(-100% + (100% / var(--reel-count))));
-  animation: md-reel-spin var(--reel-duration) cubic-bezier(0.16, 0.86, 0.22, 1) both;
+  transform: translateY(calc(-100% + (50% / var(--reel-count))));
+  animation: md-reel-spin var(--reel-duration) cubic-bezier(0.16, 0.72, 0.1, 1) both;
 }
 .md-reel__cell {
   flex: 0 0 calc(100% / var(--reel-count));
@@ -403,8 +427,9 @@ body {
   line-height: 1;
 }
 @keyframes md-reel-spin {
-  from { transform: translateY(0); }
-  to { transform: translateY(calc(-100% + (100% / var(--reel-count)))); }
+  /* current symbol centred → target symbol centred (last cell). */
+  from { transform: translateY(calc(-50% / var(--reel-count))); }
+  to { transform: translateY(calc(-100% + (50% / var(--reel-count)))); }
 }
 
 /* The settled result sits centered in the window. .md-reel__land layers the
@@ -421,21 +446,21 @@ body {
 .md-reel__land {
   animation: md-reel-land 0.6s cubic-bezier(0.13, 0.72, 0.26, 1) both;
 }
-/* The era reel decelerates LONGER (lands last + slow) for the slot-machine
+/* The era reel locks LONGER + slower (lands last + slow) for the slot-machine
    "will the era be good?" beat — it already lands a stagger after the team. */
 .md-reel__face--era .md-reel__land {
-  animation-duration: 0.8s;
+  animation-duration: 0.9s;
 }
 @keyframes md-reel-land {
-  /* The final symbol scrolls UP into the window (matching the spin direction),
-     decelerating hard and sharpening (blur → 0) as it arrives — that ease-out IS
-     the slow-down — then thunks past center and settles. */
-  0%   { transform: translateY(135%) scale(1.02); filter: blur(3.2px); }
-  60%  { transform: translateY(0)    scale(1);    filter: blur(0); }
-  /* momentum carries it a hair past, then recoils back */
-  76%  { transform: translateY(-6%)  scale(0.99); }
-  90%  { transform: translateY(2.5%) scale(1.008); }
-  100% { transform: translateY(0)    scale(1); }
+  /* The strip has already crawled the target to centre; the result takes over
+     EXACTLY there (translateY 0 — no re-entry, no drop-out) and locks in with a
+     punchy pop + a damped wobble that settles. This is the "lock" beat. */
+  0%   { transform: translateY(0)     scale(1); }
+  15%  { transform: translateY(-13%)  scale(1.1); }  /* pop up + grow (the lock) */
+  40%  { transform: translateY(7%)    scale(0.955); } /* thunk down past, squash */
+  62%  { transform: translateY(-3.5%) scale(1.025); } /* wobble back */
+  82%  { transform: translateY(1.6%)  scale(0.994); }
+  100% { transform: translateY(0)     scale(1); }
 }
 /* The yellow snap-ring: an inset box-shadow that flashes the instant the reel
    stops, then fades. Layered on the face so it frames the landed code. */
