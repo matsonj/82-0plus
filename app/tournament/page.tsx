@@ -28,7 +28,7 @@ export default function TournamentPage({
   }, []);
 
   return (
-    <main className="relative mx-auto flex min-h-full max-w-6xl flex-col overflow-x-hidden px-4 pb-16 sm:pb-20">
+    <main className="relative mx-auto flex min-h-full max-w-6xl flex-col px-4 pb-16 sm:pb-20">
       {/* Faint halftone field behind the whole page — newsprint texture */}
       <div className="md-sunbeam" />
 
