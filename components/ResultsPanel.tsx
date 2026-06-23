@@ -618,8 +618,11 @@ export function ResultsPanel({
         */}
         <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
 
-          {/* ---- Left column ---- */}
-          <div className="flex flex-col gap-0 lg:min-w-0 lg:flex-1">
+          {/* ---- Left column ----
+              On mobile this drops BELOW the lineup (order-2) so the stack reads
+              money card → THE FIVE → team fit → CTAs (matches 871-0); on desktop
+              it returns to the left (order-1). */}
+          <div className="order-2 flex flex-col gap-0 lg:order-1 lg:min-w-0 lg:flex-1">
 
             {/* Kicker row: SEASON COMPLETE + mode badge — hidden on mobile
                 (the mobile money card header already shows this) */}
@@ -847,8 +850,9 @@ export function ResultsPanel({
             )}
           </div>
 
-          {/* ---- Right column: THE FIVE ink card (fixed lane on desktop) ---- */}
-          <div className="lg:w-[420px] lg:shrink-0">
+          {/* ---- Right column: THE FIVE ink card (fixed lane on desktop) ----
+              order-1 on mobile so the lineup sits right under the money card. */}
+          <div className="order-1 lg:order-2 lg:w-[420px] lg:shrink-0">
             <TheFiveCard
               roster={roster}
               result={result}
@@ -860,17 +864,10 @@ export function ResultsPanel({
         </div>
 
         {/*
-          Mobile-only: TEAM FIT + Enter Tournament + Share + Play Again
-          below the lineup card. On desktop these are in the left column above.
-          Since the left column already renders these (with lg:hidden / lg:block
-          splits), mobile just needs the ones hidden by `hidden lg:block`.
-          The team fit, CTAs, and share link ARE visible at all breakpoints
-          from the left column (no hidden class on them), so they appear on
-          mobile beneath the grid as well. The grid stacks on mobile so the
-          order is: mobile money card → left col (CTAs) → right col (lineup).
-          This matches 871-0 which shows: money card → lineup → team fit → CTAs.
-          To match the mobile order exactly (lineup before CTAs), we'd need to
-          reorder. Noted in report.
+          Mobile order is set by flex `order` on the two grid columns above:
+          THE FIVE (order-1) sits directly under the money card, then the left
+          column (order-2 = team fit + CTAs). Matches 871-0:
+          money card → lineup → team fit → CTAs.
         */}
       </div>
     </>

@@ -1238,7 +1238,10 @@ export default function Home() {
 
       {/* ---------------- RESULT ---------------- */}
       {phase === "play" && result && (
-        <section className="relative z-10 mx-auto mt-4 w-full max-w-lg">
+        // The result is a two-column desktop layout (score/CTAs + THE FIVE card),
+        // so it uses the full play-phase width (max-w-5xl from <main>). The narrow
+        // max-w-lg here was crushing the left column on desktop.
+        <section className="relative z-10 mt-4 w-full">
           <ResultsPanel
             roster={resultRoster}
             result={result}

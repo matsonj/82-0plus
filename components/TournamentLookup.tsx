@@ -225,9 +225,6 @@ function TeamRow({
         </span>
       </span>
 
-      {/* Captain placeholder — data not on TournamentTeamSummary */}
-      <span className="hidden w-36 shrink-0 sm:block" />
-
       {/* THE RUN — fixed-width sub-lanes, all whitespace-nowrap */}
       <span className="hidden items-center font-mono text-[12px] tabular-nums sm:flex">
 
@@ -331,6 +328,7 @@ function TeamCard({
   loading: boolean;
 }) {
   const isChampion = team.reachedRound === 4;
+  const isRunnerUp = team.reachedRound === 3 && team.recordL > 0;
   const didntEnter = team.reachedRound === 0 && team.recordW === 0 && team.recordL === 0;
   const reg = regSeasonRecord(team);
   const { text: netText, positive: netPositive } = formatSignedMargin(team.seedNet);
@@ -372,8 +370,23 @@ function TeamCard({
             {modeLabel}
           </div>
         </div>
-        <div className="shrink-0">
-          {team.mode !== "daily" && <TierBadge seedNet={team.seedNet} size="capsule" />}
+        {/* Outcome + qualifier stamps — same family as the desktop TIER lane. */}
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {isChampion && (
+            <RowStamp fill="var(--md-yellow)" text="var(--md-ink)" title="Champion">
+              ♛ CHAMP
+            </RowStamp>
+          )}
+          {isRunnerUp && (
+            <RowStamp fill="var(--md-white)" text="var(--md-ink)" title="Runner-up">
+              RUNNER-UP
+            </RowStamp>
+          )}
+          {team.mode === "daily"
+            ? team.dailyRank != null && (
+                <DailyRankStamp rank={team.dailyRank} field={team.dailyFieldSize} />
+              )
+            : !isChampion && <TierBadge seedNet={team.seedNet} size="capsule" />}
         </div>
       </div>
 
@@ -412,7 +425,7 @@ function TeamCard({
       >
         <span className="font-cond text-[12px] font-bold uppercase tracking-[0.06em]">
           {isChampion ? (
-            <>♛ Champion</>
+            "Champion · ran the table"
           ) : didntEnter ? (
             "Didn't enter"
           ) : (
@@ -949,8 +962,10 @@ export function TournamentLookup({
           </div>
         ) : (
           <>
-            {/* Desktop: table with column headers */}
-            <div className="hidden sm:block">
+            {/* Desktop: table with column headers. Gated at md (not sm) — the
+                fixed-width sub-lanes need ~740px and overflow 640–767px screens,
+                which fall back to the mobile cards. */}
+            <div className="hidden md:block">
               {/* Column header row */}
               <div
                 className="flex items-center border-b-2 border-[var(--md-ink)] px-4 py-2"
@@ -959,9 +974,6 @@ export function TournamentLookup({
                 <span className="mr-3 w-5 shrink-0" />
                 <span className="flex-[2] font-cond text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--md-paper)]">
                   Team
-                </span>
-                <span className="hidden w-36 shrink-0 font-cond text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--md-paper)] sm:block">
-                  Captain
                 </span>
                 {/* "The Run" header spans the same fixed total width as the
                     sub-lanes in each TeamRow (170+24+110+24+130 = 458px). */}
@@ -994,8 +1006,8 @@ export function TournamentLookup({
               </div>
             </div>
 
-            {/* Mobile: cards */}
-            <div className="flex flex-col gap-3 sm:hidden">
+            {/* Mobile + small-tablet (< md): cards */}
+            <div className="flex flex-col gap-3 md:hidden">
               {shown.map((team) => (
                 <TeamCard
                   key={team.teamId}
