@@ -52,11 +52,16 @@ export function CardGlyph({ size = 16 }: { size?: number }) {
 function GqChart({
   seasons,
   draftedSeason,
+  draftedTeam,
   cardTeam,
   compact = false,
 }: {
   seasons: PlayerSeasonRow[];
   draftedSeason: number;
+  // The team of the drafted/best stint (the card-team stint of that season, or
+  // the largest stint if the season was a trade with no card-team portion). The
+  // flame "this card" dot lands on exactly this (season, team) row.
+  draftedTeam: string;
   // The card's franchise — used to determine on-team vs off-team per season.
   cardTeam: string;
   compact?: boolean;
@@ -150,8 +155,10 @@ function GqChart({
       <path d={pathD} fill="none" stroke="var(--md-ink)" strokeWidth={2} />
       {/* Season dots — on-team = filled ink, off-team = hollow grey, drafted = flame */}
       {seasons.map((s, i) => {
-        const isDrafted = s.season === draftedSeason;
-        // A season is on-team when it was played for this card's franchise.
+        // Only the drafted STINT (season + its resolved team) is the flame dot;
+        // the other stint of a traded drafted season reads as another team.
+        const isDrafted = s.season === draftedSeason && s.team === draftedTeam;
+        // A stint is on-team when it was played for this card's franchise.
         const isAway = s.team !== cardTeam;
 
         const cx = x(i);
@@ -159,7 +166,7 @@ function GqChart({
         const r = isDrafted ? 6 : 4;
 
         return (
-          <g key={s.season}>
+          <g key={`${s.season}-${s.team}`}>
             {/* Drafted/best season is ALWAYS the flame "this card" dot — even when
                 the season aggregates to another team (a mid-season trade, where the
                 modal team isn't this card's franchise). This card IS that season, so
@@ -217,7 +224,7 @@ function GqChart({
             })()}
             {/* Invisible hit target for tooltip */}
             <circle cx={cx} cy={cy} r={10} fill="transparent">
-              <title>&rsquo;{String(s.season).slice(2)} · GQ {gq100(s.gq)}</title>
+              <title>&rsquo;{String(s.season).slice(2)} {s.team} · GQ {gq100(s.gq)}</title>
             </circle>
           </g>
         );
@@ -230,12 +237,17 @@ function GqChart({
         const labelIdxs = new Set<number>();
         for (let i = 0; i < seasons.length; i += step) labelIdxs.add(i);
         labelIdxs.add(seasons.length - 1);
+        // A split (traded) season occupies two adjacent indices; label the year
+        // only once so the two stint dots don't get duplicate overlapping labels.
+        const shownSeasons = new Set<number>();
         return [...labelIdxs].sort((a, b) => a - b).map((i) => {
           const s = seasons[i];
+          if (shownSeasons.has(s.season)) return null;
+          shownSeasons.add(s.season);
           const isDrafted = s.season === draftedSeason;
           return (
             <text
-              key={s.season}
+              key={i}
               x={x(i)}
               y={H - padB + 14}
               fontSize={9}
@@ -332,6 +344,19 @@ function FullCard({
   draftable?: boolean;
 }) {
   const { seasons, status } = usePlayerSeasons(player.entityId);
+
+  // The drafted/best season can be a mid-season trade (multiple stints). The
+  // "this card" stint is the one on the card's franchise; if that season has no
+  // card-team stint (a data quirk), fall back to its largest stint so the chart
+  // and the gold table row still land on a sensible row.
+  const draftedTeam = (() => {
+    const rows = seasons.filter((s) => s.season === player.season);
+    if (rows.length === 0) return player.team;
+    return (
+      rows.find((s) => s.team === player.team) ??
+      rows.reduce((a, b) => (b.gp > a.gp ? b : a))
+    ).team;
+  })();
 
   return (
     <div className="md-card flex max-h-[86vh] w-full flex-col overflow-hidden p-0" style={{ boxShadow: "var(--md-shadow-md)" }}>
@@ -470,7 +495,7 @@ function FullCard({
               <LegendItem color="var(--md-ink-muted)" filled={false} label="Another team" />
             </div>
             <div className="border border-[var(--md-paper-3)]" style={{ background: "var(--md-white)" }}>
-              <GqChart seasons={seasons} draftedSeason={player.season} cardTeam={player.team} />
+              <GqChart seasons={seasons} draftedSeason={player.season} draftedTeam={draftedTeam} cardTeam={player.team} />
             </div>
 
             {/* Per-game table */}
@@ -533,9 +558,11 @@ function FullCard({
                 </thead>
                 <tbody>
                   {seasons.map((s) => {
-                    // On-team: this season was played for the card's franchise.
+                    // On-team: this stint was played for the card's franchise.
                     const isAway = s.team !== player.team;
-                    const isBest = s.season === player.season;
+                    // Gold highlight only on the drafted stint (season + its team),
+                    // so a traded best-season highlights one row, not both.
+                    const isBest = s.season === player.season && s.team === draftedTeam;
                     const rowBg = isBest
                       ? "var(--md-yellow)"
                       : isAway
@@ -543,7 +570,7 @@ function FullCard({
                         : "var(--md-white)";
                     return (
                       <tr
-                        key={s.season}
+                        key={`${s.season}-${s.team}`}
                         className="border-t border-[var(--md-paper-3)]"
                         style={
                           isBest

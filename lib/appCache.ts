@@ -79,7 +79,7 @@ const BUILD_GAME_QUALITY = `CREATE OR REPLACE TABLE ${ACDB}.game_quality AS
 const BUILD_PLAYER_SEASON_STATS = `CREATE OR REPLACE TABLE ${ACDB}.player_season_stats AS
   SELECT g.entity_id,
          s.season_year AS season,
-         mode(b.team_abbreviation) AS team,
+         b.team_abbreviation AS team,
          round(median(g.game_quality), 3) AS gq,
          round(avg(b.fg_attempted) + 0.44 * avg(b.ft_attempted) + avg(b.turnovers), 1) AS usg,
          count(*) AS gp,
@@ -101,9 +101,9 @@ const BUILD_PLAYER_SEASON_STATS = `CREATE OR REPLACE TABLE ${ACDB}.player_season
       ON ad.entity_id = g.entity_id AND ad.season_year = s.season_year
    WHERE g.game_quality >= 0
      AND s.season_type = 'Regular Season'
-   GROUP BY g.entity_id, s.season_year
+   GROUP BY g.entity_id, s.season_year, b.team_abbreviation
   HAVING count(*) >= 5
-   ORDER BY g.entity_id, season`;
+   ORDER BY g.entity_id, season, gp DESC, team`;
 
 // 3. player_index — mirrors lib/queries.computePlayerIndexLive, but sources GQ
 //    from the materialized table (fast) and adds a `debut` column (career first

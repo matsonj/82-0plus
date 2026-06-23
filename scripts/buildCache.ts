@@ -31,18 +31,19 @@ async function main() {
 
   // Spot-check: cached card rows for entity 1449 must match the live view.
   const cached = await queryRW(
-    `SELECT season, gq, gp, pts FROM ${ACDB}.player_season_stats
-      WHERE entity_id = '1449' ORDER BY season`,
+    `SELECT season, team, gq, gp, pts FROM ${ACDB}.player_season_stats
+      WHERE entity_id = '1449' ORDER BY season, gp DESC, team`,
   );
   const live = await query(
-    `SELECT s.season_year AS season, round(median(g.game_quality),3) AS gq,
+    `SELECT s.season_year AS season, b.team_abbreviation AS team,
+            round(median(g.game_quality),3) AS gq,
             count(*) AS gp, round(avg(b.points),1) AS pts
        FROM nba_box_scores_v2.main.game_quality g
        JOIN nba_box_scores_v2.main.box_scores b
          ON g.game_id=b.game_id AND g.entity_id=b.entity_id AND b.period='FullGame'
        JOIN nba_box_scores_v2.main.schedule s ON g.game_id=s.game_id
       WHERE g.entity_id='1449' AND g.game_quality>=0 AND s.season_type='Regular Season'
-      GROUP BY 1 HAVING count(*)>=5 ORDER BY 1`,
+      GROUP BY 1, b.team_abbreviation HAVING count(*)>=5 ORDER BY season, gp DESC, team`,
   );
   const same = JSON.stringify(cached) === JSON.stringify(live);
   console.log(
