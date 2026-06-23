@@ -254,7 +254,11 @@ export function LineupDraftBoard({
           </span>
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-          <SlotMachine team={rolling ? null : source.team} decade={source.decade} size="lg" />
+          {/* Pass the team straight through — the parent already nulls it only
+              while the TEAM is rolling (full roll / team skip) and keeps it set
+              through a decade skip, so a decade skip won't spin the team reel.
+              (Don't gate on `rolling`, which is true for decade skips too.) */}
+          <SlotMachine team={source.team} decade={source.decade} size="lg" />
           {controls && (
             <div className="flex flex-col items-end gap-2">
               {controls({ pending: pending !== null, rolling })}
