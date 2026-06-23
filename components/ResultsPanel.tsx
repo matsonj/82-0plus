@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
 import { PlayerCardCarousel, type CardPlayer } from "@/components/PlayerCard";
@@ -50,7 +51,11 @@ function ShareOverlay({
   onClose: () => void;
 }) {
   const [linkCopied, setLinkCopied] = useState(false);
-  return (
+  // Portal to <body> so the fixed overlay escapes any ancestor stacking context
+  // and reliably sits above page chrome/footer (it was bleeding under the footer).
+  // Mirrors the PlayerCard overlay, which portals for the same reason.
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(21,17,14,0.75)" }}
@@ -118,7 +123,8 @@ function ShareOverlay({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
