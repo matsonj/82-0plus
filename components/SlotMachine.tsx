@@ -94,11 +94,12 @@ export function SlotMachine({
   const [decadeSpinning, setDecadeSpinning] = useState(false);
   const [decadeLand, setDecadeLand] = useState(0);
   // How long the era strip SCROLLS. On a full roll it's held to land a beat
-  // after the team, so its scroll must last that whole time (SPIN_MS+STAGGER)
-  // or it stops scrolling early and sits static while the team is still going —
-  // making both reels appear to stop together with an offset ring flash. A
-  // standalone decade skip just uses SPIN_MS.
+  // after the team (SPIN_MS+STAGGER); a standalone decade skip uses SPIN_MS.
   const [decadeSpinMs, setDecadeSpinMs] = useState(SPIN_MS);
+  // Bumped to (re)start the era strip's CSS scroll. On a full roll the scroll is
+  // RESTARTED the moment the team resolves so its motion is keyed off the team
+  // response, not the request — see the decade effect's resolve branch.
+  const [decadeStripKey, setDecadeStripKey] = useState(0);
   const prevDecade = useRef<number>(decade);
   // True while a full roll's decade reel is held spinning, waiting for the team
   // to resolve so it can land a beat AFTER the team (left-to-right stop).
@@ -155,11 +156,12 @@ export function SlotMachine({
     if (changed || (firstRun && team === null)) {
       prevDecade.current = decade;
       setDecadeStrip(buildReelStrip(decadeDisplay, decade, decadeChoices));
+      setDecadeStripKey((k) => k + 1);
       setDecadeSpinning(true);
       if (team === null) {
-        // Full roll: held until the team lands. Scroll for the whole held
-        // window so the reel keeps spinning right up to its (staggered) land
-        // instead of stopping early next to the team.
+        // Full roll: the team is still being fetched. Blur here as filler — the
+        // REAL scroll-to-target is restarted the instant the team resolves (the
+        // branch below), so the scroll never settles ahead of the team.
         setDecadeSpinMs(SPIN_MS + STAGGER_MS);
         decadeWaiting.current = true; // full roll: wait for the team to land first
         return;
@@ -175,10 +177,17 @@ export function SlotMachine({
         clearTimeout(to);
       };
     }
-    // Decade value didn't change, but a full roll was waiting on the team — it
-    // just resolved. Land the decade a beat after the team (left-to-right stop).
+    // The team just resolved while the era was held. RESTART the era scroll from
+    // NOW (re-seed the strip + bump its key) and arm the land for the same
+    // window — both keyed off the team RESPONSE, not the request. Otherwise the
+    // CSS scroll (which started at request time) and the land timer (response
+    // time) drift apart under /api/slot latency, and the era reel can finish
+    // scrolling — looking settled — before the slower team reel lands.
     if (decadeWaiting.current && team !== null) {
       decadeWaiting.current = false;
+      setDecadeStrip(buildReelStrip(decadeDisplay, decade, decadeChoices));
+      setDecadeStripKey((k) => k + 1);
+      setDecadeSpinMs(SPIN_MS + STAGGER_MS);
       const to = setTimeout(() => {
         setDecadeDisplay(decade);
         setDecadeSpinning(false);
@@ -300,6 +309,7 @@ export function SlotMachine({
           </span>
           {decadeSpinning && (
             <span
+              key={decadeStripKey}
               className="md-reel__strip"
               style={reelStyle(decadeStrip, decadeSpinMs)}
               aria-hidden="true"
