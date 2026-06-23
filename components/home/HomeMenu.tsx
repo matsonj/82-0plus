@@ -82,7 +82,6 @@ export function HomeMenu({
           <span className="font-cond text-[14px] font-bold uppercase tracking-[0.18em]">
             More Ways to Play
           </span>
-          <span className="md-folio">THREE MODES</span>
         </div>
 
         <Link

@@ -292,7 +292,6 @@ export function TournamentResults({
   const isChampion = bracket.championId === you.id;
   const myTeam = bracket.teams.find((t) => t.id === you.id);
   const isDaily = mode === "daily";
-  const teamCount = bracket.teams.length;
 
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
@@ -412,15 +411,6 @@ export function TournamentResults({
     return "Classic Tournament";
   })();
 
-  // Round count for the "FINAL · N TEAMS · SINGLE ELIM" subline.
-  const roundLabel = (() => {
-    const r = bracket.rounds.length;
-    if (r === 1) return "Final";
-    if (r === 2) return "Semifinals";
-    if (r === 3) return "Quarterfinals";
-    return `Round ${r}`;
-  })();
-
   return (
     <>
       {shareUrl && (
@@ -465,13 +455,6 @@ export function TournamentResults({
           >
             {tournamentHeadline}
           </h1>
-          {/* Subline: ROUND N · 16 TEAMS · SINGLE ELIM */}
-          <div
-            className="mt-3 font-cond font-semibold uppercase tracking-[0.14em]"
-            style={{ fontSize: 16, color: "var(--md-ink-muted)" }}
-          >
-            {roundLabel} · {teamCount} Teams · Single Elim
-          </div>
         </div>
 
         {/* ---- Your team summary — compact, above the bracket ---- */}
