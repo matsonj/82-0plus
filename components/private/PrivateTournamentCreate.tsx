@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import {
   validateName,
   validateTournamentName,
@@ -16,9 +15,9 @@ import {
   type PrivateSize,
   type PrivateBoardMode,
 } from "@/lib/privateTournament";
-import { copyText } from "@/lib/copyText";
 import { SITE_URL } from "@/lib/site";
 import { validateManualBoard } from "@/lib/privateBoardRules";
+import { Button, ButtonLink, Capsule, CopyLinkField, NameField, Notice, PinField } from "@/components/ui";
 
 // A single manual board slot the admin is filling: a decade (from /api/decades)
 // + a team chosen from /api/private-tournament/teams?decade=. Distinctness +
@@ -78,7 +77,6 @@ export function PrivateTournamentCreate({
     tournamentId: string;
     shareUrl: string;
   } | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
 
   // Restore the admin's saved account on mount.
   useEffect(() => {
@@ -194,47 +192,25 @@ export function PrivateTournamentCreate({
     return (
       <div className="md-card md-card--lift mx-auto flex w-full max-w-md flex-col gap-4 p-5">
         <div className="text-center">
-          <div className="md-capsule md-capsule--teal mb-2">
+          <Capsule tone="teal" className="mb-2">
             Tournament created
-          </div>
+          </Capsule>
           <div className="font-display text-2xl font-bold break-words">
             {name}
           </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Share link
-          </span>
-          <div className="flex items-stretch gap-2">
-            <input
-              readOnly
-              value={fullShare}
-              className="md-input flex-1 text-[13px]"
-              onFocus={(e) => e.currentTarget.select()}
-            />
-            <button
-              type="button"
-              className="md-btn md-btn--sm md-btn--secondary"
-              onClick={async () => {
-                if (await copyText(fullShare)) {
-                  setLinkCopied(true);
-                  setTimeout(() => setLinkCopied(false), 1500);
-                }
-              }}
-            >
-              {linkCopied ? "Copied!" : "Copy"}
-            </button>
-          </div>
-          <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-            Anyone with the link can join — no PIN needed to draft.
-          </span>
-        </div>
-        <Link
+        <CopyLinkField
+          label="Share link"
+          value={fullShare}
+          hint="Anyone with the link can join — no PIN needed to draft."
+        />
+        <ButtonLink
           href={created.shareUrl}
-          className="md-btn md-btn--lg md-btn--teal"
+          size="lg"
+          variant="teal"
         >
           Open the lobby
-        </Link>
+        </ButtonLink>
       </div>
     );
   }
@@ -268,85 +244,48 @@ export function PrivateTournamentCreate({
           <span className="font-display text-[11px] uppercase tracking-wide text-[var(--md-ink-muted)]">
             Your account (the host)
           </span>
-          <label className="flex flex-col gap-1">
-            <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-              Your name
-            </span>
-            <input
-              className="md-input md-input--name"
-              value={adminName}
-              maxLength={NAME_MAX_LEN}
-              autoCapitalize="characters"
-              onChange={(e) =>
-                setAdminName(
-                  e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                )
-              }
-              placeholder="PHILJACKSON"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-              Your PIN
-            </span>
-            <input
-              className="md-input"
-              value={adminPin}
-              type="password"
-              inputMode="numeric"
-              maxLength={6}
-              onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, ""))}
-              placeholder="4–6 digits"
-            />
-            <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-              {adminPin.length > 0 && !adminPinOk
+          <NameField
+            label="Your name"
+            value={adminName}
+            maxLength={NAME_MAX_LEN}
+            onChange={(event) => setAdminName(event.target.value)}
+          />
+          <PinField
+            label="Your PIN"
+            value={adminPin}
+            onChange={(event) => setAdminPin(event.target.value)}
+            hint={
+              adminPin.length > 0 && !adminPinOk
                 ? "PIN must be 4–6 digits"
-                : "Your account PIN — how you log back in."}
-            </span>
-          </label>
+                : "Your account PIN — how you log back in."
+            }
+          />
         </div>
       )}
 
-      <label className="flex flex-col gap-1">
-        <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          Tournament name
-        </span>
-        <input
-          className="md-input md-input--name"
-          value={name}
-          maxLength={TOURNAMENT_NAME_MAX_LEN}
-          autoCapitalize="characters"
-          onChange={(e) =>
-            setName(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""))
-          }
-          placeholder="FRIDAY NIGHT HOOPS CUP"
-        />
-        <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-          {name.length > 0 && !nameCheck.ok
+      <NameField
+        label="Tournament name"
+        value={name}
+        maxLength={TOURNAMENT_NAME_MAX_LEN}
+        placeholder="FRIDAY NIGHT HOOPS CUP"
+        onChange={(event) => setName(event.target.value)}
+        hint={
+          name.length > 0 && !nameCheck.ok
             ? nameCheck.reason
-            : "The tournament's name · letters, numbers, spaces · 24 max"}
-        </span>
-      </label>
+            : "The tournament's name · letters, numbers, spaces · 24 max"
+        }
+      />
 
-      <label className="flex flex-col gap-1">
-        <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          Tournament PIN
-        </span>
-        <input
-          className="md-input"
-          value={pin}
-          type="password"
-          inputMode="numeric"
-          maxLength={6}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-          placeholder="4–6 digits"
-        />
-        <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-          {pin.length > 0 && !pinOk
+      <PinField
+        label="Tournament PIN"
+        value={pin}
+        onChange={(event) => setPin(event.target.value)}
+        hint={
+          pin.length > 0 && !pinOk
             ? "PIN must be 4–6 digits"
-            : "Find the tournament later by its name + this PIN."}
-        </span>
-      </label>
+            : "Find the tournament later by its name + this PIN."
+        }
+      />
 
       {/* Mode. */}
       <div className="flex flex-col gap-1">
@@ -522,27 +461,27 @@ export function PrivateTournamentCreate({
       )}
 
       {error && (
-        <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
+        <Notice tone="error" className="font-display">
           {error}
-        </div>
+        </Notice>
       )}
 
       <div className="flex flex-wrap gap-2">
-        <button
+        <Button
           type="submit"
-          className="md-btn md-btn--teal"
+          variant="teal"
           disabled={!canSubmit}
         >
           {submitting ? "Creating…" : "Create tournament"}
-        </button>
+        </Button>
         {onCancel && (
-          <button
+          <Button
             type="button"
-            className="md-btn md-btn--secondary"
+            variant="secondary"
             onClick={onCancel}
           >
             Cancel
-          </button>
+          </Button>
         )}
       </div>
     </form>

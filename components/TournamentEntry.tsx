@@ -14,6 +14,7 @@ import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { CaptainPicker } from "@/components/CaptainPicker";
 import { TournamentResults } from "@/components/TournamentResults";
 import { TournamentHowToPlay } from "@/components/TournamentHowToPlay";
+import { Button, Capsule, NameField, Notice, PinField } from "@/components/ui";
 import {
   validateName,
   validateTeamName,
@@ -388,9 +389,9 @@ export function TournamentEntry({
           Couldn&rsquo;t start the tournament.
         </p>
         <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">{loadError}</p>
-        <button className="md-btn md-btn--sm md-btn--secondary mt-4" onClick={onBack}>
+        <Button size="sm" variant="secondary" className="mt-4" onClick={onBack}>
           Back
-        </button>
+        </Button>
       </div>
     );
   }
@@ -409,8 +410,7 @@ export function TournamentEntry({
           <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
             Your starting five
           </span>
-          <span
-            className="md-capsule"
+          <Capsule
             style={
               listMode === "hoopiq"
                 ? { background: "var(--md-ink)", color: "var(--md-white)" }
@@ -426,9 +426,9 @@ export function TournamentEntry({
                     ? "Daily"
                     : mode === "hoopiq"
                       ? "Ranked"
-                      : "Classic"
+                    : "Classic"
                 } Tournament`}
-          </span>
+          </Capsule>
         </div>
         <LineupBoard
           kinds={KINDS}
@@ -456,9 +456,9 @@ export function TournamentEntry({
       </div>
 
       {rollError && (
-        <div className="border-2 border-[var(--md-coral)] p-3 font-mono text-[13px] text-[var(--md-coral)]">
+        <Notice tone="error" className="bg-transparent p-3 text-[13px]">
           {rollError}
-        </div>
+        </Notice>
       )}
 
       {/* ---- SIXTH MAN: the bench round ---- */}
@@ -476,13 +476,14 @@ export function TournamentEntry({
           )}
           {!benchIsFixed && (
             <div className="flex flex-wrap justify-center gap-2">
-              <button
-                className="md-btn md-btn--sm md-btn--secondary"
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={teamSkip}
                 disabled={teamSkips <= 0 || rolling}
               >
                 ↻ Team skip ({teamSkips})
-              </button>
+              </Button>
             </div>
           )}
           <div className="w-full">
@@ -511,9 +512,9 @@ export function TournamentEntry({
               </div>
             )}
           </div>
-          <button className="md-btn md-btn--sm md-btn--secondary" onClick={onBack}>
+          <Button size="sm" variant="secondary" onClick={onBack}>
             Cancel
-          </button>
+          </Button>
         </div>
       )}
 
@@ -572,53 +573,35 @@ export function TournamentEntry({
                   </div>
                 ) : (
                   <>
-                    <label className="flex flex-col gap-1">
-                      <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                        Your name
-                      </span>
-                      <input
-                        className="md-input md-input--name"
-                        value={username}
-                        maxLength={NAME_MAX_LEN}
-                        autoCapitalize="characters"
-                        onChange={(e) => {
-                          setUsername(
-                            e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                          );
-                          setNameTaken(false);
-                        }}
-                        placeholder="PHILJACKSON"
-                        style={nameTaken ? { borderColor: "var(--md-coral)" } : undefined}
-                      />
-                      <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
-                        {username.length > 0 && !usernameCheck.ok
+                    <NameField
+                      label="Your name"
+                      value={username}
+                      maxLength={NAME_MAX_LEN}
+                      onChange={(event) => {
+                        setUsername(event.target.value);
+                        setNameTaken(false);
+                      }}
+                      style={nameTaken ? { borderColor: "var(--md-coral)" } : undefined}
+                      hint={
+                        username.length > 0 && !usernameCheck.ok
                           ? usernameCheck.reason
-                          : "Your account name · letters, numbers, spaces · 16 max"}
-                      </span>
-                      <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
-                        This is how you log back in to check your teams.
-                      </span>
-                    </label>
+                          : "Your account name · letters, numbers, spaces · 16 max"
+                      }
+                    />
+                    <p className="-mt-2 font-mono text-[11px] text-[var(--md-ink-muted)]">
+                      This is how you log back in to check your teams.
+                    </p>
 
-                    <label className="flex flex-col gap-1">
-                      <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                        PIN
-                      </span>
-                      <input
-                        className="md-input"
-                        value={pin}
-                        type="password"
-                        inputMode="numeric"
-                        maxLength={6}
-                        onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                        placeholder="4–6 digits"
-                      />
-                      <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
-                        {pin.length > 0 && !pinOk
+                    <PinField
+                      label="PIN"
+                      value={pin}
+                      onChange={(event) => setPin(event.target.value)}
+                      hint={
+                        pin.length > 0 && !pinOk
                           ? "PIN must be 4–6 digits"
-                          : "Remembers your account so you can check back."}
-                      </span>
-                    </label>
+                          : "Remembers your account so you can check back."
+                      }
+                    />
                   </>
                 )}
 
@@ -657,9 +640,9 @@ export function TournamentEntry({
           )}
 
           {submitError && (
-            <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-mono text-[13px] text-[var(--md-coral)]">
+            <Notice tone="error" className="text-[13px]">
               {submitError}
-            </div>
+            </Notice>
           )}
 
           {captainSlot === null && (
@@ -670,8 +653,9 @@ export function TournamentEntry({
 
           <div className="flex flex-wrap justify-center gap-2">
             {captainSlot !== null && (
-              <button
-                className="md-btn md-btn--lg md-btn--teal"
+              <Button
+                size="lg"
+                variant="teal"
                 disabled={!canSubmit}
                 onClick={submit}
               >
@@ -682,11 +666,11 @@ export function TournamentEntry({
                   : isPrivate
                     ? "Submit team"
                     : "Enter the tournament"}
-              </button>
+              </Button>
             )}
-            <button className="md-btn md-btn--lg md-btn--secondary" onClick={onBack}>
+            <Button size="lg" variant="secondary" onClick={onBack}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}

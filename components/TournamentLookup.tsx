@@ -14,8 +14,6 @@ import {
   validateName,
   validateTournamentName,
   validatePin,
-  NAME_MAX_LEN,
-  TOURNAMENT_NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
 import { TournamentResults } from "@/components/TournamentResults";
 import { TierBadge } from "@/components/TierBadge";
@@ -29,19 +27,18 @@ import {
   formatTournamentStatus,
   formatSignedMargin,
 } from "@/lib/tournamentLabels";
+import { Button, Capsule, EmptyState, LoadingState, Notice } from "@/components/ui";
+import {
+  AccountFields,
+  TournamentCredentialFields,
+  TournamentLookupTabs,
+  type TournamentLookupTab,
+} from "@/components/tournament/TournamentLookupControls";
 
 // The My-Teams filters. daily/hoopiq/classic filter the existing team list by
 // TournamentMode; "private" swaps to the private-tournament feed; "all" clears the
 // mode filter and shows every (non-private) team.
-type Tab = "all" | "daily" | "hoopiq" | "classic" | "private";
-
-const TAB_LABEL: Record<Tab, string> = {
-  all: "All",
-  daily: "Daily",
-  hoopiq: "Ranked",
-  classic: "Classic",
-  private: "Private",
-};
+type Tab = TournamentLookupTab;
 
 // "2026-06-11" → "Jun 11" (plain calendar date, no TZ shift).
 function shortDay(date: string): string {
@@ -61,37 +58,6 @@ function regSeasonRecord(team: TournamentTeamSummary): { w: number; l: number } 
   }
   const w = regWinsFromSeedNet(team.seedNet);
   return { w, l: 82 - w };
-}
-
-// ---- Tab bar shared between form and list views ----
-function TabBar({
-  tab,
-  onSelect,
-}: {
-  tab: Tab;
-  onSelect: (t: Tab) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-0 border-b-2 border-[var(--md-ink)]">
-      {(["all", "daily", "hoopiq", "classic", "private"] as Tab[]).map((t) => (
-        <button
-          key={t}
-          type="button"
-          onClick={() => onSelect(t)}
-          className="font-cond text-[12px] font-semibold uppercase tracking-[0.12em] px-4 py-2 transition-colors"
-          style={{
-            background: tab === t ? "var(--md-ink)" : "transparent",
-            color: tab === t ? "var(--md-white)" : "var(--md-ink-muted)",
-            cursor: "pointer",
-            borderBottom: tab === t ? "2px solid var(--md-ink)" : "2px solid transparent",
-            marginBottom: -2,
-          }}
-        >
-          {TAB_LABEL[t]}
-        </button>
-      ))}
-    </div>
-  );
 }
 
 // Shared "press stamp" chrome for the TIER lane. Matches TierBadge exactly (same
@@ -482,8 +448,7 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <span
-          className="md-capsule"
+        <Capsule
           style={
             row.mode === "hoopiq"
               ? { background: "var(--md-ink)", color: "var(--md-white)" }
@@ -491,10 +456,10 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
           }
         >
           {row.modeLabel}
-        </span>
-        <span className="md-capsule">{row.size} teams</span>
+        </Capsule>
+        <Capsule>{row.size} teams</Capsule>
         {isChampion && (
-          <span className="md-capsule md-capsule--press">♛ Champion</span>
+          <Capsule tone="press">♛ Champion</Capsule>
         )}
       </div>
 
@@ -889,7 +854,7 @@ export function TournamentLookup({
         </div>
 
         {/* Tab bar */}
-        <TabBar tab={tab} onSelect={(t) => { setTab(t); setPage(0); }} />
+        <TournamentLookupTabs tab={tab} onSelect={(t) => { setTab(t); setPage(0); }} />
 
         {/* Clear filter */}
         {tab !== "all" && tab !== "private" && (
@@ -903,9 +868,9 @@ export function TournamentLookup({
         )}
 
         {listError && (
-          <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-3 font-mono text-[13px] text-[var(--md-coral)]">
+          <Notice tone="error" className="p-3 text-[13px]">
             {listError}
-          </div>
+          </Notice>
         )}
 
         {/* ---- Private tab ---- */}
@@ -914,52 +879,36 @@ export function TournamentLookup({
             {showCreate ? (
               <PrivateTournamentCreate onCancel={() => setShowCreate(false)} />
             ) : (
-              <button
+              <Button
                 type="button"
-                className="md-btn md-btn--teal"
+                variant="teal"
                 onClick={() => setShowCreate(true)}
               >
                 + Create private tournament
-              </button>
+              </Button>
             )}
 
             {!showCreate &&
               (privateLoading ? (
-                <div className="py-6 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
+                <LoadingState className="py-6 font-mono text-[13px] normal-case tracking-normal">
                   Loading your private tournaments…
-                </div>
+                </LoadingState>
               ) : privateRows && privateRows.length > 0 ? (
                 privateRows.map((r) => (
                   <PrivateRow key={r.tournamentId} row={r} />
                 ))
               ) : (
-                <div className="md-card flex flex-col gap-1 p-5 text-center">
-                  <div
-                    className="font-archivo leading-tight"
-                    style={{ fontSize: 18, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
-                  >
-                    No active private tournaments
-                  </div>
-                  <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
-                    Create one above, or open a friend&rsquo;s invite link.
-                  </p>
-                </div>
+                <EmptyState title="No active private tournaments">
+                  Create one above, or open a friend&rsquo;s invite link.
+                </EmptyState>
               ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="md-card flex flex-col gap-1 p-5 text-center">
-            <div
-              className="font-archivo leading-tight"
-              style={{ fontSize: 18, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
-            >
-              No teams yet
-            </div>
-            <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
-              {tab === "daily"
-                ? "Play a Daily Challenge to see it here."
-                : "Play a Classic or Ranked season and hit Enter Tournament."}
-            </p>
-          </div>
+          <EmptyState title="No teams yet">
+            {tab === "daily"
+              ? "Play a Daily Challenge to see it here."
+              : "Play a Classic or Ranked season and hit Enter Tournament."}
+          </EmptyState>
         ) : (
           <>
             {/* Desktop: table with column headers. Gated at md (not sm) — the
@@ -1022,25 +971,27 @@ export function TournamentLookup({
 
         {tab !== "private" && pageCount > 1 && (
           <div className="flex items-center justify-between gap-2">
-            <button
+            <Button
               type="button"
-              className="md-btn md-btn--sm md-btn--secondary"
+              size="sm"
+              variant="secondary"
               disabled={safePage === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
             >
               ← Newer
-            </button>
+            </Button>
             <span className="font-mono text-[11px] uppercase tracking-wide text-[var(--md-ink-muted)]">
               Page {safePage + 1} of {pageCount}
             </span>
-            <button
+            <Button
               type="button"
-              className="md-btn md-btn--sm md-btn--secondary"
+              size="sm"
+              variant="secondary"
               disabled={safePage >= pageCount - 1}
               onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
             >
               Older →
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -1060,7 +1011,7 @@ export function TournamentLookup({
   if (tab === "private") {
     return (
       <div className="flex w-full flex-col gap-4">
-        <TabBar tab={tab} onSelect={setTab} />
+        <TournamentLookupTabs tab={tab} onSelect={setTab} />
 
         {showCreate ? (
           <PrivateTournamentCreate onCancel={() => setShowCreate(false)} />
@@ -1079,13 +1030,13 @@ export function TournamentLookup({
                   link someone shared with you.
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
-                className="md-btn md-btn--teal"
+                variant="teal"
                 onClick={() => setShowCreate(true)}
               >
                 + Create private tournament
-              </button>
+              </Button>
             </div>
 
             <form onSubmit={submitJoin} className="md-card flex flex-col gap-3 p-5">
@@ -1099,83 +1050,34 @@ export function TournamentLookup({
                 </p>
               </div>
 
-              <label className="flex flex-col gap-1">
-                <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Tournament name
-                </span>
-                <input
-                  className="md-input md-input--name"
-                  value={joinName}
-                  maxLength={TOURNAMENT_NAME_MAX_LEN}
-                  autoCapitalize="characters"
-                  onChange={(e) =>
-                    setJoinName(
-                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                    )
-                  }
-                  placeholder="FRIDAY NIGHT HOOPS CUP"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Tournament PIN
-                </span>
-                <input
-                  className="md-input"
-                  value={joinPin}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  onChange={(e) => setJoinPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4–6 digits"
-                />
-              </label>
+              <TournamentCredentialFields
+                name={joinName}
+                pin={joinPin}
+                onName={setJoinName}
+                onPin={setJoinPin}
+              />
 
               <div className="border-t-2 border-dashed border-[var(--md-ink)] pt-3">
                 <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
                   Your account (to enter as)
                 </span>
               </div>
-              <label className="flex flex-col gap-1">
-                <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Your name
-                </span>
-                <input
-                  className="md-input md-input--name"
-                  value={name}
-                  maxLength={NAME_MAX_LEN}
-                  autoCapitalize="characters"
-                  onChange={(e) =>
-                    setName(
-                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                    )
-                  }
-                  placeholder="PHILJACKSON"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Your PIN
-                </span>
-                <input
-                  className="md-input"
-                  value={pin}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4–6 digits"
-                />
-              </label>
+              <AccountFields
+                name={name}
+                pin={pin}
+                onName={setName}
+                onPin={setPin}
+                pinLabel="Your PIN"
+              />
 
               {joinError && (
-                <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-mono text-[13px] text-[var(--md-coral)]">
+                <Notice tone="error" className="text-[13px]">
                   {joinError}
-                </div>
+                </Notice>
               )}
-              <button
+              <Button
                 type="submit"
-                className="md-btn md-btn--teal"
+                variant="teal"
                 disabled={
                   !validateTournamentName(joinName).ok ||
                   !validatePin(joinPin) ||
@@ -1185,7 +1087,7 @@ export function TournamentLookup({
                 }
               >
                 {joining ? "Joining…" : "Join & start building"}
-              </button>
+              </Button>
             </form>
 
             <form
@@ -1195,57 +1097,32 @@ export function TournamentLookup({
               <div className="font-cond text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
                 Already joined one?
               </div>
-              <label className="flex flex-col gap-1">
-                <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Your name
-                </span>
-                <input
-                  className="md-input md-input--name"
-                  value={name}
-                  maxLength={NAME_MAX_LEN}
-                  autoCapitalize="characters"
-                  onChange={(e) =>
-                    setName(
-                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                    )
-                  }
-                  placeholder="PHILJACKSON"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  PIN
-                </span>
-                <input
-                  className="md-input"
-                  value={pin}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4–6 digits"
-                />
-              </label>
+              <AccountFields
+                name={name}
+                pin={pin}
+                onName={setName}
+                onPin={setPin}
+              />
               {error && (
-                <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-mono text-[13px] text-[var(--md-coral)]">
+                <Notice tone="error" className="text-[13px]">
                   {error}
-                </div>
+                </Notice>
               )}
-              <button
+              <Button
                 type="submit"
-                className="md-btn md-btn--secondary"
+                variant="secondary"
                 disabled={!canSubmit}
               >
                 {submitting ? "Checking…" : "Show my private tournaments"}
-              </button>
+              </Button>
             </form>
           </>
         )}
 
         {onBack && (
-          <button type="button" className="md-btn md-btn--secondary" onClick={onBack}>
+          <Button type="button" variant="secondary" onClick={onBack}>
             Back
-          </button>
+          </Button>
         )}
       </div>
     );
@@ -1255,7 +1132,7 @@ export function TournamentLookup({
   return (
     <div className="flex w-full flex-col gap-6">
       {/* Tab bar above the form */}
-      <TabBar tab={tab} onSelect={setTab} />
+      <TournamentLookupTabs tab={tab} onSelect={setTab} />
 
       {/* The "FIND YOUR TEAMS" lookup card — ink-spread cover card */}
       <form
@@ -1271,52 +1148,32 @@ export function TournamentLookup({
           </span>
         </div>
 
-        <label className="flex flex-col gap-1">
-          <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--md-paper-3)" }}>
-            Your Name
-          </span>
-          <input
-            className="md-input md-input--name"
-            value={name}
-            maxLength={NAME_MAX_LEN}
-            autoCapitalize="characters"
-            onChange={(e) =>
-              setName(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""))
-            }
-            placeholder="PHILJACKSON"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--md-paper-3)" }}>
-            PIN
-          </span>
-          <input
-            className="md-input"
-            value={pin}
-            type="password"
-            inputMode="numeric"
-            maxLength={6}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-            placeholder="4–6 digits"
-          />
-        </label>
+        <AccountFields
+          name={name}
+          pin={pin}
+          onName={setName}
+          onPin={setPin}
+          dark
+          nameLabel="Your Name"
+        />
 
         {error && (
-          <div className="border-2 border-[var(--md-coral)] p-2 font-mono text-[13px] text-[var(--md-coral)]">
+          <Notice tone="error" className="bg-transparent text-[13px]">
             {error}
-          </div>
+          </Notice>
         )}
 
-        <button
+        <Button
           type="submit"
-          className="md-btn md-btn--lg w-full justify-between"
+          size="lg"
+          fullWidth
+          className="justify-between"
           style={{ background: "var(--md-coral)", color: "var(--md-white)", borderColor: "var(--md-ink)" }}
           disabled={!canSubmit}
         >
           <span>{submitting ? "CHECKING…" : "LOOK UP MY TEAMS"}</span>
           <span>→</span>
-        </button>
+        </Button>
 
         <p className="font-mono text-[11px] italic" style={{ color: "var(--md-paper-3)" }}>
           🔒 Your name + PIN is your account — same one as the Daily.
@@ -1324,9 +1181,9 @@ export function TournamentLookup({
       </form>
 
       {onBack && (
-        <button type="button" className="md-btn md-btn--secondary self-start" onClick={onBack}>
+        <Button type="button" variant="secondary" className="self-start" onClick={onBack}>
           Back
-        </button>
+        </Button>
       )}
     </div>
   );

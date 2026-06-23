@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
-import { PlayerCardCarousel, type CardPlayer } from "@/components/PlayerCard";
-import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
+import { type CardPlayer, usePlayerCardDeck } from "@/components/PlayerCard";
 import { presentShare } from "@/lib/shareActions";
-import { copyText } from "@/lib/copyText";
 import { MIN_ELIGIBLE_WINS } from "@/lib/tier";
+import { Button } from "@/components/ui";
+import { ShareAssetDialog } from "@/components/ui/ShareAssetDialog";
 
 // ---- Fit narrative -------------------------------------------------------
 // One-sentence summary of the team fit adjustment. The mockup shows a single
@@ -35,91 +35,6 @@ function resultKicker(wins: number, netRating: number, perfect: boolean): string
   if (wins >= 40) return "Tournament-eligible.";
   if (netRating >= 0) return "A winning season.";
   return "Back to the draft board.";
-}
-
-// ---- Share overlay -------------------------------------------------------
-function ShareOverlay({
-  shareUrl,
-  shareLink,
-  autoCopied,
-  onClose,
-}: {
-  shareUrl: string;
-  shareLink: string;
-  autoCopied: boolean;
-  onClose: () => void;
-}) {
-  const [linkCopied, setLinkCopied] = useState(false);
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(21,17,14,0.75)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm p-5"
-        style={{
-          background: "var(--md-white)",
-          border: "2px solid var(--md-ink)",
-          boxShadow: "var(--md-shadow-lg)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h3
-            className="font-archivo leading-tight"
-            style={{ fontSize: 18, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
-          >
-            Share your season
-          </h3>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className="font-mono text-[16px] text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
-          >
-            ✕
-          </button>
-        </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={shareUrl}
-          alt="Your daily82 result card"
-          className="mt-3 w-full border-2 border-[var(--md-ink)]"
-        />
-        <p className="mt-2 text-center font-mono text-[12px] leading-snug text-[var(--md-ink-muted)]">
-          <strong>Right-click to copy and share.</strong>{" "}
-          {autoCopied
-            ? "The link is already on your clipboard."
-            : 'Use "Copy link" below to copy the link.'}
-        </p>
-        <div className="mt-3 flex flex-wrap justify-center gap-2">
-          <a
-            className="md-btn md-btn--sm md-btn--secondary"
-            href={shareUrl}
-            download="daily82-season.png"
-          >
-            Download
-          </a>
-          <button
-            className="md-btn md-btn--sm md-btn--secondary"
-            onClick={async () => {
-              const ok = await copyText(shareLink);
-              if (ok) {
-                setLinkCopied(true);
-                setTimeout(() => setLinkCopied(false), 1500);
-              }
-            }}
-          >
-            {linkCopied ? "Link copied!" : "Copy link"}
-          </button>
-          <button className="md-btn md-btn--sm md-btn--ink" onClick={onClose}>
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ---- THE FIVE: ink-spread lineup table -----------------------------------
@@ -478,7 +393,6 @@ export function ResultsPanel({
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [autoCopied, setAutoCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [cardIndex, setCardIndex] = useState<number | null>(null);
 
   // Career cards reveal stats — Classic only (not Daily).
   const cardsOn = mode === "classic" && !isDaily;
@@ -495,10 +409,14 @@ export function ResultsPanel({
       })),
     [roster],
   );
-
-  useEffect(() => {
-    if (cardsOn) for (const c of cardPlayers) prefetchPlayerSeasons(c.entityId);
-  }, [cardsOn, cardPlayers]);
+  const {
+    carousel: playerCardCarousel,
+    openCard,
+  } = usePlayerCardDeck({
+    players: cardPlayers,
+    enabled: cardsOn,
+    prefetchAll: true,
+  });
 
   useEffect(() => {
     let active = true;
@@ -550,18 +468,15 @@ export function ResultsPanel({
   return (
     <>
       {/* Career card carousel modal (Classic only) */}
-      {cardIndex !== null && cardPlayers[cardIndex] && (
-        <PlayerCardCarousel
-          players={cardPlayers}
-          index={cardIndex}
-          onClose={() => setCardIndex(null)}
-        />
-      )}
+      {playerCardCarousel}
 
       {/* Share overlay */}
       {shareUrl && (
-        <ShareOverlay
-          shareUrl={shareUrl}
+        <ShareAssetDialog
+          title="Share your season"
+          imageUrl={shareUrl}
+          imageAlt="Your daily82 result card"
+          downloadName="daily82-season.png"
           shareLink={shareLink}
           autoCopied={autoCopied}
           onClose={closeShare}
@@ -730,16 +645,18 @@ export function ResultsPanel({
             {!entryOnly && (
               <div className="flex flex-col gap-3 mb-1">
                 {/* Share — full-width flame on mobile, text link on desktop */}
-                <button
+                <Button
                   type="button"
                   onClick={share}
                   disabled={!shareBlob || !shareReady}
-                  className="md-btn md-btn--lg w-full lg:hidden transition-opacity disabled:opacity-40"
+                  size="lg"
+                  fullWidth
+                  className="lg:hidden transition-opacity disabled:opacity-40"
                   style={{ background: "var(--md-coral)", color: "var(--md-white)", borderColor: "var(--md-ink)" }}
                 >
                   <span style={{ fontSize: 14, marginRight: 6 }}>↑</span>
                   {shareBlob && shareReady ? "Share Result" : "Preparing…"}
-                </button>
+                </Button>
 
                 {/* Enter Tournament (eligible) — block style on mobile */}
                 {onEnterTournament && isEligible && (
@@ -777,8 +694,9 @@ export function ResultsPanel({
 
                 {/* Enter Tournament — button style on desktop */}
                 {onEnterTournament && isEligible && (
-                  <button
-                    className="md-btn md-btn--lg hidden lg:flex items-center gap-2"
+                  <Button
+                    size="lg"
+                    className="hidden lg:flex items-center gap-2"
                     style={{
                       background: "var(--md-coral)",
                       color: "var(--md-white)",
@@ -788,17 +706,19 @@ export function ResultsPanel({
                   >
                     {entryCtaLabel ?? "Enter Tournament"}
                     <span>→</span>
-                  </button>
+                  </Button>
                 )}
 
                 {/* Play Again */}
-                <button
-                  className="md-btn md-btn--lg md-btn--secondary w-full lg:w-auto"
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  className="w-full lg:w-auto"
                   onClick={onReset}
                 >
                   <span style={{ marginRight: 6 }}>↺</span>
                   {resetLabel ?? "Play Again"}
-                </button>
+                </Button>
               </div>
             )}
 
@@ -822,8 +742,9 @@ export function ResultsPanel({
 
             {/* entryOnly: just the entry CTA */}
             {entryOnly && onEnterTournament && (
-              <button
-                className="md-btn md-btn--lg w-full"
+              <Button
+                size="lg"
+                fullWidth
                 style={{
                   background: "var(--md-coral)",
                   color: "var(--md-white)",
@@ -832,7 +753,7 @@ export function ResultsPanel({
                 onClick={onEnterTournament}
               >
                 {entryCtaLabel ?? "Enter Tournament"}
-              </button>
+              </Button>
             )}
 
             {/* Share — text link on desktop (hidden on mobile, full-width btn above) */}
@@ -858,7 +779,7 @@ export function ResultsPanel({
               result={result}
               cardsOn={cardsOn}
               mode={mode}
-              onCardOpen={setCardIndex}
+              onCardOpen={openCard}
             />
           </div>
         </div>

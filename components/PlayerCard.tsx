@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { PlayerSeasonRow } from "@/lib/queries";
 import type { Role } from "@/lib/positions";
 import { loadPlayerSeasons, prefetchPlayerSeasons } from "@/lib/playerSeasons";
+import { Button } from "@/components/ui";
 
 type Status = "loading" | "ok" | "error";
 
@@ -18,6 +19,63 @@ export interface CardPlayer {
   // All-Defensive team that drafted season: 1 (1st) / 2 (2nd) / 0 | undefined
   // (none). Classic only — the roster mapping leaves it unset elsewhere.
   allDef?: number;
+}
+
+export function usePlayerCardDeck({
+  players,
+  enabled = true,
+  prefetchAll = false,
+  canDraft,
+  onDraft,
+}: {
+  players: CardPlayer[];
+  enabled?: boolean;
+  prefetchAll?: boolean;
+  canDraft?: (index: number) => boolean;
+  onDraft?: (index: number) => void;
+}) {
+  const [index, setIndex] = useState<number | null>(null);
+
+  const closeCard = useCallback(() => setIndex(null), []);
+  const openCard = useCallback(
+    (nextIndex: number) => {
+      if (!enabled || !players[nextIndex]) return;
+      setIndex(nextIndex);
+    },
+    [enabled, players],
+  );
+  const prefetchCard = useCallback(
+    (nextIndex: number) => {
+      if (!enabled || !players[nextIndex]) return;
+      prefetchPlayerSeasons(players[nextIndex].entityId);
+    },
+    [enabled, players],
+  );
+
+  useEffect(() => {
+    if (!enabled || !prefetchAll) return;
+    for (const player of players) prefetchPlayerSeasons(player.entityId);
+  }, [enabled, prefetchAll, players]);
+
+  const carousel =
+    enabled && index !== null && players[index] ? (
+      <PlayerCardCarousel
+        players={players}
+        index={index}
+        onClose={closeCard}
+        canDraft={canDraft}
+        onDraft={
+          onDraft
+            ? (draftIndex) => {
+                onDraft(draftIndex);
+                closeCard();
+              }
+            : undefined
+        }
+      />
+    ) : null;
+
+  return { activeCardIndex: index, carousel, closeCard, openCard, prefetchCard };
 }
 
 // Position → capsule background on the SLAM system (no role colors bleed into data).
@@ -376,16 +434,16 @@ function FullCard({
             </span>
           )}
           {onDraft && (
-            <button
+            <Button
               type="button"
-              className="md-btn md-btn--sm"
+              size="sm"
               style={{ background: "var(--md-white)", color: "var(--md-coral)", borderColor: "var(--md-ink)" }}
               onClick={onDraft}
               disabled={!draftable}
               title={draftable ? "Draft this player" : "No open slot fits his position"}
             >
               Draft
-            </button>
+            </Button>
           )}
           {onClose && (
             <button
