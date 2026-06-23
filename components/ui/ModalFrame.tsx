@@ -1,4 +1,7 @@
-import type { CSSProperties, ReactNode } from "react";
+"use client";
+
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { cx } from "@/components/ui/classNames";
 
 export function ModalFrame({
@@ -36,7 +39,12 @@ export function ModalFrame({
   overlayStyle?: CSSProperties;
   panelStyle?: CSSProperties;
 }) {
-  return (
+  // Portal to <body> so the modal escapes any page stacking context (e.g. the
+  // footer bleeding over it). Mirrors PlayerCard. Mounted-gated for SSR safety.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const overlay = (
     <div
       className={cx("fixed inset-0 z-50 flex items-center justify-center p-4", overlayClassName)}
       style={{ background: "rgba(21,17,14,0.75)", ...overlayStyle }}
@@ -85,4 +93,7 @@ export function ModalFrame({
       </div>
     </div>
   );
+
+  if (!mounted) return null;
+  return createPortal(overlay, document.body);
 }
