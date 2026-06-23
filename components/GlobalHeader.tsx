@@ -68,6 +68,9 @@ export function GlobalHeader({
   // client-side only (localStorage) so the first render stays hydration-safe.
   const [user, setUser] = useState<{ username: string; pin: string } | null>(null);
   const [open, setOpen] = useState(false);
+  // Mobile nav: the desktop link row is hidden below sm, so a hamburger exposes
+  // My Teams / How to Play / Player Cards on small screens.
+  const [menuOpen, setMenuOpen] = useState(false);
   // Changelog: `unread` pops the bell + survives reloads (localStorage); `viewing`
   // keeps the note rendered for the session in which it was first opened, so it
   // doesn't vanish the instant the panel opens.
@@ -158,6 +161,21 @@ export function GlobalHeader({
   // Shared masthead nav-link treatment (Oswald caps on ink).
   const navCls =
     "font-cond text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--md-paper)] transition-colors hover:text-[var(--md-coral)]";
+  // Mobile menu row — full-width tap target, hairline-divided.
+  const mobileLinkCls =
+    "block border-b border-[#3a322a] py-3 text-left font-cond text-[15px] font-semibold uppercase tracking-[0.12em] text-[var(--md-paper)] transition-colors hover:text-[var(--md-coral)]";
+  // Mobile menu rows (order mirrors the desktop nav). Sign In folds in here too —
+  // the standalone chip/button is hidden below sm so the bar stays uncluttered.
+  const menuItems: { label: string; href?: string; action?: () => void }[] = [
+    ...(!onMyTeams ? [{ label: "My Teams", href: "/tournament" }] : []),
+    onHowToPlay
+      ? { label: "How to Play", action: onHowToPlay }
+      : { label: "How to Play", href: "/?howto=1" },
+    { label: "Player Cards", href: "/cards" },
+    ...(!user
+      ? [onSignIn ? { label: "Sign In", action: onSignIn } : { label: "Sign In", href: "/" }]
+      : []),
+  ];
 
   return (
     // Full-bleed ink masthead: breaks out of the page container to the viewport
@@ -303,7 +321,7 @@ export function GlobalHeader({
             <Link
               href="/tournament"
               title="Your teams"
-              className="max-w-[140px] truncate border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-3 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)]"
+              className="hidden max-w-[140px] truncate border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-3 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)] sm:inline-block"
             >
               {user.username}
             </Link>
@@ -312,20 +330,71 @@ export function GlobalHeader({
               type="button"
               onClick={onSignIn}
               style={{ cursor: "pointer" }}
-              className="border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-4 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)]"
+              className="hidden border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-4 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)] sm:inline-block"
             >
               Sign In
             </button>
           ) : (
             <Link
               href="/"
-              className="border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-4 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)]"
+              className="hidden border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-4 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)] sm:inline-block"
             >
               Sign In
             </Link>
           )}
+
+          {/* Mobile menu toggle — exposes the link row that's hidden below sm. */}
+          <button
+            type="button"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center border-2 border-[#3a322a] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5 sm:hidden"
+            style={{ cursor: "pointer" }}
+          >
+            {menuOpen ? (
+              <span aria-hidden className="font-cond text-[18px] font-bold leading-none text-[var(--md-paper)]">
+                ✕
+              </span>
+            ) : (
+              <span aria-hidden className="flex flex-col gap-[3px]">
+                <span className="block h-[2px] w-[18px] bg-[var(--md-paper)]" />
+                <span className="block h-[2px] w-[18px] bg-[var(--md-paper)]" />
+                <span className="block h-[2px] w-[18px] bg-[var(--md-paper)]" />
+              </span>
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Mobile nav sheet — full-bleed ink panel under the masthead, flame top rule. */}
+      {menuOpen && (
+        <nav className="absolute left-0 right-0 top-full z-40 border-t-2 border-[var(--md-coral)] bg-[var(--md-ink)] sm:hidden">
+          <div className="mx-auto flex max-w-6xl flex-col px-4 py-1">
+            {menuItems.map((it, i) => {
+              const cls = `${mobileLinkCls} w-full ${i === menuItems.length - 1 ? "border-b-0" : ""}`;
+              return it.href ? (
+                <Link key={it.label} href={it.href} onClick={() => setMenuOpen(false)} className={cls}>
+                  {it.label}
+                </Link>
+              ) : (
+                <button
+                  key={it.label}
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    it.action?.();
+                  }}
+                  className={cls}
+                  style={{ cursor: "pointer" }}
+                >
+                  {it.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </header>
   );
 }

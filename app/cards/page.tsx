@@ -327,8 +327,10 @@ function StacksGrid({ initialQuery }: { initialQuery: string }) {
   );
 }
 
-// A team rendered as a little deck of cards: two offset layers peeking behind the
-// front card, so it reads as a stack you can open.
+// A team rendered as a little deck of cards: offset layers peeking behind the
+// front card, so it reads as a stack you can open. The number of layers tracks
+// the era count — a single-era team is one lone card, two eras peek one layer,
+// three-plus show the full two-layer stack.
 function CardStack({
   team,
   eras,
@@ -344,15 +346,19 @@ function CardStack({
       className="group relative mr-1.5 mt-1.5 block transition-transform hover:-translate-y-0.5"
       aria-label={`${team} — ${eras} era${eras === 1 ? "" : "s"}`}
     >
-      {/* Stacked layers behind the front card */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -translate-y-2 translate-x-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-3)]"
-      />
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -translate-y-1 translate-x-1 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)]"
-      />
+      {/* Stacked layers behind the front card — only as deep as the team has eras */}
+      {eras >= 3 && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -translate-y-2 translate-x-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-3)]"
+        />
+      )}
+      {eras >= 2 && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -translate-y-1 translate-x-1 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)]"
+        />
+      )}
       {/* Front card */}
       <div
         className="relative flex flex-col border-2 border-[var(--md-ink)] bg-[var(--md-white)]"

@@ -116,9 +116,10 @@ function outcomeFooterLine(
   return { finish: finishLabel, detail };
 }
 
-// The viewer's team summary: record + collapsible roster. Placed before the
-// bracket so it's immediately visible. Open by default (collapsed on re-open).
-// Guarded by isDaily: never reveals the roster for an incomplete daily (spoiler).
+// The viewer's team summary: net rating + record + collapsible roster. Placed
+// before the bracket so it's immediately visible. The roster is the viewer's
+// OWN team (never a spoiler to themselves), so it's always shown — open by
+// default for non-daily, collapsed-but-openable for daily.
 function YourTeamCard({
   team,
   you,
@@ -172,6 +173,12 @@ function YourTeamCard({
         {/* Record chips */}
         <div className="flex shrink-0 items-center gap-3 font-mono text-[13px] tabular-nums">
           <div className="flex flex-col items-center leading-tight">
+            <span className="font-cond text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">Net</span>
+            <span className="font-bold" style={{ color: team.seedNet >= 0 ? "var(--md-teal)" : "var(--md-coral)" }}>
+              {fmtNet(team.seedNet)}
+            </span>
+          </div>
+          <div className="flex flex-col items-center leading-tight">
             <span className="font-cond text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">Reg</span>
             <span className="font-bold">{reg.w}–{reg.l}</span>
           </div>
@@ -189,8 +196,9 @@ function YourTeamCard({
         </div>
       </div>
 
-      {/* Roster — hidden for daily (spoiler guard), collapsible otherwise */}
-      {!isDaily && team.roster && (
+      {/* Roster — always shown for the viewer's own team (never a spoiler to
+          themselves); collapsed by default for daily, open otherwise. */}
+      {team.roster && (
         <>
           <button
             type="button"

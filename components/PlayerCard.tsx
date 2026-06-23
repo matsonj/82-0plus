@@ -237,7 +237,7 @@ function GqChart({
               y={H - padB + 14}
               fontSize={9}
               textAnchor="middle"
-              fill={isDrafted ? "var(--md-coral)" : "var(--md-ink-muted)"}
+              fill={isDrafted ? "var(--md-ink)" : "var(--md-ink-muted)"}
               fontFamily="var(--font-mono)"
               fontWeight={isDrafted ? 700 : 400}
             >
@@ -560,8 +560,10 @@ function FullCard({
                             background: rowBg,
                             width: 54,
                             flexShrink: 0,
+                            // Best row sits on a press-yellow fill — type on yellow is
+                            // always ink (never the flame red used elsewhere).
                             color: isBest
-                              ? "var(--md-coral)"
+                              ? "var(--md-ink)"
                               : isAway
                                 ? "var(--md-ink-muted)"
                                 : "var(--md-ink)",
@@ -588,9 +590,11 @@ function FullCard({
                               width: COL_W[ci],
                               minWidth: COL_W[ci],
                               flexShrink: 0,
-                              color: isAway
-                                ? "var(--md-ink-muted)"
-                                : "var(--md-ink)",
+                              color: isBest
+                                ? "var(--md-ink)"
+                                : isAway
+                                  ? "var(--md-ink-muted)"
+                                  : "var(--md-ink)",
                               fontWeight: isBest ? 700 : 400,
                             }}
                           >
