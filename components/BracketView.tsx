@@ -627,13 +627,24 @@ function ChampionColumn({
   teamOf: (id: string) => BracketTeam | undefined;
   bracket: BracketResult;
 }) {
-  // Derive W-L across all rounds by walking every series for this champion.
-  const won = bracket.rounds.reduce((acc, round) => {
-    return acc + round.filter((s) => s.winnerId === championId).length;
-  }, 0);
-  const lost = bracket.rounds.reduce((acc, round) => {
-    return acc + round.filter((s) => s.loId === championId && s.winnerId !== championId).length;
-  }, 0);
+  // Derive the champion's playoff GAME record (not series): walk every series the
+  // champion played in and add their game wins + losses. scoreHi/scoreLo are the
+  // game-win counts for hi/lo, so the champion's wins are scoreHi when they're hi
+  // (scoreLo when lo) and their losses are the other side.
+  let won = 0;
+  let lost = 0;
+  for (const round of bracket.rounds) {
+    for (const s of round) {
+      if (s.hiId === championId) {
+        won += s.scoreHi;
+        lost += s.scoreLo;
+      } else if (s.loId === championId) {
+        won += s.scoreLo;
+        lost += s.scoreHi;
+      }
+    }
+  }
+  // "Undefeated" only when the champion dropped ZERO playoff games.
   const record = lost === 0 ? `${won}-0 · Undefeated` : `${won}-${lost} · Ran the table`;
   const isGhost = teamOf(championId)?.isGhost;
 

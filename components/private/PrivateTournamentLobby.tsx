@@ -185,14 +185,15 @@ export function PrivateTournamentLobby({
               {data.filled} / {data.size}
             </span>
           </div>
-          {/* Column headers */}
+          {/* Column headers — no Record yet: the lobby is pre-bracket, so entrants
+              have no playoff record until the field finalizes. Columns must match
+              the data rows below (#, Player, Status). */}
           <div
             className="grid font-cond text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--md-ink-muted)]"
-            style={{ gridTemplateColumns: "32px 1fr 96px 80px", borderBottom: "1px solid var(--md-paper-3)", paddingBottom: 4, paddingTop: 6 }}
+            style={{ gridTemplateColumns: "32px 1fr 80px", borderBottom: "1px solid var(--md-paper-3)", paddingBottom: 4, paddingTop: 6 }}
           >
             <span className="pl-1">#</span>
             <span>Player</span>
-            <span className="text-right">Record</span>
             <span className="text-right pr-1">Status</span>
           </div>
 
@@ -267,7 +268,7 @@ export function PrivateTournamentLobby({
           {/* Bracket note */}
           <p className="mt-4 flex items-start gap-2 font-display text-[12px] text-[var(--md-ink-muted)]">
             <span className="mt-0.5 shrink-0 text-[10px]">{"{}"}</span>
-            <span>The bracket forms automatically when all {data.size} seats fill.</span>
+            <span>The bracket is drawn once all {data.size} entrants lock in their rosters — or when the clock runs out, whichever comes first.</span>
           </p>
 
           {/* Draft / status CTA — shown below table on mobile, above invite on desktop */}
@@ -398,7 +399,7 @@ export function PrivateTournamentLobby({
                 className="font-cover text-[var(--md-paper)]"
                 style={{ fontSize: 24, textTransform: "uppercase", lineHeight: 1.05, marginTop: 2 }}
               >
-                Bracket Forms When Full
+                Bracket Drops When Everyone&rsquo;s In
               </div>
             </div>
 
@@ -474,7 +475,7 @@ export function PrivateTournamentLobby({
           </div>
 
           <p className="mt-3 font-display text-[12px] leading-snug text-[var(--md-ink-muted)]">
-            Once all {data.size} seats fill, seeds lock and the bracket is drawn automatically. Host can lock early.
+            Once all {data.size} entrants submit their rosters, seeds lock and the bracket is drawn. If the clock runs out first, it draws with whoever&rsquo;s in.
           </p>
         </div>
       </div>
