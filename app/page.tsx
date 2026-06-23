@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import type {
   GameMode,
   PublicPlayer,
@@ -26,11 +25,13 @@ import {
   type DailyRank,
 } from "@/lib/dailyResultsCache";
 import { TournamentEntry } from "@/components/TournamentEntry";
-import { GlobalHeader } from "@/components/GlobalHeader";
+import { PageShell } from "@/components/layout/PageShell";
+import { HomeMenu } from "@/components/home/HomeMenu";
+import { Capsule } from "@/components/ui";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
 import { encodeShare } from "@/lib/shareCode";
-import { SITE_URL, MOTHERDUCK_URL } from "@/lib/site";
+import { SITE_URL } from "@/lib/site";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import {
   setPendingDaily,
@@ -988,12 +989,23 @@ export default function Home() {
   ) : null;
 
   return (
-    <main
-      className={`relative mx-auto flex min-h-full flex-col px-4 pb-12 sm:pb-16 ${
-        // The play phase (both the 2-column draft and the result screen) needs
-        // room; the menu bento gets the full 6xl.
-        phase === "menu" ? "max-w-3xl md:max-w-6xl" : "max-w-5xl"
-      }`}
+    <PageShell
+      width={phase === "menu" ? "home" : "play"}
+      onSignIn={() => setShowDailySignIn(true)}
+      onHowToPlay={() => setShowHowTo(true)}
+      headerRight={
+        phase === "play" ? (
+          <Capsule
+            style={
+              mode === "hoopiq"
+                ? { background: "var(--md-ink)", color: "var(--md-white)" }
+                : undefined
+            }
+          >
+            {mode === "hoopiq" ? "Ranked" : "Classic"}
+          </Capsule>
+        ) : undefined
+      }
     >
       {showHowTo && <HowToPlay onClose={() => setShowHowTo(false)} />}
 
@@ -1028,175 +1040,15 @@ export default function Home() {
           }}
         />
       )}
-      <div className="md-sunbeam" />
-
-      <GlobalHeader
-        onSignIn={() => setShowDailySignIn(true)}
-        onHowToPlay={() => setShowHowTo(true)}
-        right={
-          phase === "play" ? (
-            <span
-              className="md-capsule"
-              style={
-                mode === "hoopiq"
-                  ? { background: "var(--md-ink)", color: "var(--md-white)" }
-                  : undefined
-              }
-            >
-              {mode === "hoopiq" ? "Ranked" : "Classic"}
-            </span>
-          ) : undefined
-        }
-      />
 
       {/* ---------------- MENU ---------------- */}
       {phase === "menu" && (
-        <>
-          {/* The bento as a 2-col grid with explicit placement so the LAST 7 DAYS
-              band can be full-width BELOW on desktop yet sit RIGHT AFTER the daily
-              card (before the modes) when it all stacks on mobile. DOM order is
-              left → history → right; desktop pins them with col/row-start. */}
-          <section className="relative z-10 grid gap-6 md:grid-cols-[1.6fr_1fr]">
-              {/* Left: editorial hero + the big Daily tile. */}
-              <div className="flex flex-col gap-6 md:col-start-1 md:row-start-1">
-                {/* Folio bar on a double rule */}
-                <div className="md-rule-double flex items-end justify-between pb-2">
-                  <span className="md-folio uppercase">
-                    A daily basketball draft puzzle
-                  </span>
-                  {dateline && (
-                    <span className="md-folio uppercase">{dateline}</span>
-                  )}
-                </div>
-                {/* Marker kicker → Anton cover line → double rule */}
-                <div>
-                  <span className="md-kicker--marker">Today&rsquo;s draft is live.</span>
-                  <h1
-                    className="font-cover mt-1 flex flex-wrap items-baseline gap-x-4 uppercase"
-                    style={{
-                      fontSize: "clamp(46px, 5.4vw, 74px)",
-                      lineHeight: 0.9,
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
-                    <span>Go</span>
-                    <span className="text-[var(--md-coral)]">Undefeated.</span>
-                  </h1>
-                  <div className="mt-4 flex flex-col gap-[3px]">
-                    <div className="h-[5px] w-full bg-[var(--md-ink)]" />
-                    <div className="h-[2px] w-1/2 max-w-[320px] bg-[var(--md-coral)]" />
-                  </div>
-                </div>
-                {/* Deck */}
-                <p className="max-w-[620px] text-[17px] leading-[1.6]">
-                  Five rounds. Each spin gives you one team + era — draft a player
-                  and slot him at Guard, Wing, Big, or Flex.{" "}
-                  <span className="font-bold">
-                    Fit five together and{" "}
-                    <span className="box-decoration-clone bg-[var(--md-yellow)] px-1 text-[var(--md-ink)]">
-                      simulate the season.
-                    </span>
-                  </span>
-                </p>
-                <div className="md-card--cover flex flex-1 flex-col p-6">
-                  <div
-                    className="flex items-center justify-between gap-2 pb-3"
-                    style={{
-                      borderBottom: "1px solid var(--md-paper)",
-                      boxShadow: "0 4px 0 -1px var(--md-paper)",
-                    }}
-                  >
-                    <div className="font-cond text-[18px] font-semibold uppercase tracking-[0.16em] text-[var(--md-paper)]">
-                      Daily Challenge
-                    </div>
-                    <span className="text-xl" aria-hidden>
-                      🏆
-                    </span>
-                  </div>
-                  {dailyBody}
-                </div>
-              </div>
-              {/* LAST 7 DAYS — its own grid row: full-width on desktop, but right
-                  after the daily card (before the modes) when stacked on mobile. */}
-              <div className="md:col-span-2 md:col-start-1 md:row-start-2">
-                {dailyHistory}
-              </div>
-              {/* Right: the "ways to play" rail. */}
-              <div className="flex flex-col gap-4 md:col-start-2 md:row-start-1">
-                <div className="md-rule-double flex items-end justify-between pb-2">
-                  <span className="font-cond text-[14px] font-bold uppercase tracking-[0.18em]">
-                    More Ways to Play
-                  </span>
-                  <span className="md-folio">THREE MODES</span>
-                </div>
-                {/* Private Tournament — cobalt, a first-class mode. */}
-                <Link
-                  href="/tournament?tab=private"
-                  className="flex flex-[1.1] flex-col justify-between gap-3 border-2 border-[var(--md-ink)] p-6 text-[var(--md-white)] transition-transform hover:-translate-y-0.5"
-                  style={{ background: "var(--md-cobalt)", boxShadow: "var(--md-shadow-md)" }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[18px]" aria-hidden>🏆</span>
-                    <span className="font-cond text-[17px] font-bold uppercase tracking-[0.1em]">
-                      Private Tournament
-                    </span>
-                  </div>
-                  <p className="text-[15px] leading-[1.45] text-[#dde4ff]">
-                    Host a bracket for your friends, or join one by link.
-                  </p>
-                  <div className="flex items-center justify-between border-t border-white/30 pt-3 font-cond text-[12px] font-semibold uppercase tracking-[0.12em] text-[#dde4ff]">
-                    <span>Host or Join</span>
-                    <span aria-hidden>→</span>
-                  </div>
-                </Link>
-                {/* Classic — clean stock insert. */}
-                <button
-                  className="flex flex-1 flex-col justify-between gap-3 border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-6 text-left transition-transform hover:-translate-y-0.5"
-                  style={{ boxShadow: "var(--md-shadow-md)" }}
-                  onClick={() => startGame("classic", "free")}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center bg-[var(--md-ink)] font-mono text-[11px] font-bold text-[var(--md-yellow)]">
-                      01
-                    </span>
-                    <span className="font-cond text-[17px] font-bold uppercase tracking-[0.1em]">
-                      Classic
-                    </span>
-                  </div>
-                  <p className="text-[15px] leading-[1.45] text-[var(--md-ink-muted)]">
-                    Per-game stats shown. Draft with full information.
-                  </p>
-                  <div className="flex items-center justify-between border-t border-[var(--md-ink)]/20 pt-3 font-cond text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">
-                    <span>Play Classic</span>
-                    <span aria-hidden>→</span>
-                  </div>
-                </button>
-                {/* Ranked — ink. */}
-                <button
-                  className="flex flex-1 flex-col justify-between gap-3 border-2 border-[var(--md-ink)] p-6 text-left text-[var(--md-paper)] transition-transform hover:-translate-y-0.5"
-                  style={{ background: "var(--md-ink)", boxShadow: "var(--md-shadow-md)" }}
-                  onClick={() => startGame("hoopiq", "free")}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center bg-[var(--md-yellow)] font-mono text-[11px] font-bold text-[var(--md-ink)]">
-                      02
-                    </span>
-                    <span className="font-cond text-[17px] font-bold uppercase tracking-[0.1em] text-[var(--md-paper)]">
-                      Ranked
-                    </span>
-                  </div>
-                  <p className="text-[15px] leading-[1.45] text-[var(--md-paper-3)]">
-                    Stats hidden. Draft from memory — true hoops IQ.
-                  </p>
-                  <div className="flex items-center justify-between border-t border-[#2a231c] pt-3 font-cond text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--md-paper-3)]">
-                    <span>Play Ranked</span>
-                    <span aria-hidden>→</span>
-                  </div>
-                </button>
-              </div>
-          </section>
-
-        </>
+        <HomeMenu
+          dateline={dateline}
+          dailyBody={dailyBody}
+          dailyHistory={dailyHistory}
+          onStartGame={(nextMode) => startGame(nextMode, "free")}
+        />
       )}
 
       {/* Failed to load the game data — recoverable. */}
@@ -1363,23 +1215,6 @@ export default function Home() {
         </div>
       )}
 
-      <footer className="relative z-10 mt-auto flex flex-col gap-1.5 border-t border-[var(--md-ink)] pt-5 text-[var(--md-ink-muted)] sm:flex-row sm:items-center sm:justify-between">
-        <p className="font-byline text-[12px] tracking-[0.02em]">
-          Powered by{" "}
-          <a
-            href={MOTHERDUCK_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-[var(--md-ink)]"
-          >
-            MotherDuck
-          </a>{" "}
-          · <span className="font-mono">nba_box_scores_v2</span>
-        </p>
-        <p className="font-byline text-[12px] tracking-[0.02em]">
-          An independent project — not affiliated with or endorsed by the NBA.
-        </p>
-      </footer>
-    </main>
+    </PageShell>
   );
 }

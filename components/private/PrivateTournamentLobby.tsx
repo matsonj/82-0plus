@@ -8,10 +8,10 @@ import {
   NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
 import { privateModeLabel } from "@/lib/privateTournament";
-import { copyText } from "@/lib/copyText";
 import { SITE_URL } from "@/lib/site";
 import { PrivateTournamentDraft } from "@/components/private/PrivateTournamentDraft";
 import { DeleteTournamentControl } from "@/components/private/DeleteTournamentControl";
+import { Button, Capsule, CopyLinkField, NameField, Notice, PinField } from "@/components/ui";
 import type {
   PrivateLobbyResponse,
   PrivateRegisterResponse,
@@ -55,7 +55,6 @@ export function PrivateTournamentLobby({
   const [error, setError] = useState<string | null>(null);
   // The active draft session (entry + board), once registered.
   const [session, setSession] = useState<PrivateRegisterResponse | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     const saved = getSavedUser();
@@ -138,9 +137,9 @@ export function PrivateTournamentLobby({
       <div className="flex flex-col gap-2">
         {/* PRIVATE TOURNAMENT cobalt kicker */}
         <div>
-          <span className="md-capsule md-capsule--cobalt inline-flex text-[11px]">
+          <Capsule tone="cobalt" className="inline-flex text-[11px]">
             Private Tournament
-          </span>
+          </Capsule>
         </div>
         <h1
           className="font-cover leading-none text-[var(--md-ink)]"
@@ -276,7 +275,7 @@ export function PrivateTournamentLobby({
             {submitted ? (
               <div className="flex flex-col gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-4">
                 <div className="flex items-center gap-2">
-                  <span className="md-capsule md-capsule--teal text-[10px]">Your team is in</span>
+                  <Capsule tone="teal" className="text-[10px]">Your team is in</Capsule>
                 </div>
                 {you?.regW != null && you?.regL != null && (
                   <div className="font-mono text-[13px] text-[var(--md-ink-muted)] tabular-nums">
@@ -311,35 +310,19 @@ export function PrivateTournamentLobby({
                 {/* Creds: shown only when not logged in. */}
                 {!hasSaved && (
                   <>
-                    <label className="flex flex-col gap-1">
-                      <span className="font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                        Your name
-                      </span>
-                      <input
-                        className="md-input md-input--name"
-                        value={name}
-                        maxLength={NAME_MAX_LEN}
-                        autoCapitalize="characters"
-                        onChange={(e) =>
-                          setName(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""))
-                        }
-                        placeholder="PHILJACKSON"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1">
-                      <span className="font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                        PIN
-                      </span>
-                      <input
-                        className="md-input"
-                        value={pin}
-                        type="password"
-                        inputMode="numeric"
-                        maxLength={6}
-                        onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                        placeholder="4–6 digits"
-                      />
-                    </label>
+                    <NameField
+                      label="Your name"
+                      value={name}
+                      maxLength={NAME_MAX_LEN}
+                      onChange={(event) => setName(event.target.value)}
+                      labelTextClassName="text-[10px]"
+                    />
+                    <PinField
+                      label="PIN"
+                      value={pin}
+                      onChange={(event) => setPin(event.target.value)}
+                      labelTextClassName="text-[10px]"
+                    />
                   </>
                 )}
                 {hasSaved && (
@@ -350,13 +333,13 @@ export function PrivateTournamentLobby({
                 )}
 
                 {error && (
-                  <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
+                  <Notice tone="error" textClassName="font-display text-sm">
                     {error}
-                  </div>
+                  </Notice>
                 )}
 
-                <button
-                  className="md-btn md-btn--lg"
+                <Button
+                  size="lg"
                   disabled={registering}
                   onClick={startDraft}
                 >
@@ -367,7 +350,7 @@ export function PrivateTournamentLobby({
                       : isAdmin
                         ? "Submit team"
                         : "Register & draft"}
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -403,29 +386,17 @@ export function PrivateTournamentLobby({
               </div>
             </div>
 
-            {/* Copy invite link button */}
-            <button
-              type="button"
-              className="md-btn md-btn--lg w-full"
-              style={{ justifyContent: "center" }}
-              onClick={async () => {
-                if (await copyText(fullShare)) {
-                  setLinkCopied(true);
-                  setTimeout(() => setLinkCopied(false), 1500);
-                }
-              }}
-            >
-              <span>⎘</span>
-              {linkCopied ? "Copied!" : "Copy Invite Link"}
-            </button>
-
-            {/* URL display */}
-            <div
-              className="border-2 border-[#3a322a] px-3 py-2 font-mono text-[12px] text-[var(--md-paper)]"
-              style={{ background: "var(--md-ink-2)" }}
-            >
-              {fullShare.replace(/^https?:\/\//, "")}
-            </div>
+            <CopyLinkField
+              value={fullShare}
+              layout="button"
+              copyLabel="Copy Invite Link"
+              buttonSize="lg"
+              buttonFullWidth
+              buttonPrefix={<span>⎘</span>}
+              displayValue={fullShare.replace(/^https?:\/\//, "")}
+              displayClassName="border-2 border-[#3a322a] px-3 py-2 text-[var(--md-paper)]"
+              displayStyle={{ background: "var(--md-ink-2)" }}
+            />
 
             {/* Slots + bracket preview */}
             <div className="font-cond text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--md-paper-3)]">

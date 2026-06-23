@@ -85,139 +85,149 @@ body {
 .font-marker { font-family: var(--font-marker); }
 
 /* ---------- Capsule / pill ---------- */
-.md-capsule {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 14px;
-  border-radius: 999px;
-  background: var(--md-coral);
-  border: 2px solid var(--md-ink);
-  font-family: var(--font-cond);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--md-white);
-  line-height: 1.3;
+@layer components {
+  .md-capsule {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    background: var(--md-coral);
+    border: 2px solid var(--md-ink);
+    font-family: var(--font-cond);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--md-white);
+    line-height: 1.3;
+  }
+  .md-capsule--press,
+  .md-capsule--yellow { background: var(--md-yellow); color: var(--md-ink); }
+  .md-capsule--teal { background: var(--md-teal); color: var(--md-white); }
+  .md-capsule--coral { background: var(--md-coral); color: var(--md-white); }
+  .md-capsule--violet,
+  .md-capsule--sky { background: var(--md-sky); color: var(--md-white); }
+  .md-capsule--cobalt { background: var(--md-cobalt); color: var(--md-white); }
+  .md-capsule--ink { background: var(--md-ink); color: var(--md-white); }
 }
-.md-capsule--press,
-.md-capsule--yellow { background: var(--md-yellow); color: var(--md-ink); }
-.md-capsule--teal { background: var(--md-teal); color: var(--md-white); }
-.md-capsule--coral { background: var(--md-coral); color: var(--md-white); }
-.md-capsule--violet,
-.md-capsule--sky { background: var(--md-sky); color: var(--md-white); }
-.md-capsule--cobalt { background: var(--md-cobalt); color: var(--md-white); }
-.md-capsule--ink { background: var(--md-ink); color: var(--md-white); }
 
 /* ---------- Card ---------- */
 /* Two species: the clean "insert" (stock field, the default) and the dark
    "cover spread" used for hero / result / tournament money cards. */
-.md-card {
-  background: var(--md-white);
-  border: 2px solid var(--md-ink);
-  border-radius: 0;
-}
-.md-card--lift {
-  box-shadow: var(--md-shadow-md);
-}
-.md-card--cover {
-  background: var(--md-ink);
-  color: var(--md-white);
-  border: 3px solid var(--md-coral);
-  box-shadow: var(--md-shadow-pop);
-  /* halftone backdrop */
-  background-image: radial-gradient(var(--md-ink-2) 1.4px, transparent 1.5px);
-  background-size: 8px 8px;
+@layer components {
+  .md-card {
+    background: var(--md-white);
+    border: 2px solid var(--md-ink);
+    border-radius: 0;
+  }
+  .md-card--lift {
+    box-shadow: var(--md-shadow-md);
+  }
+  .md-card--cover {
+    background: var(--md-ink);
+    color: var(--md-white);
+    border: 3px solid var(--md-coral);
+    box-shadow: var(--md-shadow-pop);
+    /* halftone backdrop */
+    background-image: radial-gradient(var(--md-ink-2) 1.4px, transparent 1.5px);
+    background-size: 8px 8px;
+  }
 }
 
 /* ---------- Buttons ---------- */
-.md-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 13px 24px;
-  border: 2px solid var(--md-ink);
-  background: var(--md-coral);
-  color: var(--md-white);
-  font-family: var(--font-cond);
-  font-weight: 600;
-  font-size: 15px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: var(--md-shadow-md);
-  transition: transform 0.08s ease, box-shadow 0.08s ease;
-}
-.md-btn:hover:not(:disabled) {
-  transform: translate(-2px, -2px);
-  box-shadow: var(--md-shadow-pop);
-}
-.md-btn:active:not(:disabled) {
-  transform: translate(2px, 2px);
-  box-shadow: 0 0 0 0 var(--md-ink);
-}
-.md-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-.md-btn--secondary { background: var(--md-white); color: var(--md-ink); }
-.md-btn--ink { background: var(--md-ink); color: var(--md-white); border-color: var(--md-coral); }
-.md-btn--teal { background: var(--md-teal); color: var(--md-white); }
-.md-btn--yellow { background: var(--md-yellow); color: var(--md-ink); }
-.md-btn--lg { padding: 17px 34px; font-size: 18px; }
-.md-btn--sm { padding: 8px 14px; font-size: 12px; box-shadow: var(--md-shadow-sm); }
-.md-btn--sm:hover:not(:disabled) {
-  transform: translate(-1px, -1px);
-  box-shadow: var(--md-shadow-sm);
+@layer components {
+  .md-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 13px 24px;
+    border: 2px solid var(--md-ink);
+    background: var(--md-coral);
+    color: var(--md-white);
+    font-family: var(--font-cond);
+    font-weight: 600;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: var(--md-shadow-md);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  .md-btn:hover:not(:disabled) {
+    transform: translate(-2px, -2px);
+    box-shadow: var(--md-shadow-pop);
+  }
+  .md-btn:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 0 var(--md-ink);
+  }
+  .md-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  .md-btn--secondary { background: var(--md-white); color: var(--md-ink); }
+  .md-btn--ink { background: var(--md-ink); color: var(--md-white); border-color: var(--md-coral); }
+  .md-btn--teal { background: var(--md-teal); color: var(--md-white); }
+  .md-btn--yellow { background: var(--md-yellow); color: var(--md-ink); }
+  .md-btn--lg { padding: 17px 34px; font-size: 18px; }
+  .md-btn--sm { padding: 8px 14px; font-size: 12px; box-shadow: var(--md-shadow-sm); }
+  .md-btn--sm:hover:not(:disabled) {
+    transform: translate(-1px, -1px);
+    box-shadow: var(--md-shadow-sm);
+  }
 }
 
 /* ---------- Text input ---------- */
-.md-input {
-  display: block;
-  width: 100%;
-  padding: 12px 14px;
-  background: var(--md-white);
-  border: 2px solid var(--md-ink);
-  border-radius: 0;
-  box-shadow: var(--md-shadow-sm);
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 16px;
-  color: var(--md-ink);
-  line-height: 1.2;
-  outline: none;
-  caret-color: var(--md-coral);
-}
-.md-input::placeholder {
-  color: var(--md-ink-muted);
-  font-weight: 400;
-}
-.md-input:focus {
-  background: var(--md-paper);
-  box-shadow: var(--md-shadow-sm), 0 0 0 2px var(--md-coral);
-}
-/* A name field reads like an arcade high-score / contents-page byline entry. */
-.md-input--name {
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
+@layer components {
+  .md-input {
+    display: block;
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--md-white);
+    border: 2px solid var(--md-ink);
+    border-radius: 0;
+    box-shadow: var(--md-shadow-sm);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--md-ink);
+    line-height: 1.2;
+    outline: none;
+    caret-color: var(--md-coral);
+  }
+  .md-input::placeholder {
+    color: var(--md-ink-muted);
+    font-weight: 400;
+  }
+  .md-input:focus {
+    background: var(--md-paper);
+    box-shadow: var(--md-shadow-sm), 0 0 0 2px var(--md-coral);
+  }
+  /* A name field reads like an arcade high-score / contents-page byline entry. */
+  .md-input--name {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
 }
 
 /* ---------- Team badge ---------- */
-.md-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-cond);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  border: 2px solid var(--md-ink);
-  background: var(--md-ink);
-  color: var(--md-white);
+@layer components {
+  .md-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-cond);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    border: 2px solid var(--md-ink);
+    background: var(--md-ink);
+    color: var(--md-white);
+  }
 }
 
 /* ---------- Halftone field (replaces the retired yellow sunbeam) ---------- */

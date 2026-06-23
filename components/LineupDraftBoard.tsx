@@ -6,6 +6,7 @@ import { canFill, type SlotKind } from "@/lib/positions";
 import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
+import { Button } from "@/components/ui";
 
 // The SHARED draft engine for the five starters. Both the main game (which ROLLS
 // random team/era sources, with skips) and a private tournament (which REVEALS a
@@ -400,12 +401,13 @@ export function LineupDraftBoard({
           Tap a glowing slot above.
         </div>
         {allowCancelPending && (
-          <button
-            className="md-btn md-btn--sm md-btn--secondary"
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={() => setPending(null)}
           >
             Cancel pick
-          </button>
+          </Button>
         )}
       </div>
     ) : null;

@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import type { BracketResult } from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
-import { GlobalHeader } from "@/components/GlobalHeader";
+import { PageShell } from "@/components/layout/PageShell";
 
 type Status = "loading" | "ok" | "error";
 
@@ -46,10 +46,11 @@ export default function PublicBracketPage({
   }, [id]);
 
   return (
-    <main className="relative mx-auto flex min-h-full max-w-6xl flex-col px-4 pb-12 sm:px-6 sm:pb-16">
-      <div className="md-sunbeam" />
-      <GlobalHeader />
-
+    <PageShell
+      width="wide"
+      paddingClassName="px-4 pb-12 sm:px-6 sm:pb-16"
+      footer={false}
+    >
       <section className="relative z-10">
         {status === "loading" && (
           <div className="py-20 text-center font-cond text-sm uppercase tracking-widest text-[var(--md-ink-muted)]">
@@ -144,6 +145,6 @@ export default function PublicBracketPage({
           </div>
         )}
       </section>
-    </main>
+    </PageShell>
   );
 }

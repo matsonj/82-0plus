@@ -10,10 +10,11 @@ import type {
 import { BracketView } from "@/components/BracketView";
 import { buildTournamentShareImage } from "@/lib/shareImage";
 import { presentShare } from "@/lib/shareActions";
-import { copyText } from "@/lib/copyText";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { SITE_URL } from "@/lib/site";
 import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
+import { Button } from "@/components/ui";
+import { ShareAssetDialog } from "@/components/ui/ShareAssetDialog";
 import {
   reachedRoundLabelPlain,
   reachedRoundSentence,
@@ -317,91 +318,6 @@ function ChampionStamp({
   );
 }
 
-// ---- Share overlay -------------------------------------------------------
-function ShareOverlay({
-  shareUrl,
-  shareLink,
-  autoCopied,
-  onClose,
-}: {
-  shareUrl: string;
-  shareLink: string;
-  autoCopied: boolean;
-  onClose: () => void;
-}) {
-  const [linkCopied, setLinkCopied] = useState(false);
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(21,17,14,0.7)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm p-5"
-        style={{
-          background: "var(--md-white)",
-          border: "2px solid var(--md-ink)",
-          boxShadow: "var(--md-shadow-lg)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h3
-            className="font-archivo leading-tight"
-            style={{ fontSize: 20, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
-          >
-            Share your run
-          </h3>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className="font-mono text-[16px] text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
-          >
-            ✕
-          </button>
-        </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={shareUrl}
-          alt="Your tournament result card"
-          className="mt-3 w-full border-2 border-[var(--md-ink)]"
-        />
-        <p className="mt-2 text-center font-mono text-[12px] leading-snug text-[var(--md-ink-muted)]">
-          <strong>Right-click to copy and share.</strong>{" "}
-          {autoCopied
-            ? "The link is already on your clipboard."
-            : 'Use "Copy link" below to copy the link.'}
-        </p>
-        <div className="mt-3 flex flex-wrap justify-center gap-2">
-          <a
-            className="md-btn md-btn--sm md-btn--secondary"
-            href={shareUrl}
-            download="daily82-tournament.png"
-          >
-            Download
-          </a>
-          <button
-            className="md-btn md-btn--sm md-btn--secondary"
-            onClick={async () => {
-              const ok = await copyText(shareLink);
-              if (ok) {
-                setLinkCopied(true);
-                setTimeout(() => setLinkCopied(false), 1500);
-              }
-            }}
-          >
-            {linkCopied ? "Link copied!" : "Copy link"}
-          </button>
-          <button className="md-btn md-btn--sm md-btn--ink" onClick={onClose}>
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ---- Main component -------------------------------------------------------
 export function TournamentResults({
   data,
@@ -550,8 +466,11 @@ export function TournamentResults({
   return (
     <>
       {shareUrl && (
-        <ShareOverlay
-          shareUrl={shareUrl}
+        <ShareAssetDialog
+          title="Share your run"
+          imageUrl={shareUrl}
+          imageAlt="Your tournament result card"
+          downloadName="daily82-tournament.png"
           shareLink={shareLink}
           autoCopied={autoCopied}
           onClose={closeShare}
@@ -722,8 +641,9 @@ export function TournamentResults({
           {/* Share + Back buttons */}
           <div className="flex flex-wrap items-center gap-3 shrink-0">
             {myTeam && (
-              <button
-                className="md-btn md-btn--lg flex items-center gap-2"
+              <Button
+                size="lg"
+                className="flex items-center gap-2"
                 style={{
                   background: "var(--md-coral)",
                   color: "var(--md-white)",
@@ -734,12 +654,12 @@ export function TournamentResults({
               >
                 <span style={{ fontSize: 14 }}>↑</span>
                 {shareReady ? "Share the Bracket" : "Preparing…"}
-              </button>
+              </Button>
             )}
             {onReset && (
-              <button className="md-btn md-btn--lg md-btn--secondary" onClick={onReset}>
+              <Button size="lg" variant="secondary" onClick={onReset}>
                 Back
-              </button>
+              </Button>
             )}
           </div>
         </div>

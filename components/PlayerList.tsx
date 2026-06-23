@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GameMode, PublicPlayer } from "@/lib/types";
 import type { Role } from "@/lib/positions";
-import { PlayerCardCarousel, CardGlyph, type CardPlayer } from "@/components/PlayerCard";
-import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
+import { CardGlyph, type CardPlayer, usePlayerCardDeck } from "@/components/PlayerCard";
+import { Button, Capsule, SegmentedControl } from "@/components/ui";
 
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -29,29 +29,6 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "blk", label: "BPG" },
 ];
 const POS_FILTERS: ("all" | Role)[] = ["all", "G", "W", "B"];
-
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="border-2 border-[var(--md-ink)] px-2 py-1 font-cond text-[11px] font-semibold uppercase tracking-[0.08em]"
-      style={{
-        background: active ? "var(--md-ink)" : "var(--md-white)",
-        color: active ? "var(--md-paper)" : "var(--md-ink)",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
 
 export function PlayerList({
   team,
@@ -84,7 +61,6 @@ export function PlayerList({
   const [reloadKey, setReloadKey] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("mpg");
   const [posFilter, setPosFilter] = useState<"all" | Role>("all");
-  const [cardIndex, setCardIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -158,6 +134,21 @@ export function PlayerList({
       })),
     [rows, team],
   );
+  const {
+    carousel: playerCardCarousel,
+    openCard,
+    prefetchCard,
+  } = usePlayerCardDeck({
+    players: cardPlayers,
+    enabled: browse || mode === "classic",
+    canDraft: browse ? undefined : (i) => !!rows[i] && draftable(rows[i]),
+    onDraft: browse
+      ? undefined
+      : (i) => {
+          const row = rows[i];
+          if (row && draftable(row)) onPick(row);
+        },
+  });
 
   return (
     <div className="flex flex-col gap-2">
@@ -179,15 +170,15 @@ export function PlayerList({
 
       {mode === "classic" && status === "ok" && (
         <div className="flex flex-wrap items-center gap-1">
-          {POS_FILTERS.map((p) => (
-            <Chip
-              key={p}
-              active={posFilter === p}
-              onClick={() => setPosFilter(p)}
-            >
-              {p === "all" ? "All" : p}
-            </Chip>
-          ))}
+          <SegmentedControl
+            options={POS_FILTERS.map((p) => ({
+              value: p,
+              label: p === "all" ? "All" : p,
+            }))}
+            value={posFilter}
+            onChange={setPosFilter}
+            className="gap-1"
+          />
           <span
             className="mx-1 h-4 w-px self-center bg-[var(--md-ink)] opacity-30"
             aria-hidden
@@ -195,15 +186,15 @@ export function PlayerList({
           <span className="mr-0.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
             Sort
           </span>
-          {SORTS.map((s) => (
-            <Chip
-              key={s.key}
-              active={sortKey === s.key}
-              onClick={() => setSortKey(s.key)}
-            >
-              {s.label}
-            </Chip>
-          ))}
+          <SegmentedControl
+            options={SORTS.map((sort) => ({
+              value: sort.key,
+              label: sort.label,
+            }))}
+            value={sortKey}
+            onChange={setSortKey}
+            className="gap-1"
+          />
         </div>
       )}
 
@@ -221,12 +212,12 @@ export function PlayerList({
             <div className="font-display text-sm text-[var(--md-coral)]">
               Couldn&rsquo;t load this roster.
             </div>
-            <button
-              className="md-btn md-btn--sm"
+            <Button
+              size="sm"
               onClick={() => setReloadKey((k) => k + 1)}
             >
               ↻ Try again
-            </button>
+            </Button>
           </div>
         )}
         {noneEligible && (
@@ -235,9 +226,9 @@ export function PlayerList({
               No one here fits your open slots.
             </div>
             {allowRespin ? (
-              <button className="md-btn md-btn--sm" onClick={onNoneEligible}>
+              <Button size="sm" onClick={onNoneEligible}>
                 ↻ Respin team (free)
-              </button>
+              </Button>
             ) : (
               // Daily mode is a fixed, seeded challenge — no random respin. Move
               // an already-drafted player to free up a slot {team} can fill.
@@ -269,7 +260,7 @@ export function PlayerList({
               className="flex items-stretch border-b border-[var(--md-paper-3)]"
             >
             <button
-              onClick={() => (browse ? setCardIndex(i) : onPick(p))}
+              onClick={() => (browse ? openCard(i) : onPick(p))}
               disabled={!eligible}
               title={
                 browse
@@ -337,7 +328,7 @@ export function PlayerList({
                     </div>
                   </>
                 ) : (
-                  <div className="md-capsule">Pick</div>
+                  <Capsule>Pick</Capsule>
                 )}
               </div>
             </button>
@@ -347,9 +338,9 @@ export function PlayerList({
             {mode === "classic" && !browse && (
               <button
                 type="button"
-                onClick={() => setCardIndex(i)}
-                onMouseEnter={() => prefetchPlayerSeasons(p.entity_id)}
-                onFocus={() => prefetchPlayerSeasons(p.entity_id)}
+                onClick={() => openCard(i)}
+                onMouseEnter={() => prefetchCard(i)}
+                onFocus={() => prefetchCard(i)}
                 title="Career card"
                 aria-label={`${p.player_name} career card`}
                 className="flex shrink-0 items-center border-l border-[var(--md-paper-3)] px-2.5 text-[var(--md-ink-muted)] hover:bg-[var(--md-yellow)] hover:text-[var(--md-ink)]"
@@ -362,26 +353,7 @@ export function PlayerList({
           })}
       </div>
 
-      {cardIndex !== null && cardPlayers[cardIndex] && (
-        <PlayerCardCarousel
-          players={cardPlayers}
-          index={cardIndex}
-          onClose={() => setCardIndex(null)}
-          // Browse is read-only: no Draft button on the card.
-          canDraft={browse ? undefined : (i) => !!rows[i] && draftable(rows[i])}
-          onDraft={
-            browse
-              ? undefined
-              : (i) => {
-                  const row = rows[i];
-                  if (row && draftable(row)) {
-                    onPick(row);
-                    setCardIndex(null);
-                  }
-                }
-          }
-        />
-      )}
+      {playerCardCarousel}
     </div>
   );
 }
