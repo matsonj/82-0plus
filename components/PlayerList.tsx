@@ -9,10 +9,12 @@ import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+// Position chips read at a glance — a distinct riso ink per role (cream text).
+// Flame is reserved for W/L, so positions use violet / court-green / magenta.
 const ROLE_BG: Record<Role, string> = {
-  G: "var(--md-sky)",
-  W: "var(--md-teal-bright)",
-  B: "var(--md-orange)",
+  G: "var(--md-sky)", // violet
+  W: "var(--md-teal)", // court green
+  B: "var(--md-magenta)", // riso magenta
 };
 
 type Status = "loading" | "ok" | "error";
@@ -40,10 +42,10 @@ function Chip({
   return (
     <button
       onClick={onClick}
-      className="border-2 border-[var(--md-ink)] px-2 py-1 font-display text-[11px] font-bold uppercase tracking-wide"
+      className="border-2 border-[var(--md-ink)] px-2 py-1 font-cond text-[11px] font-semibold uppercase tracking-[0.08em]"
       style={{
         background: active ? "var(--md-ink)" : "var(--md-white)",
-        color: active ? "var(--md-white)" : "var(--md-ink)",
+        color: active ? "var(--md-paper)" : "var(--md-ink)",
       }}
     >
       {children}
@@ -163,7 +165,8 @@ export function PlayerList({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={`Filter ${team} roster…`}
-        className="w-full border-2 border-[var(--md-ink)] bg-[var(--md-white)] px-3 py-2 font-display text-sm outline-none focus:bg-[var(--md-paper)]"
+        className="md-input"
+        style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}
       />
 
       {/* Ranked/Daily hide stats, so the roster's order isn't self-evident the
@@ -290,14 +293,17 @@ export function PlayerList({
                     {p.positions.map((r) => (
                       <span
                         key={r}
-                        className="border border-[var(--md-ink)] px-1 font-display text-[10px] font-bold"
+                        className="border border-[var(--md-ink)] px-1 font-display text-[10px] font-bold text-[var(--md-paper)]"
                         style={{ background: ROLE_BG[r] }}
                       >
                         {r}
                       </span>
                     ))}
                   </span>
-                  <span className="min-w-0 truncate font-display text-sm font-bold">
+                  <span
+                    className="min-w-0 truncate font-archivo text-[15px] font-bold"
+                    style={{ fontVariationSettings: '"wdth" 90' }}
+                  >
                     {p.player_name}
                   </span>
                   {p.allDef === 1 ? (
@@ -323,7 +329,7 @@ export function PlayerList({
               <div className="shrink-0 text-right">
                 {mode === "classic" && p.mpg !== null ? (
                   <>
-                    <div className="font-display text-sm font-bold text-[var(--md-orange-deep)]">
+                    <div className="font-display text-sm font-bold text-[var(--md-coral)]">
                       {sortKey === "mpg" ? p.mpg : (p[sortKey] ?? 0)}
                     </div>
                     <div className="font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
@@ -331,7 +337,7 @@ export function PlayerList({
                     </div>
                   </>
                 ) : (
-                  <div className="md-capsule md-capsule--sky">Pick</div>
+                  <div className="md-capsule">Pick</div>
                 )}
               </div>
             </button>

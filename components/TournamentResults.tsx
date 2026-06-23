@@ -21,188 +21,29 @@ import {
 
 // Fallback so a daily card never falls back to rendering the roster (a spoiler)
 // even if an older stored team lacks team_box_json.
-const EMPTY_BOX = { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgPct: 0, ftPct: 0, tov: 0, fg3m: 0 };
+const EMPTY_BOX = {
+  pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgPct: 0, ftPct: 0, tov: 0, fg3m: 0,
+};
 
-// Reg-season W-L from the team rating (the five's net), via the shared tier
-// projection (single source of truth for wins = 41 + 2.7·net, clamped to 82).
 function regSeasonRecord(seedNet: number): { w: number; l: number } {
   const w = regWinsFromSeedNet(seedNet);
   return { w, l: 82 - w };
 }
 
-// Signed net-rating string, deliberately ROUNDED TO A WHOLE NUMBER so the team
-// rating reads as a ballpark, not a precise competitive figure. e.g. "+5" / "−3".
 function fmtNet(n: number): string {
   const v = Math.round(n);
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v)}`;
 }
 
-// The user's own roster (five starters with the captain flagged, then the sixth
-// man) — revealed by the "Show roster" toggle on the results page.
-function MyRoster({ team }: { team: BracketTeam }) {
-  if (!team.roster) return null;
-  return (
-    <div className="mt-3 border-t-2 border-dashed border-[var(--md-ink)] pt-2 text-left">
-      {team.roster.map((p, i) => (
-        <div
-          key={`${p.team}-${p.name}-${i}`}
-          className="flex items-baseline justify-between gap-2 py-0.5 font-display text-[12px]"
-        >
-          <span className="min-w-0 truncate">
-            {p.name}
-            {p.captain ? (
-              <span className="ml-1 inline-block border border-[var(--md-ink)] bg-[var(--md-yellow)] px-1 text-[8px] font-bold uppercase leading-tight tracking-wide align-middle">
-                C
-              </span>
-            ) : null}
-          </span>
-          <span className="shrink-0 text-[11px] text-[var(--md-orange-deep)]">
-            {p.team} &rsquo;{String(p.season).slice(2)}
-          </span>
-        </div>
-      ))}
-      {team.sixthMan && (
-        <>
-          <div className="my-1 border-t border-[var(--md-paper-3)]" />
-          <div className="font-display text-[9px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Sixth Man
-          </div>
-          <div className="flex items-baseline justify-between gap-2 py-0.5 font-display text-[12px]">
-            <span className="min-w-0 truncate">{team.sixthMan.name}</span>
-            <span className="shrink-0 text-[11px] text-[var(--md-orange-deep)]">
-              {team.sixthMan.team} &rsquo;{String(team.sixthMan.season).slice(2)}
-            </span>
-          </div>
-        </>
-      )}
-    </div>
-  );
+// Which tournament label to show in the kicker, e.g. "DAILY TOURNAMENT".
+function tournamentKicker(mode?: TournamentMode, isPrivate?: boolean): string {
+  if (isPrivate) return "Private Tournament";
+  if (mode === "daily") return "Daily Tournament";
+  if (mode === "hoopiq") return "Ranked Tournament";
+  return "Classic Tournament";
 }
 
-// Round labels for the user's record summary, by round index (0..3).
-const RECORD_ROUND_LABEL = ["R1", "R2", "R3", "FINAL"];
-
-interface RoundRecord {
-  label: string;
-  wins: number;
-  losses: number;
-  eliminated: boolean;
-}
-
-// Walk the bracket round by round and pull out the user's own game record:
-// for each round their team appears in, find the series with their id and read
-// their wins (scoreHi if hiId else scoreLo) vs the opponent's. The round they
-// lost is flagged "(eliminated)".
-function computeRoundRecords(
-  bracket: BracketResult,
-  youId: string,
-): { rows: RoundRecord[]; totalW: number; totalL: number } {
-  const rows: RoundRecord[] = [];
-  let totalW = 0;
-  let totalL = 0;
-  bracket.rounds.forEach((round, r) => {
-    const s = round.find((x) => x.hiId === youId || x.loId === youId);
-    if (!s) return;
-    const youAreHi = s.hiId === youId;
-    const wins = youAreHi ? s.scoreHi : s.scoreLo;
-    const losses = youAreHi ? s.scoreLo : s.scoreHi;
-    totalW += wins;
-    totalL += losses;
-    rows.push({
-      label: RECORD_ROUND_LABEL[r] ?? `R${r + 1}`,
-      wins,
-      losses,
-      eliminated: s.winnerId !== youId,
-    });
-  });
-  return { rows, totalW, totalL };
-}
-
-// A tidy md-card block of the user's per-round + total game record.
-function RecordSummary({
-  bracket,
-  youId,
-}: {
-  bracket: BracketResult;
-  youId: string;
-}) {
-  const { rows, totalW, totalL } = computeRoundRecords(bracket, youId);
-  if (rows.length === 0) return null;
-  return (
-    <div className="md-card p-3 sm:p-4">
-      <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-        Your record
-      </div>
-      <div className="grid gap-0.5">
-        {rows.map((row) => (
-          <div
-            key={row.label}
-            className="flex items-baseline justify-between gap-3 font-display text-sm tabular-nums"
-          >
-            <span className="text-[var(--md-ink-muted)]">{row.label}</span>
-            <span>
-              {row.wins}&ndash;{row.losses}
-              {row.eliminated ? (
-                <span className="ml-1 text-[var(--md-coral)]">(eliminated)</span>
-              ) : null}
-            </span>
-          </div>
-        ))}
-        <div className="mt-1 flex items-baseline justify-between gap-3 border-t-2 border-[var(--md-ink)] pt-1 font-display text-sm font-bold tabular-nums">
-          <span>TOT</span>
-          <span>
-            {totalW}&ndash;{totalL}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// A four-pip progress meter (R1 → Final). Filled pips = rounds the team won
-// through; the last filled pip glows teal for a champion.
-function ProgressPips({
-  reachedRound,
-  isChampion,
-}: {
-  reachedRound: number;
-  isChampion: boolean;
-}) {
-  const labels = ["R1", "Semis", "Conf F", "Final"];
-  return (
-    <div className="flex items-stretch justify-center gap-1.5">
-      {labels.map((lbl, i) => {
-        // A team that reached round R cleared rounds 0..R-1; the champion
-        // (reachedRound 4) fills all four.
-        const filled = i < reachedRound;
-        return (
-          <div
-            key={lbl}
-            className="flex flex-1 flex-col items-center gap-1"
-            style={{ maxWidth: 64 }}
-          >
-            <div
-              className="h-2 w-full border-2 border-[var(--md-ink)]"
-              style={{
-                background: filled
-                  ? isChampion
-                    ? "var(--md-teal-bright)"
-                    : "var(--md-yellow)"
-                  : "var(--md-paper-2)",
-              }}
-            />
-            <span className="font-display text-[9px] uppercase tracking-wide text-[var(--md-ink-muted)]">
-              {lbl}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// Which tournament this run was — shown on the share card. Daily includes its
-// date (MM-DD-YY); classic/hoopiq are just the mode name.
+// Which tournament this run was — for the share card.
 function tournamentModeLabel(
   mode?: TournamentMode,
   dailyDate?: string | null,
@@ -218,6 +59,342 @@ function tournamentModeLabel(
   return mode === "hoopiq" ? "Ranked" : "Classic";
 }
 
+// Walk the bracket and compute the viewer's per-round game record.
+function computeRoundRecords(
+  bracket: BracketResult,
+  youId: string,
+): { totalW: number; totalL: number } {
+  let totalW = 0;
+  let totalL = 0;
+  bracket.rounds.forEach((round) => {
+    const s = round.find((x) => x.hiId === youId || x.loId === youId);
+    if (!s) return;
+    const youAreHi = s.hiId === youId;
+    totalW += youAreHi ? s.scoreHi : s.scoreLo;
+    totalL += youAreHi ? s.scoreLo : s.scoreHi;
+  });
+  return { totalW, totalL };
+}
+
+// One-line footer sentence: "MATT finished TOP 4 — lost in semis to HOOPMAMBA"
+// Matches the A8H-0 mockup footer bar exactly.
+function outcomeFooterLine(
+  youName: string,
+  reachedRound: number,
+  isChampion: boolean,
+  bracket: BracketResult,
+  youId: string,
+): { finish: string; detail: string } {
+  if (isChampion) {
+    return { finish: "Champion", detail: "Ran the table." };
+  }
+  // Find the series where the viewer was eliminated to get the opponent's name.
+  let eliminatorName: string | null = null;
+  for (const round of bracket.rounds) {
+    const s = round.find((x) => x.hiId === youId || x.loId === youId);
+    if (s && s.winnerId !== youId) {
+      const eliminatorId = s.winnerId;
+      eliminatorName = bracket.teams.find((t) => t.id === eliminatorId)?.name ?? null;
+      break;
+    }
+  }
+
+  const finishLabel = (() => {
+    switch (reachedRound) {
+      case 0: return "Lost R1";
+      case 1: return "Top " + Math.ceil(bracket.teams.length / 2);
+      case 2: return "Top 4";
+      case 3: return "Runner-Up";
+      default: return reachedRoundLabelPlain(reachedRound);
+    }
+  })();
+
+  const detail = eliminatorName
+    ? `lost ${reachedRound === 3 ? "the Final" : reachedRound === 2 ? "in conf finals" : reachedRound === 1 ? "in semis" : "in R1"} to ${eliminatorName}`
+    : reachedRoundSentence(reachedRound, false).toLowerCase();
+
+  return { finish: finishLabel, detail };
+}
+
+// The viewer's team summary: record + collapsible roster. Placed before the
+// bracket so it's immediately visible. Open by default (collapsed on re-open).
+// Guarded by isDaily: never reveals the roster for an incomplete daily (spoiler).
+function YourTeamCard({
+  team,
+  you,
+  isDaily,
+  bracket,
+}: {
+  team: BracketTeam;
+  you: { id: string; name: string; reachedRound: number; seed?: number };
+  isDaily: boolean;
+  bracket: BracketResult;
+}) {
+  // Roster toggle — open by default so it's visible on first load.
+  const [rosterOpen, setRosterOpen] = useState(!isDaily);
+
+  const { totalW, totalL } = computeRoundRecords(bracket, you.id);
+  const isChampion = bracket.championId === you.id;
+  const reg = regSeasonRecord(team.seedNet);
+
+  return (
+    <div
+      className="border-2 border-[var(--md-ink)]"
+      style={{ background: "var(--md-white)", boxShadow: "var(--md-shadow-sm)" }}
+    >
+      {/* Header row: team name + record chips */}
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+        style={isChampion
+          ? { background: "var(--md-yellow)", boxShadow: "inset 4px 0 0 var(--md-cobalt)" }
+          : { background: "var(--md-paper-2)", boxShadow: "inset 4px 0 0 var(--md-cobalt)" }}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          {isChampion && <span style={{ fontSize: 16, color: "var(--md-ink)" }}>♛</span>}
+          {team.seed !== undefined && (
+            <span
+              className="inline-flex shrink-0 items-center justify-center font-mono text-[10px] leading-none"
+              style={{
+                width: 18, height: 18,
+                background: "var(--md-ink)", color: "var(--md-white)",
+              }}
+            >
+              {team.seed}
+            </span>
+          )}
+          <span
+            className="font-archivo min-w-0 truncate leading-tight"
+            style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
+          >
+            {you.name}
+          </span>
+        </div>
+        {/* Record chips */}
+        <div className="flex shrink-0 items-center gap-3 font-mono text-[13px] tabular-nums">
+          <div className="flex flex-col items-center leading-tight">
+            <span className="font-cond text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">Reg</span>
+            <span className="font-bold">{reg.w}–{reg.l}</span>
+          </div>
+          {(totalW > 0 || totalL > 0) && (
+            <>
+              <span className="text-[var(--md-ink-muted)]">→</span>
+              <div className="flex flex-col items-center leading-tight">
+                <span className="font-cond text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">Bracket</span>
+                <span className="font-bold" style={{ color: isChampion ? "var(--md-ink)" : "var(--md-coral)" }}>
+                  {totalW}–{totalL}
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Roster — hidden for daily (spoiler guard), collapsible otherwise */}
+      {!isDaily && team.roster && (
+        <>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between border-t-2 border-[var(--md-ink)] px-4 py-2 text-left font-mono text-[9px] uppercase tracking-wide text-[var(--md-ink-muted)]"
+            style={{ cursor: "pointer", background: "var(--md-paper-2)" }}
+            onClick={() => setRosterOpen((v) => !v)}
+            aria-expanded={rosterOpen}
+          >
+            <span>Your Roster</span>
+            <span>{rosterOpen ? "hide ▴" : "show ▾"}</span>
+          </button>
+          {rosterOpen && (
+            <div className="flex flex-col gap-0 border-t-2 border-dashed border-[var(--md-ink)] px-4 py-3">
+              {team.roster.map((p, i) => (
+                <div
+                  key={`${p.team}-${p.name}-${i}`}
+                  className="flex items-baseline justify-between gap-2 py-0.5 font-mono text-[12px]"
+                >
+                  <span className="min-w-0 truncate">
+                    {p.name}
+                    {p.captain ? (
+                      <span className="ml-1 inline-block border border-[var(--md-ink)] bg-[var(--md-yellow)] px-1 text-[8px] font-bold uppercase leading-tight tracking-wide align-middle">
+                        C
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-[var(--md-coral-deep)]">
+                    {p.team} &rsquo;{String(p.season).slice(2)}
+                  </span>
+                </div>
+              ))}
+              {team.sixthMan && (
+                <>
+                  <div className="my-1 border-t border-[var(--md-paper-3)]" />
+                  <div className="font-cond text-[9px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                    Sixth Man
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 py-0.5 font-mono text-[12px]">
+                    <span className="min-w-0 truncate">{team.sixthMan.name}</span>
+                    <span className="shrink-0 text-[11px] text-[var(--md-coral-deep)]">
+                      {team.sixthMan.team} &rsquo;{String(team.sixthMan.season).slice(2)}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---- Champion stamp card ------------------------------------------------
+// Top-right press-yellow card. A8H-0: trophy icon, "CHAMPION" kicker, big
+// Archivo name, "N-0 · UNDEFEATED" or "N-M · RAN THE TABLE" record line.
+function ChampionStamp({
+  name,
+  bracket,
+  championId,
+}: {
+  name: string;
+  bracket: BracketResult;
+  championId: string;
+}) {
+  // Count champion's wins and losses across all rounds.
+  let w = 0;
+  let l = 0;
+  bracket.rounds.forEach((round) => {
+    const s = round.find((x) => x.hiId === championId || x.loId === championId);
+    if (!s) return;
+    const isHi = s.hiId === championId;
+    w += isHi ? s.scoreHi : s.scoreLo;
+    l += isHi ? s.scoreLo : s.scoreHi;
+  });
+  const undefeated = l === 0;
+  const recordLine = undefeated ? `${w}-0 · Undefeated` : `${w}-${l} · Ran the table`;
+
+  return (
+    <div
+      className="flex items-start gap-3 p-4"
+      style={{
+        background: "var(--md-yellow)",
+        color: "var(--md-ink)",
+        border: "3px solid var(--md-ink)",
+        boxShadow: "var(--md-shadow-md)",
+        minWidth: 200,
+      }}
+    >
+      <span style={{ fontSize: 28, lineHeight: 1 }}>♛</span>
+      <div>
+        <div
+          className="font-cond font-bold uppercase tracking-[0.16em]"
+          style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
+        >
+          Champion
+        </div>
+        <div
+          className="font-archivo font-bold leading-tight mt-0.5"
+          style={{
+            fontSize: "clamp(14px, 2vw, 20px)",
+            fontWeight: 800,
+            fontVariationSettings: '"wdth" 100',
+          }}
+        >
+          {name}
+        </div>
+        <div
+          className="font-cond font-semibold uppercase tracking-[0.08em] mt-1"
+          style={{ fontSize: 11, color: "var(--md-ink-muted)" }}
+        >
+          {recordLine}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Share overlay -------------------------------------------------------
+function ShareOverlay({
+  shareUrl,
+  shareLink,
+  autoCopied,
+  onClose,
+}: {
+  shareUrl: string;
+  shareLink: string;
+  autoCopied: boolean;
+  onClose: () => void;
+}) {
+  const [linkCopied, setLinkCopied] = useState(false);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(21,17,14,0.7)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm p-5"
+        style={{
+          background: "var(--md-white)",
+          border: "2px solid var(--md-ink)",
+          boxShadow: "var(--md-shadow-lg)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h3
+            className="font-archivo leading-tight"
+            style={{ fontSize: 20, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
+          >
+            Share your run
+          </h3>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="font-mono text-[16px] text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
+          >
+            ✕
+          </button>
+        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={shareUrl}
+          alt="Your tournament result card"
+          className="mt-3 w-full border-2 border-[var(--md-ink)]"
+        />
+        <p className="mt-2 text-center font-mono text-[12px] leading-snug text-[var(--md-ink-muted)]">
+          <strong>Right-click to copy and share.</strong>{" "}
+          {autoCopied
+            ? "The link is already on your clipboard."
+            : 'Use "Copy link" below to copy the link.'}
+        </p>
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
+          <a
+            className="md-btn md-btn--sm md-btn--secondary"
+            href={shareUrl}
+            download="daily82-tournament.png"
+          >
+            Download
+          </a>
+          <button
+            className="md-btn md-btn--sm md-btn--secondary"
+            onClick={async () => {
+              const ok = await copyText(shareLink);
+              if (ok) {
+                setLinkCopied(true);
+                setTimeout(() => setLinkCopied(false), 1500);
+              }
+            }}
+          >
+            {linkCopied ? "Link copied!" : "Copy link"}
+          </button>
+          <button className="md-btn md-btn--sm md-btn--ink" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Main component -------------------------------------------------------
 export function TournamentResults({
   data,
   mode,
@@ -233,24 +410,15 @@ export function TournamentResults({
   const isChampion = bracket.championId === you.id;
   const myTeam = bracket.teams.find((t) => t.id === you.id);
   const isDaily = mode === "daily";
-  // Daily is "Open" — tier-less. Instead of a tier, rank the team within the whole
-  // (untiered) field it played by seeding net.
-  const tier = isDaily || !myTeam ? null : tierForSeedNet(myTeam.seedNet);
-  const openRank = (() => {
-    if (!isDaily || !myTeam) return null;
-    const sorted = [...bracket.teams].sort((a, b) => b.seedNet - a.seedNet);
-    const r = sorted.findIndex((t) => t.id === you.id) + 1;
-    return r > 0 ? { rank: r, total: bracket.teams.length } : null;
-  })();
-  const [showRoster, setShowRoster] = useState(false);
+  const teamCount = bracket.teams.length;
+
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
-  // Whether the fallback auto-copy actually landed the link on the clipboard.
   const [autoCopied, setAutoCopied] = useState(false);
-  // A SERVER-SIGNED token for the sharer's stored daily result (unforgeable).
   const [dailyShareToken, setDailyShareToken] = useState<string | null>(null);
 
+  // Fetch the daily share token (signed, time-limited) so the share link is
+  // fully formed before the user taps Share.
   useEffect(() => {
     if (!isDaily || !dailyDate) return;
     const u = getSavedUser();
@@ -266,14 +434,10 @@ export function TournamentResults({
         if (active && d?.share) setDailyShareToken(d.share as string);
       })
       .catch(() => {});
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [isDaily, dailyDate]);
 
-  // Precompute the share PNG so the click handler can call the native share
-  // sheet synchronously (iOS requires the share() call to happen in the same
-  // user-gesture tick — no awaits before it).
+  // Build the share image.
   useEffect(() => {
     if (!myTeam) { setShareBlob(null); return; }
     let active = true;
@@ -302,9 +466,6 @@ export function TournamentResults({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myTeam, bracket, you, isChampion, isDaily, mode, dailyDate, data]);
 
-  // Daily shares drive recipients into the (login-gated) day's challenge with a
-  // head-to-head compare — NOT the public bracket. The signed token carries the
-  // sharer's record; others use /t/<id>.
   const shareLink =
     isDaily && dailyDate
       ? `${SITE_URL}/d/${dailyDate}${dailyShareToken ? `?s=${encodeURIComponent(dailyShareToken)}` : ""}`
@@ -312,17 +473,14 @@ export function TournamentResults({
         ? `${SITE_URL}/t/${data.teamId}`
         : SITE_URL;
 
-  // For daily we must hold the signed token before sharing — never share a bare
-  // /d/<date> link (it would unfurl without the head-to-head card). Non-daily
-  // shares only need the precomputed image.
   const shareReady = !!shareBlob && (!isDaily || !!dailyShareToken);
 
   const share = async () => {
     if (!myTeam || !shareReady || !shareBlob) return;
-    const text = `82-0+ Tournament · ${you.name} — ${reachedRoundSentence(you.reachedRound, isChampion)}\n${shareLink}`;
+    const text = `daily82 Tournament · ${you.name} — ${reachedRoundSentence(you.reachedRound, isChampion)}\n${shareLink}`;
     const outcome = await presentShare({
       blob: shareBlob,
-      filename: "82-0-tournament.png",
+      filename: "daily82-tournament.png",
       text,
       link: shareLink,
     });
@@ -338,190 +496,246 @@ export function TournamentResults({
   const closeShare = () => {
     if (shareUrl) URL.revokeObjectURL(shareUrl);
     setShareUrl(null);
-    setLinkCopied(false);
   };
 
+  // Outcome footer sentence for the viewer.
+  const { finish, detail } = outcomeFooterLine(
+    you.name,
+    you.reachedRound,
+    isChampion,
+    bracket,
+    you.id,
+  );
+
+  // Tournament headline — private uses `bracket.tournamentName` if available,
+  // otherwise a generic label. Public brackets derive from mode+date.
+  const tournamentHeadline = (() => {
+    // Private TournamentRunResponse may carry tournamentName (not in the public
+    // type yet — guard with an 'in' check so tsc stays happy).
+    if ("tournamentName" in data && typeof data.tournamentName === "string") {
+      return data.tournamentName as string;
+    }
+    if (isDaily && dailyDate && /^\d{4}-\d{2}-\d{2}$/.test(dailyDate)) {
+      const [y, m, d] = dailyDate.split("-");
+      const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+      return date.toLocaleDateString(undefined, {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      }) + " Daily";
+    }
+    if (mode === "hoopiq") return "Ranked Tournament";
+    if (mode === "daily") return "Daily Tournament";
+    return "Classic Tournament";
+  })();
+
+  // Round count for the "FINAL · N TEAMS · SINGLE ELIM" subline.
+  const roundLabel = (() => {
+    const r = bracket.rounds.length;
+    if (r === 1) return "Final";
+    if (r === 2) return "Semifinals";
+    if (r === 3) return "Quarterfinals";
+    return `Round ${r}`;
+  })();
+
   return (
-    <div className="flex flex-col gap-6">
+    <>
       {shareUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(56,56,56,0.55)" }}
-          onClick={closeShare}
-        >
-          <div
-            className="md-card md-card--lift w-full max-w-sm p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="font-display text-lg font-bold">Share your run</h3>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={closeShare}
-                className="font-display text-lg text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
-              >
-                ✕
-              </button>
-            </div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={shareUrl}
-              alt="Your tournament result card"
-              className="mt-3 w-full border-2 border-[var(--md-ink)]"
-            />
-            <p className="mt-2 text-center text-[13px] leading-snug text-[var(--md-ink-muted)]">
-              <strong>Right-click to copy and share.</strong>{" "}
-              {autoCopied
-                ? "The link is already on your clipboard."
-                : "Use “Copy link” below to copy the link."}
-            </p>
-            <div className="mt-3 flex flex-wrap justify-center gap-2">
-              <a
-                className="md-btn md-btn--sm md-btn--secondary"
-                href={shareUrl}
-                download="82-0-tournament.png"
-              >
-                Download
-              </a>
-              <button
-                className="md-btn md-btn--sm md-btn--secondary"
-                onClick={async () => {
-                  const ok = await copyText(shareLink);
-                  if (ok) {
-                    setLinkCopied(true);
-                    setTimeout(() => setLinkCopied(false), 1500);
-                  }
+        <ShareOverlay
+          shareUrl={shareUrl}
+          shareLink={shareLink}
+          autoCopied={autoCopied}
+          onClose={closeShare}
+        />
+      )}
+
+      <div className="flex flex-col gap-8">
+
+        {/* ---- Masthead: kicker + headline + champion stamp ---- */}
+        <div>
+          {/* Kicker row */}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              {/* Mode kicker capsule */}
+              <div className="mb-2">
+                <span
+                  className="font-cond font-bold uppercase tracking-[0.14em] px-2 py-1"
+                  style={{
+                    fontSize: 11,
+                    background: "var(--md-coral)",
+                    color: "var(--md-white)",
+                    border: "2px solid var(--md-ink)",
+                  }}
+                >
+                  {tournamentKicker(mode)}
+                </span>
+              </div>
+              {/* Tournament name — Anton cover headline */}
+              <h1
+                className="font-cover uppercase leading-none"
+                style={{
+                  fontSize: "clamp(28px, 7vw, 64px)",
+                  letterSpacing: "-0.02em",
+                  maxWidth: "20ch",
                 }}
               >
-                {linkCopied ? "Link copied!" : "Copy link"}
-              </button>
-              <button className="md-btn md-btn--sm md-btn--ink" onClick={closeShare}>
-                Done
-              </button>
+                {tournamentHeadline}
+              </h1>
+              {/* Subline: FINAL · N TEAMS · SINGLE ELIM */}
+              <div
+                className="mt-2 font-cond font-semibold uppercase tracking-[0.16em]"
+                style={{ fontSize: 11, color: "var(--md-ink-muted)" }}
+              >
+                {roundLabel} · {teamCount} Teams · Single Elim
+              </div>
+            </div>
+
+            {/* Champion stamp — top-right on desktop, below headline on mobile */}
+            <div className="shrink-0">
+              <ChampionStamp
+                name={bracket.championName}
+                bracket={bracket}
+                championId={bracket.championId}
+              />
             </div>
           </div>
         </div>
-      )}
-      {/* Hero — the player's run, ResultsPanel aesthetic. */}
-      <div className="md-card md-card--lift flex flex-col gap-4 p-4 sm:p-5">
-        <div className="text-center">
+
+        {/* ---- Your team summary — compact, above the bracket ---- */}
+        {/* Record + roster visible by default. Daily spoiler guard: roster hidden
+            for daily mode (isDaily), but the record chip is always safe to show. */}
+        {myTeam && (
+          <div>
+            <div className="mb-3 flex items-center gap-3">
+              <span
+                className="font-cond font-bold uppercase tracking-[0.16em]"
+                style={{ fontSize: 12, color: "var(--md-ink)" }}
+              >
+                Your Team
+              </span>
+              <div className="flex-1 border-t border-[var(--md-paper-3)]" />
+            </div>
+            <YourTeamCard
+              team={myTeam}
+              you={you}
+              isDaily={isDaily}
+              bracket={bracket}
+            />
+          </div>
+        )}
+
+        {/* ---- The bracket — hero/centerpiece ---- */}
+        <div>
+          {/* Section header */}
+          <div className="mb-4 flex items-center gap-3">
+            <span
+              className="font-cond font-bold uppercase tracking-[0.16em]"
+              style={{ fontSize: 12, color: "var(--md-ink)" }}
+            >
+              The Bracket
+            </span>
+            <div className="flex-1 border-t border-[var(--md-paper-3)]" />
+            {/* "You" legend */}
+            <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+              <span
+                className="inline-block h-3 w-3 border-2 border-[var(--md-ink)]"
+                style={{ background: "var(--md-cobalt)" }}
+              />
+              <span>★ you</span>
+            </div>
+          </div>
+
+          {/* BracketView: the viewer's path is highlighted via youId */}
+          <BracketView bracket={bracket} youId={you.id} sharedBoard={isDaily} />
+        </div>
+
+        {/* ---- Footer bar: outcome one-liner + share button ---- */}
+        {/*
+          A8H-0: a single horizontal bar with the viewer's finish chip on the
+          left and "SHARE THE BRACKET" flame button on the right. On mobile this
+          stacks: outcome block then share button.
+        */}
+        <div
+          className="flex flex-col gap-4 border-t-2 border-[var(--md-ink)] pt-5 sm:flex-row sm:items-center sm:justify-between"
+        >
+          {/* Viewer outcome */}
           {isChampion ? (
-            <div className="md-capsule md-capsule--teal mb-3">
-              🏆 Tournament Champion
+            /* Champion gets the full press-yellow treatment */
+            <div
+              className="inline-flex items-center gap-3 px-4 py-3"
+              style={{
+                background: "var(--md-yellow)",
+                color: "var(--md-ink)",
+                border: "2px solid var(--md-ink)",
+                boxShadow: "var(--md-shadow-sm)",
+              }}
+            >
+              <span style={{ fontSize: 20 }}>♛</span>
+              <div>
+                <div
+                  className="font-archivo font-bold leading-tight"
+                  style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
+                >
+                  {you.name}
+                </div>
+                <div
+                  className="font-cond font-bold uppercase tracking-[0.1em] mt-0.5"
+                  style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
+                >
+                  Champion · {finish}
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="md-capsule mb-3">Tournament Result</div>
-          )}
-          <div
-            className="font-display font-bold break-words"
-            style={{ fontSize: "clamp(34px, 10vw, 56px)", lineHeight: 1 }}
-          >
-            {you.name}
-          </div>
-          {/* Tier + seed + conference as tight capsules, like ResultsPanel's headers. */}
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-            {tier && (
-              <span className="md-capsule" style={{ background: tier.color }}>
-                {tier.label}-Tier
+            /* Non-champion: ink chip + finish + detail */
+            <div className="flex items-center gap-3 flex-wrap">
+              <span
+                className="font-cond font-bold uppercase tracking-[0.1em] px-2 py-1.5 shrink-0"
+                style={{
+                  fontSize: 12,
+                  background: "var(--md-ink)",
+                  color: "var(--md-white)",
+                }}
+              >
+                {you.name}
               </span>
-            )}
-            {openRank && (
-              <span className="md-capsule md-capsule--teal">
-                Open · #{openRank.rank} of {openRank.total}
+              <span
+                className="font-mono text-[13px]"
+                style={{ color: "var(--md-ink)" }}
+              >
+                finished{" "}
+                <strong className="font-bold">{finish}</strong>
+                {detail ? ` — ${detail}` : ""}
               </span>
-            )}
-            <span className="md-capsule">#{you.seed} Seed</span>
-            <span
-              className={`md-capsule ${
-                you.conference === "West" ? "md-capsule--sky" : "md-capsule--coral"
-              }`}
-            >
-              {you.conference}
-            </span>
-          </div>
-          <div
-            className="mt-3 font-display text-lg font-bold sm:text-xl"
-            style={{ color: isChampion ? "var(--md-teal)" : "var(--md-ink)" }}
-          >
-            {reachedRoundSentence(you.reachedRound, isChampion)}
-          </div>
-          <div className="mt-3">
-            <ProgressPips reachedRound={you.reachedRound} isChampion={isChampion} />
-          </div>
-
-          {/* Team rating (the five's net at the end of Classic/Ranked — no
-              tournament buffs, no sixth man) + a roster reveal. Kept understated
-              and rounded, on purpose. */}
-          {myTeam && (
-            <div className="mt-3 text-[var(--md-ink-muted)]">
-              <span className="font-display text-[13px]">
-                Team rating{" "}
-                <span className="font-bold">{fmtNet(myTeam.seedNet)}</span>
-              </span>
-              {myTeam.roster && (
-                <>
-                  <span className="px-1.5">·</span>
-                  <button
-                    type="button"
-                    className="font-display text-[13px] font-bold text-[var(--md-blue)] underline"
-                    onClick={() => setShowRoster((v) => !v)}
-                  >
-                    {showRoster ? "Hide roster" : "Show roster"}
-                  </button>
-                </>
-              )}
             </div>
           )}
-        </div>
 
-        {myTeam && showRoster && <MyRoster team={myTeam} />}
-
-        {/* The player's own per-round + total game record. */}
-        <RecordSummary bracket={bracket} youId={you.id} />
-
-        {/* Champion banner. */}
-        <div className="border-t-2 border-[var(--md-ink)] pt-3 text-center">
-          <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Champion
+          {/* Share + Back buttons */}
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            {myTeam && (
+              <button
+                className="md-btn md-btn--lg flex items-center gap-2"
+                style={{
+                  background: "var(--md-coral)",
+                  color: "var(--md-white)",
+                  borderColor: "var(--md-ink)",
+                }}
+                onClick={share}
+                disabled={!shareReady}
+              >
+                <span style={{ fontSize: 14 }}>↑</span>
+                {shareReady ? "Share the Bracket" : "Preparing…"}
+              </button>
+            )}
+            {onReset && (
+              <button className="md-btn md-btn--lg md-btn--secondary" onClick={onReset}>
+                Back
+              </button>
+            )}
           </div>
-          <div className="mt-1 font-display text-xl font-bold">
-            🏆 {bracket.championName}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-2">
-          {myTeam && (
-            <button
-              className="md-btn md-btn--lg md-btn--teal"
-              onClick={share}
-              disabled={!shareReady}
-            >
-              {shareReady ? "Share result" : "Preparing…"}
-            </button>
-          )}
-          {onReset && (
-            <button className="md-btn md-btn--lg md-btn--ink" onClick={onReset}>
-              Back to menu
-            </button>
-          )}
         </div>
       </div>
-
-      {/* The full bracket, with the user's team highlighted across rounds. */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="md-capsule">The Bracket</div>
-          <div className="flex items-center gap-1.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
-            <span
-              className="inline-block h-3 w-3 border-2 border-[var(--md-ink)]"
-              style={{ background: "var(--md-yellow)" }}
-            />
-            <span>★ you</span>
-          </div>
-        </div>
-        <BracketView bracket={bracket} youId={you.id} sharedBoard={isDaily} />
-      </div>
-    </div>
+    </>
   );
 }

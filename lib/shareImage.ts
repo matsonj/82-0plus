@@ -24,33 +24,55 @@ export async function buildShareImage(
     /* fonts best-effort */
   }
 
-  const ink = "#383838";
-  const paper = "#F4EFEA";
-  const teal = "#16AA98";
-  const coral = "#FF7169";
-  const orange = "#A45916";
-  const muted = "#818181";
+  // SLAM Editorial palette — inline hex, matches OG route tokens
+  const ink = "#15110E";
+  const paper = "#EDE7D8";
+  const coral = "#E5261F";
+  const teal = "#127A4F";
+  const yellow = "#FFC400";
+  const muted = "#6B6157";
   const mono = '"Space Mono", ui-monospace, monospace';
   const f = (px: number, weight = "bold") => `${weight} ${px}px ${mono}`;
 
+  // Newsprint background + ink border frame
   ctx.fillStyle = paper;
   ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = ink;
-  ctx.lineWidth = 10;
-  ctx.strokeRect(24, 24, W - 48, H - 48);
+  ctx.lineWidth = 8;
+  ctx.strokeRect(20, 20, W - 40, H - 40);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(30, 30, W - 60, H - 60);
 
-  ctx.textAlign = "center";
+  // Wordmark: "DAILY 82" — "DAILY" in ink, "82" in flame box
+  ctx.textAlign = "left";
   ctx.fillStyle = ink;
-  ctx.font = f(52);
-  ctx.fillText("🦆 82-0+", W / 2, 130);
+  ctx.font = `900 58px "Arial Black", sans-serif`;
+  ctx.fillText("DAILY", 64, 112);
+  const dailyW = ctx.measureText("DAILY").width;
+  const boxX = 64 + dailyW + 10;
+  const boxW = 80;
+  ctx.fillStyle = coral;
+  ctx.fillRect(boxX, 66, boxW, 54);
+  ctx.fillStyle = "#EDE7D8";
+  ctx.font = `900 52px "Arial Black", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.fillText("82", boxX + boxW / 2, 110);
 
+  // Mode label
+  ctx.textAlign = "center";
   ctx.font = f(30, "normal");
   ctx.fillStyle = muted;
   ctx.fillText(label.toUpperCase(), W / 2, 182);
 
+  ctx.fillStyle = coral;
+  ctx.font = f(200);
+  ctx.fillText(`${result.wins}`, W / 2 - 180, 420);
+  ctx.fillStyle = muted;
+  ctx.font = f(120);
+  ctx.fillText("–", W / 2, 420);
   ctx.fillStyle = ink;
   ctx.font = f(200);
-  ctx.fillText(`${result.wins}–${result.losses}`, W / 2, 400);
+  ctx.fillText(`${result.losses}`, W / 2 + 200, 420);
 
   ctx.font = f(42);
   ctx.fillStyle = result.netRating >= 0 ? teal : coral;
@@ -62,10 +84,17 @@ export async function buildShareImage(
 
   let y = 540;
   if (result.perfect) {
-    ctx.fillStyle = teal;
-    ctx.font = f(40);
-    ctx.fillText("🏆 PERFECT SEASON", W / 2, y);
-    y += 60;
+    ctx.fillStyle = yellow;
+    ctx.fillRect(W / 2 - 260, y - 38, 520, 52);
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(W / 2 - 260, y - 38, 520, 52);
+    ctx.fillStyle = ink;
+    ctx.font = f(36);
+    ctx.textBaseline = "middle";
+    ctx.fillText("PERFECT SEASON", W / 2, y - 38 + 26);
+    ctx.textBaseline = "alphabetic";
+    y += 68;
   }
 
   if (isDaily) {
@@ -100,7 +129,7 @@ export async function buildShareImage(
     ctx.textAlign = "left";
     ctx.font = f(34, "normal");
     for (const r of roster) {
-      ctx.fillStyle = orange;
+      ctx.fillStyle = coral;
       ctx.fillText(`${r.team} '${String(r.best_season).slice(2)}`, 110, y);
       ctx.fillStyle = ink;
       const name =
@@ -158,25 +187,46 @@ export async function buildTournamentShareImage(args: {
     /* fonts best-effort */
   }
 
-  const ink = "#383838";
-  const paper = "#F4EFEA";
-  const teal = "#16AA98";
-  const yellow = "#FFDE00";
-  const orange = "#A45916";
-  const muted = "#818181";
+  // SLAM Editorial palette — inline hex, matches OG route tokens
+  const ink = "#15110E";
+  const paper = "#EDE7D8";
+  const coral = "#E5261F";
+  const teal = "#127A4F";
+  const yellow = "#FFC400";
+  const orange = coral; // alias: team labels use flame-red
+  const muted = "#6B6157";
   const mono = '"Space Mono", ui-monospace, monospace';
   const f = (px: number, weight = "bold") => `${weight} ${px}px ${mono}`;
 
+  // Newsprint background + ink double-rule border
   ctx.fillStyle = paper;
   ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = ink;
-  ctx.lineWidth = 10;
-  ctx.strokeRect(24, 24, W - 48, H - 48);
+  ctx.lineWidth = 8;
+  ctx.strokeRect(20, 20, W - 40, H - 40);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(30, 30, W - 60, H - 60);
 
-  ctx.textAlign = "center";
+  // Wordmark: "DAILY 82" lockup top-left
+  ctx.textAlign = "left";
   ctx.fillStyle = ink;
-  ctx.font = f(46);
-  ctx.fillText("🦆 82-0+ TOURNAMENT", W / 2, 120);
+  ctx.font = `900 48px "Arial Black", sans-serif`;
+  ctx.fillText("DAILY", 64, 100);
+  const dailyW2 = ctx.measureText("DAILY").width;
+  const boxX2 = 64 + dailyW2 + 10;
+  const boxW2 = 70;
+  ctx.fillStyle = coral;
+  ctx.fillRect(boxX2, 58, boxW2, 48);
+  ctx.fillStyle = "#EDE7D8";
+  ctx.font = `900 44px "Arial Black", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.fillText("82", boxX2 + boxW2 / 2, 98);
+
+  // "TOURNAMENT" kicker top-right
+  ctx.textAlign = "right";
+  ctx.fillStyle = muted;
+  ctx.font = f(26, "normal");
+  ctx.fillText("TOURNAMENT", W - 64, 84);
 
   // Team name (clamp size to fit).
   const name = args.teamName.toUpperCase();
@@ -240,7 +290,7 @@ export async function buildTournamentShareImage(args: {
     if (typeof args.actualMargin === "number") {
       const m = args.actualMargin;
       ctx.textAlign = "right";
-      ctx.fillStyle = m >= 0 ? teal : "#FF7169";
+      ctx.fillStyle = m >= 0 ? teal : coral;
       ctx.font = f(28);
       ctx.fillText(`${m >= 0 ? "+" : ""}${m.toFixed(1)} margin (actual)`, W - 110, headY);
     }
@@ -315,16 +365,18 @@ export async function buildTournamentShareImage(args: {
   }
 
   if (args.isChampion) {
-    // Champion banner near the bottom — size the box to the TEXT (was a fixed
-    // 460px that the label overflowed).
-    const label = "🏆 TOURNAMENT CHAMPION";
+    // Champion banner: yellow pill with hard ink shadow, SLAM style
+    const label = "TOURNAMENT CHAMPION";
     ctx.font = f(40);
     const textW = ctx.measureText(label).width;
-    const padX = 28;
+    const padX = 32;
     const boxW = textW + padX * 2;
     const boxH = 64;
     const boxX = W / 2 - boxW / 2;
-    const boxY = H - 152;
+    const boxY = H - 160;
+    // Hard shadow (4px offset, no blur)
+    ctx.fillStyle = ink;
+    ctx.fillRect(boxX + 5, boxY + 5, boxW, boxH);
     ctx.fillStyle = yellow;
     ctx.fillRect(boxX, boxY, boxW, boxH);
     ctx.strokeStyle = ink;

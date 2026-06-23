@@ -106,23 +106,39 @@ export function SlotMachine({
     }
   }, [decade, team]);
 
+  // Badge (team) + era-box sizing per size. The team chip is a self-contained
+  // ink chip with cream Archivo type, so it reads on a dark "roll" card (ink-on-
+  // ink, the cream wordmark carries) AND on a light surface (a dark chip).
   const dim =
     size === "lg"
-      ? // Compact on phones so the roster below is the focus; full size at sm+.
-        "h-16 w-28 text-3xl sm:h-28 sm:w-44 sm:text-5xl"
+      ? "h-16 w-28 text-3xl sm:h-24 sm:w-40 sm:text-5xl"
       : size === "sm"
         ? "h-11 w-16 text-base"
         : "h-16 w-20 text-2xl";
-  const label =
-    size === "lg" ? "text-[11px] sm:text-sm" : "text-[11px]";
+  const eraCls =
+    size === "lg"
+      ? "px-3 py-1 text-2xl sm:text-4xl"
+      : size === "sm"
+        ? "px-1.5 py-0.5 text-sm"
+        : "px-2 py-0.5 text-xl";
+  const archivo = {
+    fontFamily: "var(--font-display)",
+    fontWeight: 900,
+    fontVariationSettings: '"wdth" 110',
+    letterSpacing: "-0.01em",
+  } as const;
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className={`md-badge ${dim} ${spinning ? "md-spinning" : ""}`}>
+    <div className="flex items-center gap-3 sm:gap-4">
+      <div
+        className={`md-badge ${dim} ${spinning ? "md-spinning" : ""}`}
+        style={archivo}
+      >
         {display}
       </div>
       <div
-        className={`font-display ${label} font-bold uppercase tracking-wide text-[var(--md-ink-muted)] ${decadeSpinning ? "md-spinning" : ""}`}
+        className={`inline-flex items-center border-2 border-[var(--md-ink)] bg-[var(--md-coral)] leading-none text-[var(--md-paper)] ${eraCls} ${decadeSpinning ? "md-spinning" : ""}`}
+        style={archivo}
       >
         {decadeDisplay}s
       </div>

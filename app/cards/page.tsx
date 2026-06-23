@@ -90,7 +90,7 @@ export default function CardsPage({
   const query = first(sp.q).slice(0, 64);
 
   return (
-    <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
+    <main className="relative mx-auto flex min-h-screen max-w-5xl flex-col px-4 pb-12 sm:pb-16">
       <div className="md-sunbeam" />
 
       <GlobalHeader />
@@ -103,8 +103,8 @@ export default function CardsPage({
         <StacksGrid initialQuery={query} />
       )}
 
-      <footer className="relative z-10 mt-auto pt-12 text-center">
-        <p className="font-display text-xs text-[var(--md-ink-muted)]">
+      <footer className="relative z-10 mt-auto flex flex-col gap-1 border-t border-[var(--md-ink)] pt-5 text-[var(--md-ink-muted)] sm:flex-row sm:items-center sm:justify-between">
+        <p className="font-byline text-[12px] tracking-[0.02em]">
           Powered by{" "}
           <a
             href={MOTHERDUCK_URL}
@@ -114,10 +114,10 @@ export default function CardsPage({
           >
             MotherDuck
           </a>{" "}
-          · <code>nba_box_scores_v2</code>
+          · <span className="font-mono">nba_box_scores_v2</span>
         </p>
-        <p className="mt-2 text-[11px] text-[var(--md-ink-muted)]">
-          An independent project, not affiliated with or endorsed by the NBA.
+        <p className="font-byline text-[12px] tracking-[0.02em]">
+          An independent project — not affiliated with or endorsed by the NBA.
         </p>
       </footer>
     </main>
@@ -227,60 +227,101 @@ function StacksGrid({ initialQuery }: { initialQuery: string }) {
 
   return (
     <section className="relative z-10 mt-6 flex flex-col sm:mt-8">
-      <div className="text-center">
-        <h1
-          className="font-display font-bold tracking-tight"
-          style={{ fontSize: "clamp(34px, 9vw, 64px)", lineHeight: 1 }}
-        >
-          Player cards
-        </h1>
-        <p className="mx-auto mt-4 max-w-md text-[14px] leading-relaxed sm:text-[15px]">
-          Every team is a stack of eras. Open one, then flip through each
-          player&rsquo;s career card.
-        </p>
+      {/* Folio bar on double rule */}
+      <div className="md-rule-double flex items-end justify-between pb-2">
+        <span className="md-folio uppercase">The daily 82 archive</span>
+        <span className="md-folio uppercase">Search the archive</span>
       </div>
 
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search a team, player, or year (e.g. LAL, Jokić, 1996)…"
-        className="mt-6 w-full border-2 border-[var(--md-ink)] bg-[var(--md-white)] px-3 py-2 font-display text-sm outline-none focus:bg-[var(--md-paper)]"
-      />
+      {/* Page header */}
+      <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <span className="md-kicker--marker block">Flip through history.</span>
+          <h1
+            className="font-cover uppercase"
+            style={{ fontSize: "clamp(42px, 10vw, 80px)", lineHeight: 0.88, letterSpacing: "-0.01em" }}
+          >
+            Player<br />Cards.
+          </h1>
+          <p className="mt-3 max-w-sm text-[14px] leading-relaxed sm:text-[15px]">
+            Every team is a stack of eras. Open one, then flip through each
+            player&rsquo;s career card.
+          </p>
+        </div>
+
+        {/* Search */}
+        <div className="sm:w-[340px]">
+          <div className="font-cond mb-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--md-ink-muted)]">
+            Search
+          </div>
+          <div className="relative">
+            <span
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--md-ink-muted)]"
+              aria-hidden
+              style={{ fontSize: 14 }}
+            >
+              &#128269;
+            </span>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search a team, player, or year (e.g. LAL, Jokić, 1996)…"
+              className="md-input w-full pl-8 text-[13px]"
+              style={{ fontSize: 13, padding: "10px 12px 10px 32px" }}
+            />
+          </div>
+        </div>
+      </div>
 
       {status === "loading" && (
-        <div className="mt-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
+        <div className="mt-12 text-center font-mono text-sm text-[var(--md-ink-muted)]">
           Loading teams…
         </div>
       )}
       {status === "error" && (
-        <div className="mt-8 text-center font-display text-sm text-[var(--md-coral)]">
+        <div className="mt-12 text-center font-mono text-sm text-[var(--md-coral)]">
           Couldn&rsquo;t load the league right now.
         </div>
       )}
       {status === "ok" && q.trim().length > 0 && stacks.length === 0 && !searching && (
-        <div className="mt-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
+        <div className="mt-12 text-center font-mono text-sm text-[var(--md-ink-muted)]">
           Nothing matches &ldquo;{q}&rdquo;.
         </div>
       )}
 
       {status === "ok" && stacks.length > 0 && (
-        <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 md:grid-cols-4">
-          {stacks.map((s) => (
-            <CardStack
-              key={s.team}
-              team={s.team}
-              eras={s.decades.length}
-              q={q}
-            />
-          ))}
-        </div>
+        <>
+          {/* Grid section header */}
+          <div className="mt-8 flex items-baseline justify-between border-b border-[var(--md-ink)] pb-2">
+            <span
+              className="font-archivo uppercase"
+              style={{ fontVariationSettings: '"wdth" 88', fontWeight: 800, fontSize: 20, letterSpacing: "-0.01em" }}
+            >
+              Browse by team
+            </span>
+            <span className="font-mono text-[12px] text-[var(--md-ink-muted)]">
+              {stacks.length} deck{stacks.length === 1 ? "" : "s"} · every franchise era we have on file
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {stacks.map((s) => (
+              <CardStack
+                key={s.team}
+                team={s.team}
+                eras={s.decades.length}
+                q={q}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       <Link
         href="/"
-        className="mx-auto mt-10 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+        className="font-cond mx-auto mt-10 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--md-blue)] underline"
       >
-        ← Back to 82-0+
+        ← Back to daily82
       </Link>
     </section>
   );
@@ -303,25 +344,53 @@ function CardStack({
       className="group relative mr-1.5 mt-1.5 block transition-transform hover:-translate-y-0.5"
       aria-label={`${team} — ${eras} era${eras === 1 ? "" : "s"}`}
     >
+      {/* Stacked layers behind the front card */}
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 -translate-y-1.5 translate-x-1.5 border-2 border-[var(--md-ink)] bg-[var(--md-paper-3)]"
-        style={{ boxShadow: "var(--md-shadow-sm)" }}
+        className="pointer-events-none absolute inset-0 -translate-y-2 translate-x-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-3)]"
       />
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 -translate-y-[3px] translate-x-[3px] border-2 border-[var(--md-ink)] bg-[var(--md-paper)]"
+        className="pointer-events-none absolute inset-0 -translate-y-1 translate-x-1 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)]"
       />
+      {/* Front card */}
       <div
-        className="relative flex flex-col gap-1 border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-4"
+        className="relative flex flex-col border-2 border-[var(--md-ink)] bg-[var(--md-white)]"
         style={{ boxShadow: "var(--md-shadow-md)" }}
       >
-        <div className="font-display text-2xl font-bold tracking-tight">
-          {team}
+        {/* Narrow ink top bar with "DECK" label and glyph */}
+        <div className="flex items-center justify-between border-b border-[var(--md-paper-3)] bg-[var(--md-white)] px-2 py-1">
+          <span className="font-cond text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--md-ink-muted)]">
+            Deck
+          </span>
+          <svg viewBox="0 0 12 12" width={10} height={10} aria-hidden style={{ color: "var(--md-ink-muted)" }}>
+            <rect x="1.5" y="0.5" width="9" height="11" rx="0" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            <line x1="3" y1="3.5" x2="9" y2="3.5" stroke="currentColor" strokeWidth="1.1" />
+            <line x1="3" y1="6" x2="9" y2="6" stroke="currentColor" strokeWidth="0.9" />
+            <line x1="3" y1="8.5" x2="7" y2="8.5" stroke="currentColor" strokeWidth="0.9" />
+          </svg>
         </div>
-        <div className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          {eras} era{eras === 1 ? "" : "s"}
+        {/* Main card body */}
+        <div className="flex flex-1 flex-col justify-between p-2.5 pb-3">
+          {/* Giant team code */}
+          <div
+            className="font-cover leading-none"
+            style={{ fontSize: "clamp(32px, 4.5vw, 48px)", letterSpacing: "-0.01em", lineHeight: 0.92 }}
+          >
+            {team}
+          </div>
+          {/* Footer: era count in flame */}
+          <div className="mt-3">
+            <div
+              className="font-cond text-[10px] font-bold uppercase tracking-[0.06em]"
+              style={{ color: "var(--md-coral)" }}
+            >
+              {eras} era{eras === 1 ? "" : "s"}
+            </div>
+          </div>
         </div>
+        {/* Bottom flame accent bar */}
+        <div className="h-[3px] w-full" style={{ background: "var(--md-coral)" }} />
       </div>
     </Link>
   );
@@ -347,55 +416,77 @@ function TeamStack({ team, query }: { team: string; query: string }) {
 
   return (
     <section className="relative z-10 mt-6 flex flex-col sm:mt-8">
-      <Link
-        href={cardsHref({ q: query })}
-        className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-      >
-        ← All teams
-      </Link>
-      <div className="mt-3 flex items-baseline gap-2">
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 font-cond text-[11px] font-semibold uppercase tracking-[0.16em]">
+        <Link
+          href={cardsHref({ q: query })}
+          className="text-[var(--md-blue)] underline"
+        >
+          ← Player cards
+        </Link>
+        <span className="text-[var(--md-ink-muted)]">/</span>
+        <span className="text-[var(--md-ink)]">{team}</span>
+      </div>
+
+      {/* Section header */}
+      <div className="mt-5 border-b-2 border-[var(--md-ink)] pb-3">
+        <h1
+          className="font-cover uppercase"
+          style={{ fontSize: "clamp(38px, 9vw, 64px)", lineHeight: 0.9, letterSpacing: "-0.01em" }}
+        >
           {team}
         </h1>
         {settled && eras.length > 0 && (
-          <span className="font-display text-base font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            {eras.length} era{eras.length === 1 ? "" : "s"}
-          </span>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="font-cond text-[12px] font-bold uppercase tracking-[0.16em] text-[var(--md-ink-muted)]">
+              {eras.length} era{eras.length === 1 ? "" : "s"}
+            </span>
+            <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
+              · pick an era to browse its roster
+            </span>
+          </div>
         )}
       </div>
-      <p className="mt-1 font-display text-xs text-[var(--md-ink-muted)]">
-        Pick an era to flip through its roster.
-      </p>
 
       {status === "loading" && (
-        <div className="mt-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
+        <div className="mt-10 text-center font-mono text-sm text-[var(--md-ink-muted)]">
           Loading eras…
         </div>
       )}
       {status === "error" && (
-        <div className="mt-8 text-center font-display text-sm text-[var(--md-coral)]">
+        <div className="mt-10 text-center font-mono text-sm text-[var(--md-coral)]">
           Couldn&rsquo;t load the league right now.
         </div>
       )}
       {settled && eras.length === 0 && (
-        <div className="mt-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
+        <div className="mt-10 text-center font-mono text-sm text-[var(--md-ink-muted)]">
           No eras on record for {team}
-          {query.trim() ? ` matching “${query}”` : ""}.
+          {query.trim() ? ` matching "${query}"` : ""}.
         </div>
       )}
 
       {settled && eras.length > 0 && (
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {eras.map((c) => (
             <Link
               key={c.decade}
               href={cardsHref({ team, decade: c.decade, q: query })}
-              className="md-card md-card--lift flex flex-col gap-1 p-4 text-left transition-transform hover:-translate-y-0.5"
+              className="group flex flex-col border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-4 text-left transition-transform hover:-translate-y-0.5"
+              style={{ boxShadow: "var(--md-shadow-md)" }}
             >
-              <div className="font-display text-2xl font-bold tracking-tight">
+              <div
+                className="font-cover leading-none"
+                style={{ fontSize: "clamp(28px, 6vw, 40px)", letterSpacing: "-0.01em" }}
+              >
                 {c.decade}s
               </div>
-              <div className="mt-1 font-display text-[11px] text-[var(--md-ink-muted)]">
+              <div className="mt-2 font-cond text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">
+                {team}
+              </div>
+              <div
+                className="font-cond mt-0.5 text-[11px] font-bold uppercase tracking-[0.06em]"
+                style={{ color: "var(--md-coral)" }}
+              >
                 {c.count} players
               </div>
             </Link>
@@ -418,23 +509,45 @@ function TeamRoster({
 }) {
   return (
     <section className="relative z-10 mt-6 flex flex-col sm:mt-8">
-      <Link
-        href={cardsHref({ team, q: query })}
-        className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-      >
-        ← {team} eras
-      </Link>
-      <div className="mt-3 flex items-baseline gap-2">
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 font-cond text-[11px] font-semibold uppercase tracking-[0.16em]">
+        <Link
+          href={cardsHref({ q: query })}
+          className="text-[var(--md-blue)] underline"
+        >
+          ← Player cards
+        </Link>
+        <span className="text-[var(--md-ink-muted)]">/</span>
+        <Link
+          href={cardsHref({ team, q: query })}
+          className="text-[var(--md-blue)] underline"
+        >
+          {team}
+        </Link>
+        <span className="text-[var(--md-ink-muted)]">/</span>
+        <span className="text-[var(--md-ink)]">{decade}s</span>
+      </div>
+
+      {/* Section header */}
+      <div className="mt-5 border-b-2 border-[var(--md-ink)] pb-3">
+        <h1
+          className="font-cover uppercase"
+          style={{ fontSize: "clamp(38px, 9vw, 64px)", lineHeight: 0.9, letterSpacing: "-0.01em" }}
+        >
           {team}
         </h1>
-        <span className="font-display text-base font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          {decade}s
-        </span>
+        <div className="mt-1 flex items-center gap-2">
+          <span
+            className="font-archivo uppercase"
+            style={{ fontVariationSettings: '"wdth" 88', fontWeight: 800, fontSize: 18, color: "var(--md-coral)" }}
+          >
+            {decade}s
+          </span>
+          <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
+            · tap any player to flip through their career card
+          </span>
+        </div>
       </div>
-      <p className="mt-1 font-display text-xs text-[var(--md-ink-muted)]">
-        Tap any player to flip through their career card.
-      </p>
 
       <div className="mt-4">
         <PlayerList team={team} decade={decade} mode="classic" browse />

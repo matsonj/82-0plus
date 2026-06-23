@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { regWinsFromSeedNet } from "@/lib/tier";
 import type {
   BracketResult,
   BracketTeam,
@@ -11,20 +10,30 @@ import type {
   GameBreakdown,
 } from "@/lib/types";
 
-// Round labels for the four playoff rounds (rounds[0..3]).
-const ROUND_LABEL = ["Round 1", "Conf. Semifinals", "Conf. Finals", "The Final"];
+// Derives a round label from the round's distance to the final (0 = final round).
+// Used by both the desktop tree and the mobile stacked view.
+function roundLabel(distFromFinal: number): string {
+  switch (distFromFinal) {
+    case 0: return "Final";
+    case 1: return "Semifinals";
+    case 2: return "Quarterfinals";
+    case 3: return "Round of 16";
+    case 4: return "Round of 32";
+    default: return `Round of ${Math.pow(2, distFromFinal + 1)}`;
+  }
+}
 
 function round1(n: number): string {
   const v = Math.round(n * 10) / 10;
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}`;
 }
 
-// A small seed chip — md-badge, square, conference-tinted via background.
+// A small seed chip — ink square, white label.
 function SeedBadge({ seed }: { seed?: number }) {
   if (seed === undefined) return null;
   return (
     <span
-      className="md-badge shrink-0 text-[10px] leading-none"
+      className="md-badge inline-flex items-center justify-center shrink-0 font-mono text-[10px] leading-none"
       style={{ width: 18, height: 18 }}
     >
       {seed}
@@ -32,14 +41,13 @@ function SeedBadge({ seed }: { seed?: number }) {
   );
 }
 
-// One signed line in a per-team breakdown. Buffs read teal, penalties coral —
-// mirrors ResultsPanel's Adj component.
+// One signed line in a per-team breakdown.
 function BreakLine({ label, value }: { label: string; value: number }) {
   const v = Math.round(value * 10) / 10;
   const color =
     v > 0 ? "var(--md-teal)" : v < 0 ? "var(--md-coral)" : "var(--md-ink-muted)";
   return (
-    <div className="flex items-baseline justify-between gap-2 font-display text-[11px]">
+    <div className="flex items-baseline justify-between gap-2 font-mono text-[11px]">
       <span className="whitespace-nowrap text-[var(--md-ink-muted)]">{label}</span>
       <span className="shrink-0" style={{ color }}>{round1(v)}</span>
     </div>
@@ -58,7 +66,7 @@ function TeamBreakdown({
   return (
     <div className="flex-1 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] p-2">
       <div
-        className={`mb-1 truncate font-display text-[11px] ${
+        className={`mb-1 truncate font-mono text-[11px] ${
           won ? "font-bold" : "text-[var(--md-ink-muted)]"
         }`}
       >
@@ -73,7 +81,7 @@ function TeamBreakdown({
       <BreakLine label="fatigue" value={-b.fatigue} />
       <BreakLine label="recovery" value={-b.recoveryCarry} />
       <BreakLine label="random" value={b.randomFactor} />
-      <div className="mt-1 flex items-baseline justify-between border-t-2 border-[var(--md-ink)] pt-0.5 font-display text-[11px] font-bold">
+      <div className="mt-1 flex items-baseline justify-between border-t-2 border-[var(--md-ink)] pt-0.5 font-mono text-[11px] font-bold">
         <span>adj</span>
         <span>{round1(b.adj)}</span>
       </div>
@@ -93,7 +101,7 @@ function GameRow({
   const ab = game.breakdown?.[game.awayId];
   return (
     <div className="border-t border-[var(--md-paper-3)] pt-2">
-      <div className="flex items-baseline justify-between gap-2 font-display text-[12px]">
+      <div className="flex items-baseline justify-between gap-2 font-mono text-[12px]">
         <span>
           <span className="text-[var(--md-ink-muted)]">G{game.gameNo}</span>{" "}
           <span className={homeWon ? "font-bold" : "text-[var(--md-ink-muted)]"}>
@@ -104,7 +112,7 @@ function GameRow({
             {nameOf(game.awayId)}
           </span>
         </span>
-        <span className="shrink-0 font-display text-[12px] font-bold tabular-nums">
+        <span className="shrink-0 font-mono text-[12px] font-bold tabular-nums">
           {game.homeScore}&ndash;{game.awayScore}
         </span>
       </div>
@@ -119,20 +127,14 @@ function GameRow({
 }
 
 // A stable identity for a drafted player, used to spot the same player across
-// multiple teams (everyone draws the same daily board, so overlap is expected).
-// Exported so other shared-board views (e.g. the daily leaderboard's roster diff)
-// build the same `compareKeys` set against the viewer's own roster.
+// multiple teams.
 export const playerKey = (p: BracketPlayer) => `${p.name}|${p.team}|${p.season}`;
 
-// One player row in a roster panel: name + subtle "team 'season", captain chip.
-// `shared` greys + italicises a player YOU also drafted (daily mode), so this
-// team's picks that differ from yours read bold at a glance.
+// One player row in a roster panel.
 function PlayerRow({ p, shared }: { p: BracketPlayer; shared?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 py-0.5 font-display text-[11px]">
+    <div className="flex items-baseline justify-between gap-2 py-0.5 font-mono text-[11px]">
       <span
-        // pr-1 on italic: `truncate` clips overflow, and the slanted final glyph
-        // (e.g. the "d" in Leonard/Reed) overhangs its box — the padding gives it room.
         className={`min-w-0 truncate ${shared ? "italic pr-1 text-[var(--md-ink-muted)]" : ""}`}
         title={shared ? "You drafted this player too" : undefined}
       >
@@ -143,18 +145,14 @@ function PlayerRow({ p, shared }: { p: BracketPlayer; shared?: boolean }) {
           </span>
         ) : null}
       </span>
-      <span className="shrink-0 text-[10px] text-[var(--md-orange-deep)]">
+      <span className="shrink-0 text-[10px] text-[var(--md-coral-deep)]">
         {p.team} &rsquo;{String(p.season).slice(2)}
       </span>
     </div>
   );
 }
 
-// The five starters (+ optional sixth man) as player rows, greying/italicising any
-// pick in `compareKeys` (a shared pick with the viewer). The bare list — no panel
-// chrome — so callers can drop it into any container. Exported for reuse by other
-// shared-board comparisons (the daily leaderboard's roster diff feeds it the same
-// `compareKeys` set built from the viewer's own roster).
+// The five starters (+ optional sixth man) as player rows. Exported for reuse.
 export function RosterList({
   roster,
   sixthMan,
@@ -162,8 +160,6 @@ export function RosterList({
 }: {
   roster: BracketPlayer[];
   sixthMan?: BracketPlayer;
-  // The viewer's roster keys to grey out here (a shared pick). Undefined for the
-  // viewer's own roster (or a non-shared view) → nothing greyed.
   compareKeys?: Set<string>;
 }) {
   const isShared = (p: BracketPlayer) => compareKeys?.has(playerKey(p)) ?? false;
@@ -175,7 +171,7 @@ export function RosterList({
       {sixthMan && (
         <>
           <div className="my-1 border-t-2 border-[var(--md-ink)]" />
-          <div className="font-display text-[8px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+          <div className="font-cond text-[8px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
             Sixth Man
           </div>
           <PlayerRow p={sixthMan} shared={isShared(sixthMan)} />
@@ -185,9 +181,7 @@ export function RosterList({
   );
 }
 
-// The expandable roster panel for one team in a bracket: the roster list wrapped in
-// the series-panel chrome. Degrades gracefully when a stored bracket predates the
-// roster fields.
+// The expandable roster panel for one team in a bracket.
 function RosterPanel({
   team,
   compareKeys,
@@ -197,7 +191,7 @@ function RosterPanel({
 }) {
   if (!team || team.roster === undefined) {
     return (
-      <div className="border-t-2 border-dashed border-[var(--md-ink)] bg-[var(--md-paper)] px-2 py-1.5 font-display text-[10px] italic text-[var(--md-ink-muted)]">
+      <div className="border-t-2 border-dashed border-[var(--md-ink)] bg-[var(--md-paper)] px-2 py-1.5 font-mono text-[10px] italic text-[var(--md-ink-muted)]">
         roster unavailable
       </div>
     );
@@ -213,68 +207,11 @@ function RosterPanel({
   );
 }
 
-// One side of a series card: seed badge + name (a roster toggle) + score,
-// winner bold / loser muted. The name button toggles `this` team's roster panel.
-function SeriesSide({
-  team,
-  name,
-  isWinner,
-  isYou,
-  score,
-  open,
-  onToggle,
-}: {
-  team: BracketTeam | undefined;
-  name: string;
-  isWinner: boolean;
-  isYou: boolean;
-  score: number;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <div
-      className={`flex items-center gap-2 px-2 py-1 ${
-        isWinner ? "" : "opacity-60"
-      }`}
-      // Highlight only YOUR row (not the whole card).
-      style={isYou ? { background: "var(--md-yellow)" } : undefined}
-    >
-      <SeedBadge seed={team?.seed} />
-      <button
-        type="button"
-        onClick={onToggle}
-        className={`min-w-0 flex-1 truncate text-left font-display text-[12px] sm:text-[13px] ${
-          isWinner ? "font-bold" : ""
-        }`}
-        style={{ cursor: "pointer" }}
-        aria-expanded={open}
-      >
-        {/* Ghost (AI filler) teams are prefixed with 🤖 so users can tell them
-            apart from real human submissions. Human teams render no emoji. */}
-        {team?.isGhost ? "🤖 " : ""}
-        {name}
-        {isYou ? " ★" : ""}
-        <span className="ml-1 text-[9px] text-[var(--md-ink-muted)]">
-          {open ? "▴" : "▾"}
-        </span>
-      </button>
-      {/* Regular-season record (projected from the team's net rating). */}
-      {team && (
-        <span className="shrink-0 font-display text-[10px] tabular-nums text-[var(--md-ink-muted)]">
-          {regWinsFromSeedNet(team.seedNet)}&ndash;{82 - regWinsFromSeedNet(team.seedNet)}
-        </span>
-      )}
-      <span
-        className={`w-4 shrink-0 text-right font-display text-[14px] tabular-nums ${
-          isWinner ? "font-bold" : "text-[var(--md-ink-muted)]"
-        }`}
-      >
-        {score}
-      </span>
-    </div>
-  );
-}
+// ─── SERIES CARD ────────────────────────────────────────────────────────────
+// Used in both the stacked mobile view and the horizontal desktop tree.
+// Two rows: winner (ink bg, red score) + loser (muted). Optional per-game
+// scores expandable via "see scores" toggle.
+// NOTE: scoreHi/scoreLo are game-win counts (not best-of-7 series wins).
 
 function SeriesCard({
   series,
@@ -283,6 +220,7 @@ function SeriesCard({
   youId,
   youKeys,
   isFinal = false,
+  compact = false,
 }: {
   series: SeriesResult;
   nameOf: (id: string) => string;
@@ -290,62 +228,131 @@ function SeriesCard({
   youId?: string;
   youKeys?: Set<string>;
   isFinal?: boolean;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  // Which team's roster panel is expanded (the name-click toggle), if any.
   const [rosterOpen, setRosterOpen] = useState<"hi" | "lo" | null>(null);
   const hiWon = series.winnerId === series.hiId;
   const involvesYou =
     youId !== undefined && (series.hiId === youId || series.loId === youId);
   const hiTeam = teamOf(series.hiId);
   const loTeam = teamOf(series.loId);
-  // Grey the viewer's shared picks on OPPONENTS only — never on the viewer's team.
   const compareFor = (id: string) => (id === youId ? undefined : youKeys);
   const toggleRoster = (side: "hi" | "lo") =>
     setRosterOpen((cur) => (cur === side ? null : side));
 
+  const hiIsYou = series.hiId === youId;
+  const loIsYou = series.loId === youId;
+
+  // Series record: "4-1 (W)" / "1-4 (L)".
+  // scoreHi and scoreLo hold game-win counts for each side.
+  const hiRecord = `${series.scoreHi}-${series.scoreLo} (${hiWon ? "W" : "L"})`;
+  const loRecord = `${series.scoreLo}-${series.scoreHi} (${hiWon ? "L" : "W"})`;
+
+  const py = compact ? "py-1.5" : "py-2";
+  const nameSize = compact ? "text-[11px]" : "text-[12px] sm:text-[13px]";
+  const scoreWidth = compact ? 64 : 72;
+
   return (
     <div
-      className={`md-card ${involvesYou || isFinal ? "md-card--lift" : ""}`}
-      style={{ background: "var(--md-white)" }}
+      className={`border-2 border-[var(--md-ink)]`}
+      style={{
+        background: "var(--md-white)",
+        boxShadow: involvesYou || isFinal ? "var(--md-shadow-sm)" : undefined,
+      }}
     >
-      {/* The matchup — higher seed on top. Each name toggles its roster panel. */}
-      <div className="divide-y divide-[var(--md-paper-3)]">
-        <SeriesSide
-          team={hiTeam}
-          name={nameOf(series.hiId)}
-          isWinner={hiWon}
-          isYou={series.hiId === youId}
-          score={series.scoreHi}
-          open={rosterOpen === "hi"}
-          onToggle={() => toggleRoster("hi")}
-        />
-        {rosterOpen === "hi" && (
-          <RosterPanel team={hiTeam} compareKeys={compareFor(series.hiId)} />
-        )}
-        <SeriesSide
-          team={loTeam}
-          name={nameOf(series.loId)}
-          isWinner={!hiWon}
-          isYou={series.loId === youId}
-          score={series.scoreLo}
-          open={rosterOpen === "lo"}
-          onToggle={() => toggleRoster("lo")}
-        />
-        {rosterOpen === "lo" && (
-          <RosterPanel team={loTeam} compareKeys={compareFor(series.loId)} />
-        )}
+      {/* Hi team row */}
+      <div
+        className={`flex items-center gap-2 border-b border-[var(--md-paper-3)] px-2 ${py}`}
+        style={hiIsYou ? { boxShadow: "inset 4px 0 0 var(--md-cobalt)" } : undefined}
+      >
+        <SeedBadge seed={hiTeam?.seed} />
+        <button
+          type="button"
+          onClick={() => toggleRoster("hi")}
+          className="min-w-0 flex-1 truncate text-left"
+          aria-expanded={rosterOpen === "hi"}
+          style={{ cursor: "pointer" }}
+        >
+          <span
+            className={`font-mono ${nameSize} uppercase tracking-[0.02em]`}
+            style={{
+              fontWeight: hiWon ? 700 : 400,
+              color: hiWon ? "var(--md-ink)" : "var(--md-ink-muted)",
+            }}
+          >
+            {hiTeam?.isGhost ? "🤖 " : ""}
+            {nameOf(series.hiId)}
+            {hiIsYou ? " ★" : ""}
+          </span>
+          <span className="ml-1 text-[9px] text-[var(--md-ink-muted)]">
+            {rosterOpen === "hi" ? "▴" : "▾"}
+          </span>
+        </button>
+        <span
+          className="shrink-0 font-mono text-[13px] font-bold tabular-nums"
+          style={{
+            color: hiWon ? "var(--md-coral)" : "var(--md-ink-muted)",
+            minWidth: scoreWidth,
+            textAlign: "right",
+          }}
+        >
+          {hiRecord}
+        </span>
       </div>
+      {rosterOpen === "hi" && (
+        <RosterPanel team={hiTeam} compareKeys={compareFor(series.hiId)} />
+      )}
 
-      {/* Series format + per-game scores. Click the footer to reveal each game's
-          box score. With NEXT_PUBLIC_DEBUG=1 the games also carry the per-game
-          "WHY" modifier breakdown (otherwise it's stripped server-side, so this
-          shows scores only in normal play). */}
+      {/* Lo team row */}
+      <div
+        className={`flex items-center gap-2 px-2 ${py}`}
+        style={loIsYou ? { boxShadow: "inset 4px 0 0 var(--md-cobalt)" } : undefined}
+      >
+        <SeedBadge seed={loTeam?.seed} />
+        <button
+          type="button"
+          onClick={() => toggleRoster("lo")}
+          className="min-w-0 flex-1 truncate text-left"
+          aria-expanded={rosterOpen === "lo"}
+          style={{ cursor: "pointer" }}
+        >
+          <span
+            className={`font-mono ${nameSize} uppercase tracking-[0.02em]`}
+            style={{
+              fontWeight: hiWon ? 400 : 700,
+              color: hiWon ? "var(--md-ink-muted)" : "var(--md-ink)",
+            }}
+          >
+            {loTeam?.isGhost ? "🤖 " : ""}
+            {nameOf(series.loId)}
+            {loIsYou ? " ★" : ""}
+          </span>
+          <span className="ml-1 text-[9px] text-[var(--md-ink-muted)]">
+            {rosterOpen === "lo" ? "▴" : "▾"}
+          </span>
+        </button>
+        <span
+          className="shrink-0 font-mono text-[13px] font-bold tabular-nums"
+          style={{
+            color: hiWon ? "var(--md-ink-muted)" : "var(--md-coral)",
+            minWidth: scoreWidth,
+            textAlign: "right",
+          }}
+        >
+          {loRecord}
+        </span>
+      </div>
+      {rosterOpen === "lo" && (
+        <RosterPanel team={loTeam} compareKeys={compareFor(series.loId)} />
+      )}
+
+      {/* Per-game scores toggle */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between border-t-2 border-[var(--md-ink)] px-2 py-1 text-left font-display text-[9px] uppercase tracking-wide text-[var(--md-ink-muted)]"
-        style={{ cursor: "pointer" }}
+        className="flex w-full items-center justify-between border-t-2 border-[var(--md-ink)] px-2 py-1 text-left font-mono text-[9px] uppercase tracking-wide text-[var(--md-ink-muted)]"
+        style={{ cursor: "pointer", background: "var(--md-paper-2)" }}
         aria-expanded={open}
       >
         <span>best of {series.bestOf}</span>
@@ -363,22 +370,19 @@ function SeriesCard({
   );
 }
 
-// A small conference tag shown on each non-final series so East/West stay
-// readable when both flow through the same responsive grid.
+// Conference tag shown on each non-final series in the mobile stacked view.
 function ConfTag({ conf }: { conf?: string }) {
   if (!conf) return null;
   return (
     <span
-      className={`md-capsule ${conf === "West" ? "md-capsule--sky" : "md-capsule--coral"} px-1.5 py-0.5 text-[8px]`}
+      className={`md-capsule ${conf === "West" ? "md-capsule--violet" : "md-capsule--coral"} px-1.5 py-0.5 text-[8px]`}
     >
       {conf}
     </span>
   );
 }
 
-// One full round, rendered as its own bounded section: a centered capsule
-// header with a dashed divider above (mirrors the Final treatment), then the
-// round's series in a responsive grid. East & West series flow together.
+// One full round section — used in the MOBILE stacked layout only.
 function RoundSection({
   label,
   series,
@@ -396,8 +400,17 @@ function RoundSection({
 }) {
   if (series.length === 0) return null;
   return (
-    <div className="flex flex-col items-center gap-3 border-t-2 border-dashed border-[var(--md-paper-3)] pt-5">
-      <div className="md-capsule">{label}</div>
+    <div className="flex flex-col gap-3">
+      {/* Round header: Oswald caps label + hairline rule */}
+      <div className="flex items-center gap-3">
+        <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
+          {label}
+        </span>
+        <div className="flex-1 border-t border-[var(--md-paper-3)]" />
+        <span className="font-mono text-[10px] text-[var(--md-ink-muted)]">
+          {series.length} game{series.length !== 1 ? "s" : ""}
+        </span>
+      </div>
       <div className="grid w-full gap-3 sm:grid-cols-2">
         {series.map((s, i) => {
           const conf = teamOf(s.hiId)?.conference;
@@ -419,52 +432,359 @@ function RoundSection({
   );
 }
 
-export function BracketView({
+// ─── HORIZONTAL TREE (desktop lg:+) ──────────────────────────────────────────
+//
+// Layout: side-by-side columns, one per bracket round + a champion column.
+// Within each column, matchup slots are distributed with equal flex spacing so
+// each slot vertically centers between its two feeder slots in the prior column.
+//
+// Connectors: right-side horizontal arm → vertical bar → horizontal arm into
+// next round, drawn with absolutely-positioned ink hairline divs.
+//
+// The whole tree scrolls horizontally inside its overflow-x:auto wrapper if
+// the viewport is too narrow (e.g. small desktop < 900px).
+
+// Renders a single matchup slot in the horizontal tree. Each slot occupies an
+// equal share of the column height via flex-grow. The card sits in the vertical
+// center; the remaining space is split above/below, which is what creates the
+// "pairs feeding upward" geometry without any hardcoded pixel math.
+function TreeSlot({
+  series,
+  nameOf,
+  teamOf,
+  youId,
+  youKeys,
+  isFinal,
+  // Whether to draw connector lines on the right side of this slot.
+  // true for all rounds except the final (which feeds into the champion box).
+  drawConnectorRight,
+  // Whether to draw the incoming connector on the left side.
+  // false for the very first column (no feeder).
+  drawConnectorLeft,
+  // This slot is the TOP of a pair (affects which half of the vertical
+  // connector spans downward vs upward).
+  isTopOfPair,
+}: {
+  series: SeriesResult;
+  nameOf: (id: string) => string;
+  teamOf: (id: string) => BracketTeam | undefined;
+  youId?: string;
+  youKeys?: Set<string>;
+  isFinal?: boolean;
+  drawConnectorRight: boolean;
+  drawConnectorLeft: boolean;
+  isTopOfPair: boolean;
+}) {
+  return (
+    // Each slot: flex-1 so all slots share column height equally.
+    // relative so the connector pseudo-lines can be absolutely positioned.
+    <div className="relative flex flex-1 flex-col items-stretch justify-center">
+      {/* Left incoming connector: horizontal arm from midpoint of the gap between
+          two feeder cards to the left edge of this card.
+          Only rendered on rounds > 0. The arm is a 1px horizontal line at 50%
+          of the slot height, running from left=0 to the card left edge (24px). */}
+      {drawConnectorLeft && (
+        <div
+          className="pointer-events-none absolute"
+          style={{
+            top: "50%",
+            left: 0,
+            width: 24,
+            height: 1,
+            background: "var(--md-ink)",
+            transform: "translateY(-0.5px)",
+          }}
+        />
+      )}
+
+      {/* The series card itself, indented by connector arm width on left. */}
+      <div style={{ marginLeft: drawConnectorLeft ? 24 : 0, marginRight: drawConnectorRight ? 24 : 0 }}>
+        <SeriesCard
+          series={series}
+          nameOf={nameOf}
+          teamOf={teamOf}
+          youId={youId}
+          youKeys={youKeys}
+          isFinal={isFinal}
+          compact
+        />
+      </div>
+
+      {/* Right outgoing connector: horizontal arm + vertical bar.
+          The arm runs from the card right edge to the column right edge.
+          The vertical bar covers the top half (isTopOfPair) or bottom half
+          so the two slots in a pair share a vertical spine at column-right. */}
+      {drawConnectorRight && (
+        <>
+          {/* Horizontal arm to right */}
+          <div
+            className="pointer-events-none absolute"
+            style={{
+              top: "50%",
+              right: 0,
+              width: 24,
+              height: 1,
+              background: "var(--md-ink)",
+              transform: "translateY(-0.5px)",
+            }}
+          />
+          {/* Vertical bar: spans from this slot's center to the pair midpoint.
+              Top slot: bar goes DOWN from center to 100% (bottom of slot).
+              Bottom slot: bar goes UP from 0% to center. */}
+          <div
+            className="pointer-events-none absolute"
+            style={{
+              right: 0,
+              width: 1,
+              background: "var(--md-ink)",
+              top: isTopOfPair ? "50%" : 0,
+              bottom: isTopOfPair ? 0 : "50%",
+            }}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+// One column in the horizontal tree. The column header (QUARTERFINALS etc.) sits
+// above, then a flex column of TreeSlots fills the remaining height.
+function TreeColumn({
+  label,
+  isFinalLabel,
+  rounds,
+  nameOf,
+  teamOf,
+  youId,
+  youKeys,
+  isFirst,
+  isLast,
+  width,
+}: {
+  label: string;
+  isFinalLabel?: boolean;
+  rounds: SeriesResult[];
+  nameOf: (id: string) => string;
+  teamOf: (id: string) => BracketTeam | undefined;
+  youId?: string;
+  youKeys?: Set<string>;
+  isFirst: boolean;
+  isLast: boolean;
+  width: number;
+}) {
+  return (
+    <div className="flex flex-col" style={{ width, flexShrink: 0 }}>
+      {/* Column header */}
+      <div className="mb-3 flex items-center gap-2">
+        <span
+          className="font-cond text-[11px] font-semibold uppercase tracking-[0.16em]"
+          style={{ color: isFinalLabel ? "var(--md-coral)" : "var(--md-ink-muted)" }}
+        >
+          {label}
+        </span>
+      </div>
+      {/* Matchup slots — each gets equal flex share of the column */}
+      <div className="flex flex-1 flex-col">
+        {rounds.map((s, i) => (
+          <TreeSlot
+            key={`${s.hiId}-${s.loId}-${i}`}
+            series={s}
+            nameOf={nameOf}
+            teamOf={teamOf}
+            youId={youId}
+            youKeys={youKeys}
+            isFinal={isLast}
+            drawConnectorLeft={!isFirst}
+            drawConnectorRight={!isLast}
+            // Within each round, pairs are indexed: slot 0 is top-of-pair 0,
+            // slot 1 is bottom-of-pair 0, slot 2 is top-of-pair 1, etc.
+            isTopOfPair={i % 2 === 0}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// The champion box: press-yellow card with trophy + name + record.
+// Sits in the rightmost column, vertically centered in the full bracket height.
+function ChampionColumn({
+  championName,
+  championId,
+  teamOf,
+  bracket,
+}: {
+  championName: string;
+  championId: string;
+  teamOf: (id: string) => BracketTeam | undefined;
+  bracket: BracketResult;
+}) {
+  // Derive W-L across all rounds by walking every series for this champion.
+  const won = bracket.rounds.reduce((acc, round) => {
+    return acc + round.filter((s) => s.winnerId === championId).length;
+  }, 0);
+  const lost = bracket.rounds.reduce((acc, round) => {
+    return acc + round.filter((s) => s.loId === championId && s.winnerId !== championId).length;
+  }, 0);
+  const record = lost === 0 ? `${won}-0 · Undefeated` : `${won}-${lost} · Ran the table`;
+  const isGhost = teamOf(championId)?.isGhost;
+
+  return (
+    // Full-height flex column with header + centered champion box
+    <div className="flex flex-col" style={{ width: 140, flexShrink: 0 }}>
+      {/* Column header */}
+      <div className="mb-3">
+        <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--md-coral)]">
+          Champion
+        </span>
+      </div>
+      {/* Champion card — press-yellow, ink border, vertically centered */}
+      <div className="flex flex-1 flex-col items-stretch justify-center">
+        {/* Left connecting arm from Final column */}
+        <div className="relative flex flex-col">
+          <div
+            className="pointer-events-none absolute"
+            style={{
+              top: "50%",
+              left: 0,
+              width: 24,
+              height: 1,
+              background: "var(--md-ink)",
+              transform: "translateY(-0.5px)",
+            }}
+          />
+          <div
+            className="flex flex-col gap-2 px-3 py-3"
+            style={{
+              marginLeft: 24,
+              background: "var(--md-yellow)",
+              border: "2px solid var(--md-ink)",
+              boxShadow: "var(--md-shadow-sm)",
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[18px] leading-none">♛</span>
+              <span className="font-cond text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
+                Champion
+              </span>
+            </div>
+            <div
+              className="font-archivo leading-tight text-[var(--md-ink)]"
+              style={{ fontSize: 15, fontWeight: 800, fontVariationSettings: '"wdth" 100', wordBreak: "break-word" }}
+            >
+              {isGhost ? "🤖 " : ""}
+              {championName}
+            </div>
+            <div className="font-mono text-[10px] text-[var(--md-ink)]">{record}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── HORIZONTAL TREE WRAPPER ─────────────────────────────────────────────────
+// Renders all rounds as side-by-side columns. The entire tree sits inside an
+// overflow-x:auto container so it scrolls horizontally on small desktops
+// without breaking the page layout.
+
+function HorizontalBracketTree({
   bracket,
   youId,
-  sharedBoard = false,
+  youKeys,
 }: {
   bracket: BracketResult;
   youId?: string;
-  // SHARED-board fields (daily AND private tournaments) all draft from the same
-  // pool, so roster overlap is expected. When this is set AND we know which team
-  // is "you", an OPPONENT's players that you ALSO drafted render greyed/italic — so
-  // the picks that team made *differently* from you (the bold ones) stand out. Your
-  // own team is never greyed. (Off for classic/ranked, where boards are unique.)
-  sharedBoard?: boolean;
+  youKeys?: Set<string>;
 }) {
   const byId = new Map(bracket.teams.map((t) => [t.id, t]));
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
   const teamOf = (id: string) => byId.get(id);
 
-  // The viewer's own roster keys — the set we compare opponents against. Only for
-  // a shared board with a known "you"; otherwise undefined → nothing is greyed.
-  const youKeys = (() => {
-    if (!sharedBoard || !youId) return undefined;
-    const you = byId.get(youId);
-    if (!you) return undefined;
-    const roster = [...(you.roster ?? []), ...(you.sixthMan ? [you.sixthMan] : [])];
-    return new Set(roster.map(playerKey));
-  })();
+  const rounds = bracket.rounds;
+  const numRounds = rounds.length;
 
-  // rounds: [R1 (8), Semis (4), Conf Finals (2), Final (1)]. We render each
-  // round as its own stacked section, top to bottom; the Final is its own
-  // narrower centered section with the champion capsule beneath.
+  // Column label: derived from distance to final (last round = 0).
+  function colLabel(i: number): string {
+    return roundLabel(numRounds - 1 - i);
+  }
+
+  // Column widths: all rounds get 220px, last round (Final) gets 200px.
+  // These are minimum widths; the tree may be wider than the viewport.
+  const colWidth = (i: number) => (i === numRounds - 1 ? 200 : 220);
+
+  // Minimum tree height: enough to show all QF matchups without crowding.
+  // Each matchup card is ~56px; we want at least 32px gap between cards.
+  const qfCount = rounds[0]?.length ?? 1;
+  const minTreeHeight = Math.max(320, qfCount * 88);
+
+  return (
+    <div className="overflow-x-auto">
+      <div
+        className="flex gap-0 items-stretch"
+        style={{ minWidth: numRounds * 220 + 140, minHeight: minTreeHeight }}
+      >
+        {rounds.map((series, i) => (
+          <TreeColumn
+            key={i}
+            label={colLabel(i)}
+            isFinalLabel={i === numRounds - 1}
+            rounds={series}
+            nameOf={nameOf}
+            teamOf={teamOf}
+            youId={youId}
+            youKeys={youKeys}
+            isFirst={i === 0}
+            isLast={i === numRounds - 1}
+            width={colWidth(i)}
+          />
+        ))}
+        {/* Champion box */}
+        <ChampionColumn
+          championName={bracket.championName}
+          championId={bracket.championId}
+          teamOf={teamOf}
+          bracket={bracket}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── MOBILE STACKED VIEW ────────────────────────────────────────────────────
+// Unchanged from the original: vertical list of round sections.
+
+function MobileStackedBracket({
+  bracket,
+  youId,
+  youKeys,
+}: {
+  bracket: BracketResult;
+  youId?: string;
+  youKeys?: Set<string>;
+}) {
+  const byId = new Map(bracket.teams.map((t) => [t.id, t]));
+  const nameOf = (id: string) => byId.get(id)?.name ?? id;
+  const teamOf = (id: string) => byId.get(id);
+
   const lastIdx = bracket.rounds.length - 1;
 
   return (
     <div className="flex flex-col gap-6">
       {bracket.rounds.map((series, r) => {
-        // The Final gets bespoke centered/narrow treatment + champion capsule.
         if (r === lastIdx) {
           if (series.length === 0) return null;
           return (
-            <div
-              key="final"
-              className="flex flex-col items-center gap-3 border-t-2 border-dashed border-[var(--md-paper-3)] pt-5"
-            >
-              <div className="md-capsule md-capsule--coral">
-                {ROUND_LABEL[3]}
+            <div key="final" className="flex flex-col gap-3">
+              {/* Final header */}
+              <div className="flex items-center gap-3">
+                <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--md-coral)]">
+                  {roundLabel(0)}
+                </span>
+                <div className="flex-1 border-t border-[var(--md-paper-3)]" />
+                <span className="font-mono text-[10px] text-[var(--md-ink-muted)]">
+                  1 game
+                </span>
               </div>
               <div className="w-full max-w-sm">
                 {series.map((s, i) => (
@@ -479,11 +799,24 @@ export function BracketView({
                   />
                 ))}
               </div>
-              <div className="md-capsule md-capsule--teal">
-                {/* championName is a bare string here, so look the champion team
-                    up by championId to recover its isGhost flag and prefix 🤖. */}
-                🏆 {teamOf(bracket.championId)?.isGhost ? "🤖 " : ""}
-                {bracket.championName}
+              {/* Champion capsule */}
+              <div
+                className="flex items-center gap-3 px-4 py-3 font-cond"
+                style={{ background: "var(--md-yellow)", border: "2px solid var(--md-ink)", boxShadow: "var(--md-shadow-md)" }}
+              >
+                <span className="text-[20px]">♛</span>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
+                    Champion
+                  </div>
+                  <div
+                    className="font-archivo leading-tight"
+                    style={{ fontSize: 18, fontWeight: 800, fontVariationSettings: '"wdth" 100', color: "var(--md-ink)" }}
+                  >
+                    {teamOf(bracket.championId)?.isGhost ? "🤖 " : ""}
+                    {bracket.championName}
+                  </div>
+                </div>
               </div>
             </div>
           );
@@ -491,7 +824,7 @@ export function BracketView({
         return (
           <RoundSection
             key={r}
-            label={ROUND_LABEL[r] ?? `Round ${r + 1}`}
+            label={roundLabel(lastIdx - r)}
             series={series}
             nameOf={nameOf}
             teamOf={teamOf}
@@ -501,5 +834,42 @@ export function BracketView({
         );
       })}
     </div>
+  );
+}
+
+// ─── PUBLIC EXPORT ───────────────────────────────────────────────────────────
+// Renders the horizontal tree on lg:+ and the stacked view on mobile.
+// Props are unchanged from the original component.
+
+export function BracketView({
+  bracket,
+  youId,
+  sharedBoard = false,
+}: {
+  bracket: BracketResult;
+  youId?: string;
+  sharedBoard?: boolean;
+}) {
+  const byId = new Map(bracket.teams.map((t) => [t.id, t]));
+
+  const youKeys = (() => {
+    if (!sharedBoard || !youId) return undefined;
+    const you = byId.get(youId);
+    if (!you) return undefined;
+    const roster = [...(you.roster ?? []), ...(you.sixthMan ? [you.sixthMan] : [])];
+    return new Set(roster.map(playerKey));
+  })();
+
+  return (
+    <>
+      {/* Mobile: stacked rounds (hidden on lg+) */}
+      <div className="lg:hidden">
+        <MobileStackedBracket bracket={bracket} youId={youId} youKeys={youKeys} />
+      </div>
+      {/* Desktop: horizontal tree (hidden below lg) */}
+      <div className="hidden lg:block">
+        <HorizontalBracketTree bracket={bracket} youId={youId} youKeys={youKeys} />
+      </div>
+    </>
   );
 }

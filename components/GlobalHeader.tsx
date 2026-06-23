@@ -49,11 +49,24 @@ const CHANGELOG_KEY = `changelog-seen:${CHANGELOG.id}`;
 // The shared site header. Logo + an optional contextual right slot + a
 // private-tournament indicator. `right` is for genuinely useful per-page context
 // (e.g. the live Classic/Ranked badge while drafting) — not decorative pills.
-export function GlobalHeader({ right }: { right?: React.ReactNode }) {
+export function GlobalHeader({
+  right,
+  onSignIn,
+  onHowToPlay,
+}: {
+  right?: React.ReactNode;
+  // Home wires these to its local modals; other pages omit them and the
+  // masthead falls back to a plain Home link (see below).
+  onSignIn?: () => void;
+  onHowToPlay?: () => void;
+}) {
   const pathname = usePathname();
   // Don't link to "My Teams" from the My Teams page itself.
   const onMyTeams = pathname === "/tournament";
   const [notif, setNotif] = useState<NotifResponse | null>(null);
+  // The signed-in identity drives the masthead's Sign In vs. name chip. Read
+  // client-side only (localStorage) so the first render stays hydration-safe.
+  const [user, setUser] = useState<{ username: string; pin: string } | null>(null);
   const [open, setOpen] = useState(false);
   // Changelog: `unread` pops the bell + survives reloads (localStorage); `viewing`
   // keeps the note rendered for the session in which it was first opened, so it
@@ -65,6 +78,7 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
 
   const poll = useCallback(async () => {
     const user = getSavedUser();
+    setUser(user);
     if (!user) {
       setNotif(null);
       return;
@@ -141,52 +155,89 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
   // The bell pops for private activity OR an unseen changelog.
   const pop = any || changelogUnread;
 
+  // Shared masthead nav-link treatment (Oswald caps on ink).
+  const navCls =
+    "font-cond text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--md-paper)] transition-colors hover:text-[var(--md-coral)]";
+
   return (
-    <header className="relative z-20 flex items-center justify-between py-4 sm:py-5">
-      <Link href="/" className="flex items-center gap-2">
-        <span className="text-2xl" aria-hidden>
-          🦆
-        </span>
-        <span className="font-display text-lg font-bold tracking-tight">
-          82-0<span className="text-[var(--md-orange)]">+</span>
-        </span>
-      </Link>
-
-      <div className="flex items-center gap-3">
-        {right}
-        {!onMyTeams && (
-          <Link
-            href="/tournament"
-            className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+    // Full-bleed ink masthead: breaks out of the page container to the viewport
+    // edges, then re-centers its content to align with the page below.
+    <header
+      className="relative z-30 mb-6 bg-[var(--md-ink)] text-[var(--md-paper)] sm:mb-8"
+      style={{ width: "100vw", marginLeft: "calc(50% - 50vw)" }}
+    >
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+        {/* Wordmark lockup: DAILY (ink) + 82 (flame), cream box, flame offset. */}
+        <Link href="/" aria-label="daily82 home" className="flex shrink-0">
+          <span
+            className="flex border-[2.5px] border-[var(--md-paper)]"
+            style={{ boxShadow: "5px 5px 0 0 var(--md-coral)" }}
           >
-            My Teams
-          </Link>
-        )}
-
-        {/* The indicator always renders. State is carried by the glyph's color,
-            not a separate dot: a calm muted asterisk when there's nothing to
-            attend to, a bold coral asterisk that pops when there is. A quiet
-            bordered icon button — not a filled pill — so the header stays calm. */}
-        <div className="relative">
-          <button
-            type="button"
-            aria-label={pop ? "Alerts (new activity)" : "Alerts"}
-            onClick={() => (open ? closePanel() : openPanel())}
-            className="relative flex h-8 w-8 items-center justify-center border-2 border-[var(--md-ink)] bg-[var(--md-white)] transition-transform hover:-translate-y-0.5"
-            style={{ cursor: "pointer" }}
-          >
-            <span
-              aria-hidden
-              className="font-display leading-none transition-colors"
-              style={{
-                fontSize: 18,
-                fontWeight: pop ? 700 : 400,
-                color: pop ? "var(--md-coral)" : "var(--md-ink-muted)",
-              }}
-            >
-              ✶
+            <span className="flex items-center bg-[var(--md-ink)] py-[5px] pl-[14px] pr-[11px]">
+              <span
+                className="font-archivo leading-none text-[var(--md-paper)]"
+                style={{ fontSize: 26, fontWeight: 900, fontVariationSettings: '"wdth" 125', letterSpacing: "-0.01em" }}
+              >
+                DAILY
+              </span>
             </span>
-          </button>
+            <span className="flex items-center bg-[var(--md-coral)] py-[5px] pl-[11px] pr-[12px]">
+              <span
+                className="font-archivo leading-none text-[var(--md-paper)]"
+                style={{ fontSize: 26, fontWeight: 900, fontVariationSettings: '"wdth" 125', letterSpacing: "-0.02em" }}
+              >
+                82
+              </span>
+            </span>
+          </span>
+        </Link>
+
+        <div className="flex items-center gap-3 sm:gap-6">
+          <nav className="hidden items-center gap-6 sm:flex">
+            {!onMyTeams && (
+              <Link href="/tournament" className={navCls}>
+                My Teams
+              </Link>
+            )}
+            {onHowToPlay ? (
+              <button type="button" onClick={onHowToPlay} className={navCls} style={{ cursor: "pointer" }}>
+                How to Play
+              </button>
+            ) : (
+              <Link href="/?howto=1" className={navCls}>
+                How to Play
+              </Link>
+            )}
+            <Link href="/cards" className={navCls}>
+              Player Cards
+            </Link>
+          </nav>
+
+          {right}
+
+          <span className="hidden h-6 w-px bg-[#3a322a] sm:block" />
+
+          {/* Alerts: a press-yellow star at rest, flame when there's activity. */}
+          <div className="relative">
+            <button
+              type="button"
+              aria-label={pop ? "Alerts (new activity)" : "Alerts"}
+              onClick={() => (open ? closePanel() : openPanel())}
+              className="relative flex h-10 w-10 items-center justify-center border-2 border-[#3a322a] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5"
+              style={{ cursor: "pointer" }}
+            >
+              <span
+                aria-hidden
+                className="font-display leading-none transition-colors"
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: pop ? "var(--md-coral)" : "var(--md-yellow)",
+                }}
+              >
+                ✶
+              </span>
+            </button>
 
           {open && (
             <div
@@ -245,6 +296,33 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
                 )}
               </div>
             </div>
+          )}
+          </div>
+
+          {user ? (
+            <Link
+              href="/tournament"
+              title="Your teams"
+              className="max-w-[140px] truncate border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-3 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)]"
+            >
+              {user.username}
+            </Link>
+          ) : onSignIn ? (
+            <button
+              type="button"
+              onClick={onSignIn}
+              style={{ cursor: "pointer" }}
+              className="border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-4 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)]"
+            >
+              Sign In
+            </button>
+          ) : (
+            <Link
+              href="/"
+              className="border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-4 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)]"
+            >
+              Sign In
+            </Link>
           )}
         </div>
       </div>

@@ -34,12 +34,10 @@ interface LeaderboardData {
 }
 
 /**
- * The daily leaderboard modal: top players + the viewer's own neighbourhood, opened
- * from the menu's rank line. Tapping a row expands that team's roster and — since
- * everyone drafts the same five rolls — greys/italicises the picks you BOTH made
- * (reusing BracketView's shared-board treatment), so the picks that team made
- * differently from you read bold. One fetch carries every shown row's roster, so
- * expanding is instant.
+ * The daily leaderboard modal: top players + the viewer's own neighbourhood.
+ * DATA LEGIBILITY IS SACRED: ink on --md-white, Space Mono tabular-nums,
+ * fixed-width right-aligned column lanes, zebra via --md-paper-2.
+ * Your-own-row pops flame. Champion = press-yellow.
  */
 export function DailyLeaderboard({
   date,
@@ -52,8 +50,6 @@ export function DailyLeaderboard({
 }) {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [failed, setFailed] = useState(false);
-  // Keyed by the row's account id, not rank — ties share a rank, so rank would
-  // expand/collapse every tied row at once.
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,7 +73,7 @@ export function DailyLeaderboard({
     };
   }, [date, user.username, user.pin]);
 
-  // Your roster keys — the set every OTHER team's picks are greyed against.
+  // Your roster keys — every OTHER team's picks are greyed against this.
   const myKeys = useMemo(() => {
     const all = data ? [...data.top, ...data.around] : [];
     const me = all.find((e) => e.isYou);
@@ -87,25 +83,34 @@ export function DailyLeaderboard({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(56,56,56,0.55)" }}
+      style={{ background: "rgba(21,17,14,0.7)" }}
       onClick={onClose}
     >
       <div
-        className="md-card md-card--lift flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden p-0"
+        className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden border-2 border-[var(--md-ink)]"
+        style={{ background: "var(--md-white)", boxShadow: "var(--md-shadow-md)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b-2 border-[var(--md-ink)] px-5 py-4">
+        {/* Header — ink masthead band */}
+        <div
+          className="flex items-start justify-between gap-3 px-5 py-4"
+          style={{ background: "var(--md-ink)", borderBottom: "2px solid var(--md-coral)" }}
+        >
           <div className="flex flex-col gap-1">
-            <h2 className="font-display text-xl font-bold">Daily Leaderboard</h2>
-            <div className="text-[13px] text-[var(--md-ink-muted)]">
+            <h2
+              className="font-archivo leading-tight"
+              style={{ fontSize: 20, fontWeight: 800, fontVariationSettings: '"wdth" 88', color: "var(--md-white)" }}
+            >
+              Daily Leaderboard
+            </h2>
+            <div className="font-mono text-[12px] tabular-nums" style={{ color: "var(--md-paper-3)" }}>
               {label(date)}
               {data?.youRank != null && (
                 <>
                   {" "}
                   · you&rsquo;re{" "}
-                  <strong className="text-[var(--md-ink)]">#{data.youRank}</strong>{" "}
-                  of {data.total}
+                  <strong style={{ color: "var(--md-yellow)" }}>#{data.youRank}</strong>{" "}
+                  <span>of {data.total}</span>
                 </>
               )}
             </div>
@@ -114,20 +119,21 @@ export function DailyLeaderboard({
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="font-display text-lg text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
+            className="font-cond text-lg font-bold transition-colors hover:text-[var(--md-coral)]"
+            style={{ color: "var(--md-paper-3)" }}
           >
             ✕
           </button>
         </div>
 
-        {/* Body */}
-        <div className="md-scroll flex-1 overflow-auto">
+        {/* Body — SACRED data table */}
+        <div className="md-scroll flex-1 overflow-auto" style={{ background: "var(--md-white)" }}>
           {failed ? (
-            <div className="px-5 py-8 text-center font-display text-[13px] text-[var(--md-ink-muted)]">
+            <div className="px-5 py-8 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
               Couldn&rsquo;t load the leaderboard.
             </div>
           ) : !data ? (
-            <div className="px-5 py-8 text-center font-display text-[13px] text-[var(--md-ink-muted)]">
+            <div className="px-5 py-8 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
               Loading…
             </div>
           ) : (
@@ -145,7 +151,10 @@ export function DailyLeaderboard({
                 />
               ))}
               {data.around.length > 0 && (
-                <div className="flex items-center justify-center bg-[var(--md-gray-100)] py-1.5 font-display text-[14px] font-bold tracking-[0.2em] text-[var(--md-paper-3)]">
+                <div
+                  className="flex items-center justify-center py-1.5 font-mono text-[14px] font-bold tracking-[0.2em]"
+                  style={{ background: "var(--md-paper-2)", color: "var(--md-paper-3)" }}
+                >
                   · · ·
                 </div>
               )}
@@ -165,14 +174,17 @@ export function DailyLeaderboard({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t-2 border-[var(--md-ink)] px-5 py-3">
-          <span className="font-display text-[11px] italic text-[var(--md-ink-muted)]">
+        <div
+          className="flex items-center justify-between border-t-2 border-[var(--md-ink)] px-5 py-3"
+          style={{ background: "var(--md-paper-2)" }}
+        >
+          <span className="font-mono text-[11px] italic text-[var(--md-ink-muted)]">
             tap a row · italic = your pick too
           </span>
           <button
             type="button"
             onClick={onClose}
-            className="font-display text-[14px] font-bold text-[var(--md-ink-muted)] hover:text-[var(--md-ink)]"
+            className="font-cond text-[13px] font-semibold uppercase tracking-[0.1em] text-[var(--md-ink-muted)] hover:text-[var(--md-ink)]"
           >
             Close
           </button>
@@ -186,8 +198,8 @@ function sign(n: number): string {
   return `${n >= 0 ? "+" : ""}${Math.round(n)}`;
 }
 
-// One leaderboard row (or the column header). A real row is a button that toggles
-// its roster panel; the header reuses the same lanes so columns line up.
+// One leaderboard row (or the column header). Fixed-width right-aligned column
+// lanes — DATA LEGIBILITY IS SACRED.
 function Row({
   entry,
   header,
@@ -203,59 +215,101 @@ function Row({
 }) {
   if (header) {
     return (
-      <div className="flex items-center gap-3 border-b border-[var(--md-paper-3)] px-5 py-2 font-display text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">
-        <span className="w-7 shrink-0">#</span>
-        <span className="flex-1">Player</span>
-        <span className="w-14 shrink-0 text-right">W–L</span>
-        <span className="w-10 shrink-0 text-right">Net</span>
+      <div
+        className="flex items-center gap-2 border-b-2 border-[var(--md-ink)] px-4 py-2"
+        style={{ background: "var(--md-paper-2)" }}
+      >
+        <span className="w-7 shrink-0 font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">#</span>
+        <span className="flex-1 font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">Player</span>
+        <span className="w-14 shrink-0 text-right font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">W–L</span>
+        <span className="w-10 shrink-0 text-right font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">Net</span>
         <span className="w-5 shrink-0" />
       </div>
     );
   }
   if (!entry) return null;
+
+  // Semantic row background: your row = flame; zebra = paper-2; default = white.
+  const rowBg = entry.isYou
+    ? "var(--md-coral)"
+    : undefined;
+  const rowColor = entry.isYou ? "var(--md-white)" : undefined;
+
   return (
     <div
       className="border-b border-[var(--md-paper-3)]"
-      style={entry.isYou ? { background: "var(--md-yellow)" } : undefined}
+      style={entry.isYou ? { background: rowBg } : undefined}
     >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-5 py-2.5 text-left"
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-left"
+        style={entry.isYou ? undefined : undefined}
       >
-        <span className="w-7 shrink-0 font-display text-[14px] font-bold tabular-nums text-[var(--md-ink-muted)]">
+        {/* Rank — fixed width */}
+        <span
+          className="w-7 shrink-0 font-mono text-[13px] font-bold tabular-nums"
+          style={{ color: entry.isYou ? "var(--md-white)" : "var(--md-ink-muted)" }}
+        >
           {entry.rank}
         </span>
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate font-display text-[14px] font-bold">
+
+        {/* Name — fills remaining space */}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span
+            className="truncate font-mono text-[13px] font-bold uppercase tracking-[0.02em]"
+            style={{ color: entry.isYou ? "var(--md-white)" : "var(--md-ink)" }}
+          >
             {entry.name}
           </span>
           {entry.isYou && (
-            <span className="shrink-0 border border-[var(--md-ink)] px-1 text-[8px] font-bold uppercase leading-tight tracking-wide">
+            <span
+              className="shrink-0 border px-1 font-mono text-[8px] font-bold uppercase leading-tight tracking-wide"
+              style={{ borderColor: "var(--md-white)", color: "var(--md-white)" }}
+            >
               You
             </span>
           )}
-          <span className="shrink-0 font-display text-[9px] text-[var(--md-ink-muted)]">
+          <span
+            className="shrink-0 font-mono text-[9px]"
+            style={{ color: entry.isYou ? "rgba(251,248,239,0.6)" : "var(--md-ink-muted)" }}
+          >
             {open ? "▴" : "▾"}
           </span>
         </span>
-        <span className="w-14 shrink-0 text-right font-display text-[14px] font-bold tabular-nums">
+
+        {/* W–L record — fixed width right-aligned */}
+        <span
+          className="w-14 shrink-0 text-right font-mono text-[13px] font-bold tabular-nums"
+          style={{ color: entry.isYou ? "var(--md-white)" : "var(--md-ink)" }}
+        >
           {entry.wins}&ndash;{entry.losses}
         </span>
-        <span className="w-10 shrink-0 text-right font-display text-[12px] tabular-nums text-[var(--md-ink-muted)]">
+
+        {/* Net rating — fixed width right-aligned */}
+        <span
+          className="w-10 shrink-0 text-right font-mono text-[11px] tabular-nums"
+          style={{ color: entry.isYou ? "rgba(251,248,239,0.7)" : "var(--md-ink-muted)" }}
+        >
           {sign(entry.margin)}
         </span>
-        <span className="w-5 shrink-0 text-center text-[14px]" aria-hidden>
-          {entry.perfect ? "🏆" : ""}
+
+        {/* Champion indicator */}
+        <span className="w-5 shrink-0 text-center text-[13px]" aria-hidden>
+          {entry.perfect ? "♛" : ""}
         </span>
       </button>
+
       {open && (
-        <div className="border-t-2 border-dashed border-[var(--md-ink)] bg-[var(--md-paper)] px-4 py-2">
+        <div
+          className="border-t-2 border-dashed border-[var(--md-ink)] px-4 py-2"
+          style={{ background: "var(--md-paper)" }}
+        >
           {entry.roster.length > 0 ? (
             <RosterList roster={entry.roster} compareKeys={compareKeys} />
           ) : (
-            <div className="font-display text-[10px] italic text-[var(--md-ink-muted)]">
+            <div className="font-mono text-[10px] italic text-[var(--md-ink-muted)]">
               roster unavailable
             </div>
           )}

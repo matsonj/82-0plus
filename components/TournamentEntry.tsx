@@ -25,13 +25,10 @@ import { draftSourceKey, type DraftRosterMap } from "@/lib/draftSources";
 
 const HOWTO_KEY = "md820-seen-tournament-howto";
 
-// The starting five board — identical to the main game. The five are carried in
-// from the just-played Classic/Ranked game and locked; the tournament only adds
-// a sixth man + a captain on top.
+// The starting five board — identical to the main game.
 const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 
-// Down-weight a decade each time it's used so the bench roll lands in a fresh era
-// (copied from app/page.tsx — same mechanic).
+// Down-weight a decade each time it's used so the bench roll lands in a fresh era.
 function pickWeightedDecade(
   pool: number[],
   usage: Record<number, number>,
@@ -59,16 +56,8 @@ export function TournamentEntry({
 }: {
   initialLineup: (LineupEntry | null)[];
   mode: TournamentMode;
-  // For daily mode: the FIXED bench slot (team+decade) the sixth man is drafted
-  // from — no rolling, no team-skip, no receipt (the daily board is the
-  // provenance). Null/omitted for classic/hoopiq, which roll the bench.
-  // Private mode ALSO passes a fixed bench here (board.benchSlot).
   dailyBench?: { team: string; decade: number } | null;
-  dailyDate?: string | null; // daily board date (for the share-card mode label)
-  // For PRIVATE tournaments: the known account + tournament + a submit callback.
-  // When set, the bench is fixed (like daily), the account is known (no name/PIN
-  // form), and submit() posts to the private-tournament endpoint and calls
-  // onSubmitted() instead of rendering TournamentResults. Null for the main game.
+  dailyDate?: string | null;
   privateConfig?: {
     tournamentId: string;
     name: string;
@@ -80,38 +69,29 @@ export function TournamentEntry({
 }) {
   const isDaily = mode === "daily";
   const isPrivate = !!privateConfig;
-  // The bench is a FIXED slot (no roll / team-skip) for both daily and private.
   const benchIsFixed = isDaily || isPrivate;
-  // Stat visibility mirrors the main game: daily hides stats like Ranked.
   const listMode: GameMode = mode === "classic" ? "classic" : "hoopiq";
 
-  // ----- league data (for the bench roll; unused in daily) -----
   const [decades, setDecades] = useState<number[]>([]);
   const [booting, setBooting] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // ----- the starting five, carried in from the just-played game (locked) -----
   const lineup = initialLineup;
   const starters = lineup.filter(Boolean) as LineupEntry[];
 
-  // ----- sixth man (bench round) -----
   const [sixth, setSixth] = useState<LineupEntry | null>(null);
   const [currentDecade, setCurrentDecade] = useState<number | null>(null);
   const [currentTeam, setCurrentTeam] = useState<string | null>(null);
   const [currentPlayers, setCurrentPlayers] = useState<PublicPlayer[] | null>(null);
-  const [currentReceipt, setCurrentReceipt] = useState<string>(""); // bench roll receipt
+  const [currentReceipt, setCurrentReceipt] = useState<string>("");
   const [teamSkips, setTeamSkips] = useState(1);
   const [rolling, setRolling] = useState(false);
   const [rollError, setRollError] = useState<string | null>(null);
 
-  // ----- finalize -----
   const [captainSlot, setCaptainSlot] = useState<number | null>(null);
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
-  // Logged in? (remembered from a previous submit/lookup). When set, the player
-  // only needs a team name; username + PIN come from the saved session.
   const [loggedIn, setLoggedIn] = useState(false);
-  // First-visit Tournament Edition explainer.
   const [showHowTo, setShowHowTo] = useState(false);
   const [teamName, setTeamName] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -124,7 +104,6 @@ export function TournamentEntry({
 
   const step: Step = sixth ? "finalize" : "sixth";
 
-  // Players/teams already on the roster (so the bench roll never repeats them).
   const usedIds = [
     ...starters.map((e) => e.player.entity_id),
     ...(sixth ? [sixth.player.entity_id] : []),
@@ -134,7 +113,6 @@ export function TournamentEntry({
     ...(sixth ? [sixth.team] : []),
   ];
 
-  // ----- restore login + first-visit how-to on mount -----
   useEffect(() => {
     const saved = getSavedUser();
     if (saved) {
@@ -143,7 +121,6 @@ export function TournamentEntry({
       setLoggedIn(true);
     }
     try {
-      // Private skips the first-visit Tournament Edition explainer.
       if (!privateConfig && !localStorage.getItem(HOWTO_KEY)) {
         setShowHowTo(true);
         localStorage.setItem(HOWTO_KEY, "1");
@@ -161,8 +138,6 @@ export function TournamentEntry({
     setPin("");
   };
 
-  // ----- load decades on mount (classic/hoopiq only — daily & private have
-  // fixed bench slots, so no league roll is needed) -----
   useEffect(() => {
     if (benchIsFixed) {
       setBooting(false);
@@ -192,8 +167,6 @@ export function TournamentEntry({
     };
   }, [benchIsFixed]);
 
-  // Roll a team for the bench round. Excludes every team already on the roster
-  // and down-weights eras the five already cover.
   const rollRound = useCallback(
     (opts: { decade?: number; excludeTeam?: string } = {}) => {
       if (decades.length === 0) return;
@@ -241,17 +214,14 @@ export function TournamentEntry({
     [decades],
   );
 
-  // Auto-roll the bench round until a sixth man is chosen (classic/hoopiq only).
   useEffect(() => {
-    if (benchIsFixed) return; // daily & private use a fixed bench slot, not a roll
+    if (benchIsFixed) return;
     if (booting || decades.length === 0 || result) return;
     if (step !== "sixth") return;
     if (currentDecade !== null || rollActive.current) return;
     rollRound({});
   }, [benchIsFixed, booting, decades, result, step, currentDecade, rollRound]);
 
-  // Daily/private: pin the bench round to the fixed bench slot (no roll). No
-  // receipt — the board is the provenance, verified server-side on submit.
   useEffect(() => {
     if (!benchIsFixed || !dailyBench || result) return;
     if (step !== "sixth" || currentDecade !== null) return;
@@ -284,26 +254,16 @@ export function TournamentEntry({
     rollRound({ decade: currentDecade, excludeTeam: currentTeam ?? undefined });
   };
 
-  // ----- submit -----
   const usernameCheck = validateName(username);
   const teamNameCheck = validateTeamName(teamName);
   const pinOk = validatePin(pin);
   const canSubmit = isPrivate
-    ? sixth !== null &&
-      captainSlot !== null &&
-      teamNameCheck.ok &&
-      !submitting
-    : sixth !== null &&
-      captainSlot !== null &&
-      usernameCheck.ok &&
-      teamNameCheck.ok &&
-      pinOk &&
-      !submitting;
+    ? sixth !== null && captainSlot !== null && teamNameCheck.ok && !submitting
+    : sixth !== null && captainSlot !== null && usernameCheck.ok && teamNameCheck.ok && pinOk && !submitting;
+
   const fixedBenchRoster =
     currentTeam && currentDecade !== null
-      ? preloadedRosters?.[
-          draftSourceKey({ team: currentTeam, decade: currentDecade })
-        ]
+      ? preloadedRosters?.[draftSourceKey({ team: currentTeam, decade: currentDecade })]
       : undefined;
   const benchPlayers = fixedBenchRoster ?? currentPlayers;
 
@@ -313,20 +273,11 @@ export function TournamentEntry({
     setSubmitError(null);
     setNameTaken(false);
 
-    // ---- Private tournament submit: no receipts; posts to the private endpoint
-    // and hands control back via onSubmitted() (no TournamentResults render). ----
     if (privateConfig) {
       try {
         const roster = lineup
           .map((e, i) =>
-            e
-              ? {
-                  entity_id: e.player.entity_id,
-                  team: e.team,
-                  decade: e.decade,
-                  slot: i,
-                }
-              : null,
+            e ? { entity_id: e.player.entity_id, team: e.team, decade: e.decade, slot: i } : null,
           )
           .filter((p): p is NonNullable<typeof p> => p !== null);
         const res = await fetch("/api/private-tournament/submit", {
@@ -362,18 +313,9 @@ export function TournamentEntry({
     }
 
     try {
-      // Each pick carries its signed roll receipt (server verifies provenance).
       const roster = lineup
         .map((e, i) =>
-          e
-            ? {
-                entity_id: e.player.entity_id,
-                team: e.team,
-                decade: e.decade,
-                slot: i,
-                receipt: e.receipt,
-              }
-            : null,
+          e ? { entity_id: e.player.entity_id, team: e.team, decade: e.decade, slot: i, receipt: e.receipt } : null,
         )
         .filter((p): p is NonNullable<typeof p> => p !== null);
       const res = await fetch("/api/tournament/submit", {
@@ -384,7 +326,7 @@ export function TournamentEntry({
           pin,
           teamName,
           mode,
-          dailyDate, // which daily board (today or an archived day) the picks are from
+          dailyDate,
           roster,
           captainSlot,
           sixthPick: {
@@ -396,12 +338,9 @@ export function TournamentEntry({
         }),
       });
       if (res.status === 409) {
-        // Username belongs to someone else / wrong PIN — flag the USERNAME field.
         setNameTaken(true);
         const data = await res.json().catch(() => ({}));
-        setSubmitError(
-          data?.error ?? "That account name is taken — wrong PIN?",
-        );
+        setSubmitError(data?.error ?? "That account name is taken — wrong PIN?");
         return;
       }
       if (!res.ok) {
@@ -410,7 +349,6 @@ export function TournamentEntry({
         return;
       }
       const data = (await res.json()) as TournamentRunResponse;
-      // Remember the account so the next entry only needs a team name.
       saveUser({ username, pin });
       setLoggedIn(true);
       setResult(data);
@@ -437,7 +375,7 @@ export function TournamentEntry({
 
   if (booting) {
     return (
-      <div className="py-20 text-center font-display text-sm text-[var(--md-ink-muted)]">
+      <div className="py-20 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
         Spinning up the league…
       </div>
     );
@@ -446,7 +384,7 @@ export function TournamentEntry({
   if (loadError && decades.length === 0) {
     return (
       <div className="md-card md-card--lift mx-auto max-w-md p-5 text-center">
-        <p className="font-display text-base font-bold">
+        <p className="font-archivo font-bold leading-tight" style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}>
           Couldn&rsquo;t start the tournament.
         </p>
         <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">{loadError}</p>
@@ -462,10 +400,11 @@ export function TournamentEntry({
       {showHowTo && (
         <TournamentHowToPlay onClose={() => setShowHowTo(false)} />
       )}
-      {/* The locked starting five, plus the sixth-man chip once chosen. */}
+
+      {/* The locked starting five */}
       <div>
         <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+          <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
             Your starting five
           </span>
           <span
@@ -498,15 +437,15 @@ export function TournamentEntry({
         />
 
         {sixth && (
-          <div className="md-card mt-2 flex items-center justify-between gap-2 p-2">
+          <div className="md-card mt-2 flex items-center justify-between gap-2 p-3">
             <div className="flex flex-col">
-              <span className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+              <span className="font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
                 Sixth Man
               </span>
-              <span className="font-display text-sm font-bold">
+              <span className="font-archivo text-[14px] font-bold leading-tight" style={{ fontWeight: 800, fontVariationSettings: '"wdth" 88' }}>
                 {sixth.player.player_name}
               </span>
-              <span className="font-display text-[11px] text-[var(--md-orange-deep)]">
+              <span className="font-mono text-[11px] text-[var(--md-coral-deep)]">
                 {sixth.team} &rsquo;{String(sixth.player.best_season).slice(2)}
               </span>
             </div>
@@ -515,15 +454,15 @@ export function TournamentEntry({
       </div>
 
       {rollError && (
-        <div className="md-card border-[var(--md-coral)] p-3">
-          <p className="font-display text-sm">{rollError}</p>
+        <div className="border-2 border-[var(--md-coral)] p-3 font-mono text-[13px] text-[var(--md-coral)]">
+          {rollError}
         </div>
       )}
 
       {/* ---- SIXTH MAN: the bench round ---- */}
       {step === "sixth" && (
         <div className="md-card md-card--lift flex flex-col items-center gap-4 p-4 sm:p-5">
-          <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+          <div className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
             {isDaily
               ? "Draft your Sixth Man · today's bench slot"
               : benchIsFixed
@@ -533,7 +472,6 @@ export function TournamentEntry({
           {currentDecade !== null && (
             <SlotMachine team={currentTeam} decade={currentDecade} size="lg" />
           )}
-          {/* Daily & private benches are a fixed slot — no team-skip. */}
           {!benchIsFixed && (
             <div className="flex flex-wrap justify-center gap-2">
               <button
@@ -566,15 +504,12 @@ export function TournamentEntry({
                 }
               />
             ) : (
-              <div className="py-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
+              <div className="py-8 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
                 Spinning the reel…
               </div>
             )}
           </div>
-          <button
-            className="md-btn md-btn--sm md-btn--secondary"
-            onClick={onBack}
-          >
+          <button className="md-btn md-btn--sm md-btn--secondary" onClick={onBack}>
             Cancel
           </button>
         </div>
@@ -583,7 +518,12 @@ export function TournamentEntry({
       {/* ---- FINALIZE: captain + name + pin ---- */}
       {step === "finalize" && (
         <div className="md-card md-card--lift flex flex-col gap-4 p-4 sm:p-5">
-          <div className="font-display text-xl font-bold">Pick your captain</div>
+          <div
+            className="font-archivo leading-tight"
+            style={{ fontSize: 20, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
+          >
+            Pick your captain
+          </div>
           <p className="-mt-2 text-[13px] text-[var(--md-ink-muted)]">
             Tap one of your five starters.
           </p>
@@ -594,136 +534,134 @@ export function TournamentEntry({
             onChange={setCaptainSlot}
           />
 
-          {/* The name/login + team-name forms appear only AFTER a captain is
-              picked — showing them up-front confused first-time players. */}
           {captainSlot !== null && (
-          <div className="border-t-2 border-[var(--md-ink)] pt-4">
-            <div className="font-display text-xl font-bold">Claim your team</div>
-            <div className="mt-3 flex flex-col gap-3">
-              {isPrivate ? (
-                // Private: the account is already known (registered for the
-                // tournament) — no name/PIN form, no log-out.
-                <div className="flex items-center gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
-                  <span className="font-display text-[13px]">
-                    Playing as{" "}
-                    <strong className="text-[var(--md-orange-deep)]">
-                      {privateConfig.name}
-                    </strong>
-                  </span>
-                </div>
-              ) : loggedIn ? (
-                <div className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
-                  <span className="font-display text-[13px]">
-                    Playing as{" "}
-                    <strong className="text-[var(--md-orange-deep)]">
-                      {username}
-                    </strong>
-                  </span>
-                  <button
-                    type="button"
-                    className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-                    onClick={logOut}
-                  >
-                    Log out
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <label className="flex flex-col gap-1">
-                    <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                      Your name
+            <div className="border-t-2 border-[var(--md-ink)] pt-4">
+              <div
+                className="font-archivo leading-tight"
+                style={{ fontSize: 20, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
+              >
+                Claim your team
+              </div>
+              <div className="mt-3 flex flex-col gap-3">
+                {isPrivate ? (
+                  <div className="flex items-center gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
+                    <span className="font-mono text-[13px]">
+                      Playing as{" "}
+                      <strong className="text-[var(--md-coral-deep)]">
+                        {privateConfig.name}
+                      </strong>
                     </span>
-                    <input
-                      className="md-input md-input--name"
-                      value={username}
-                      maxLength={NAME_MAX_LEN}
-                      autoCapitalize="characters"
-                      onChange={(e) => {
-                        setUsername(
-                          e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                        );
-                        setNameTaken(false);
-                      }}
-                      placeholder="PHILJACKSON"
-                      style={
-                        nameTaken ? { borderColor: "var(--md-coral)" } : undefined
-                      }
-                    />
-                    <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-                      {username.length > 0 && !usernameCheck.ok
-                        ? usernameCheck.reason
-                        : "Your account name · letters, numbers, spaces · 16 max"}
+                  </div>
+                ) : loggedIn ? (
+                  <div className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
+                    <span className="font-mono text-[13px]">
+                      Playing as{" "}
+                      <strong className="text-[var(--md-coral-deep)]">
+                        {username}
+                      </strong>
                     </span>
-                    <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-                      This is how you log back in to check your teams.
-                    </span>
-                  </label>
+                    <button
+                      type="button"
+                      className="font-mono text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+                      onClick={logOut}
+                    >
+                      Log out
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                        Your name
+                      </span>
+                      <input
+                        className="md-input md-input--name"
+                        value={username}
+                        maxLength={NAME_MAX_LEN}
+                        autoCapitalize="characters"
+                        onChange={(e) => {
+                          setUsername(
+                            e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
+                          );
+                          setNameTaken(false);
+                        }}
+                        placeholder="PHILJACKSON"
+                        style={nameTaken ? { borderColor: "var(--md-coral)" } : undefined}
+                      />
+                      <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
+                        {username.length > 0 && !usernameCheck.ok
+                          ? usernameCheck.reason
+                          : "Your account name · letters, numbers, spaces · 16 max"}
+                      </span>
+                      <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
+                        This is how you log back in to check your teams.
+                      </span>
+                    </label>
 
-                  <label className="flex flex-col gap-1">
-                    <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                      PIN
-                    </span>
-                    <input
-                      className="md-input"
-                      value={pin}
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={6}
-                      onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                      placeholder="4–6 digits"
-                    />
-                    <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-                      {pin.length > 0 && !pinOk
-                        ? "PIN must be 4–6 digits"
-                        : "Remembers your account so you can check back."}
-                    </span>
-                  </label>
-                </>
-              )}
+                    <label className="flex flex-col gap-1">
+                      <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                        PIN
+                      </span>
+                      <input
+                        className="md-input"
+                        value={pin}
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={6}
+                        onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                        placeholder="4–6 digits"
+                      />
+                      <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
+                        {pin.length > 0 && !pinOk
+                          ? "PIN must be 4–6 digits"
+                          : "Remembers your account so you can check back."}
+                      </span>
+                    </label>
+                  </>
+                )}
 
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  ✎ Team name <span className="text-[var(--md-orange-deep)]">(tap to edit)</span>
-                </span>
-                <input
-                  className="md-input md-input--name"
-                  value={teamName}
-                  maxLength={NAME_MAX_LEN}
-                  autoCapitalize="characters"
-                  onChange={(e) =>
-                    setTeamName(
-                      e.target.value
-                        .toUpperCase()
-                        .replace(/[’`]/g, "'")
-                        .replace(/[^A-Z ']/g, ""),
-                    )
-                  }
-                  placeholder="DREAMTEAM"
-                  // Tinted fill + hard shadow so it clearly reads as an editable
-                  // field (not a heading) against the white card.
-                  style={{
-                    background: "var(--md-paper-2)",
-                    boxShadow: "var(--md-shadow-md)",
-                  }}
-                />
-                <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-                  {teamName.length > 0 && !teamNameCheck.ok
-                    ? teamNameCheck.reason
-                    : "This team's name · letters, spaces & ' · 16 max"}
-                </span>
-              </label>
+                <label className="flex flex-col gap-1">
+                  <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                    ✎ Team name{" "}
+                    <span className="text-[var(--md-coral-deep)]">(tap to edit)</span>
+                  </span>
+                  <input
+                    className="md-input md-input--name"
+                    value={teamName}
+                    maxLength={NAME_MAX_LEN}
+                    autoCapitalize="characters"
+                    onChange={(e) =>
+                      setTeamName(
+                        e.target.value
+                          .toUpperCase()
+                          .replace(/['`]/g, "'")
+                          .replace(/[^A-Z ']/g, ""),
+                      )
+                    }
+                    placeholder="DREAMTEAM"
+                    style={{
+                      background: "var(--md-paper-2)",
+                      boxShadow: "var(--md-shadow-md)",
+                    }}
+                  />
+                  <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
+                    {teamName.length > 0 && !teamNameCheck.ok
+                      ? teamNameCheck.reason
+                      : "This team's name · letters, spaces & ' · 16 max"}
+                  </span>
+                </label>
+              </div>
             </div>
-          </div>
           )}
 
           {submitError && (
-            <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
+            <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-mono text-[13px] text-[var(--md-coral)]">
               {submitError}
             </div>
           )}
 
           {captainSlot === null && (
-            <p className="text-center font-display text-[13px] text-[var(--md-ink-muted)]">
+            <p className="text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
               Pick a captain to continue.
             </p>
           )}

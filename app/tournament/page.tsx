@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState, useCallback } from "react";
 import Link from "next/link";
 import { TournamentLookup } from "@/components/TournamentLookup";
 import { GlobalHeader } from "@/components/GlobalHeader";
@@ -19,45 +19,122 @@ export default function TournamentPage({
   const initialTab = tab === "private" ? ("private" as const) : undefined;
   // `?daily=YYYY-MM-DD` (from a home-calendar click) auto-opens that day's bracket.
   const initialDaily = /^\d{4}-\d{2}-\d{2}$/.test(daily ?? "") ? daily : undefined;
+
+  // When TournamentLookup is showing a bracket result, suppress the lookup
+  // masthead + sidebar and give the result full content width.
+  const [resultActive, setResultActive] = useState(false);
+  const handleResultActive = useCallback((active: boolean) => {
+    setResultActive(active);
+  }, []);
+
   return (
-    <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
+    <main className="relative mx-auto flex min-h-full max-w-6xl flex-col overflow-x-hidden px-4 pb-16 sm:pb-20">
+      {/* Faint halftone field behind the whole page — newsprint texture */}
       <div className="md-sunbeam" />
 
       <GlobalHeader />
 
-      <section className="relative z-10 mt-6 flex flex-col items-center text-center sm:mt-8">
-        <h1
-          className="font-display font-bold tracking-tight"
-          style={{ fontSize: "clamp(34px, 9vw, 64px)", lineHeight: 1 }}
-        >
-          How far did you get?
-        </h1>
-        <p className="mx-auto mt-4 max-w-md text-[14px] leading-relaxed sm:text-[15px]">
-          Look up your bracket by name + PIN. Haven&rsquo;t entered yet? Play a{" "}
-          <Link href="/" className="text-[var(--md-blue)] underline">
-            Classic or Ranked
-          </Link>{" "}
-          season, then hit <strong>Enter Tournament</strong> on your result.
-        </p>
+      {/* Page masthead: folio bar + cover-line headline.
+          Hidden when a bracket result is active — TournamentResults has its own
+          masthead (kicker + tournament name + champion stamp). */}
+      {!resultActive && (
+        <section className="relative z-10 mt-4 sm:mt-6">
+          {/* Folio bar — Special Elite, muted, small */}
+          <div className="mb-3 flex items-center gap-4 border-b border-[var(--md-paper-3)] pb-2">
+            <span className="font-byline text-[11px] text-[var(--md-ink-muted)]">
+              MY TEAMS · THE BRACKET DESK
+            </span>
+          </div>
 
-        <div className="mt-8 w-full max-w-md">
-          <TournamentLookup
-            onBack={undefined}
-            initialTab={initialTab}
-            initialDaily={initialDaily}
-          />
-        </div>
+          {/* Kicker — flame italic script above headline */}
+          <div
+            className="font-byline mb-1"
+            style={{ fontSize: 18, color: "var(--md-coral)", fontStyle: "italic" }}
+          >
+            Roll call —
+          </div>
 
-        <Link
-          href="/"
-          className="mt-6 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-        >
-          ← Back to 82-0+
-        </Link>
-      </section>
+          {/* Cover-line headline — Anton */}
+          <h1
+            className="font-cover uppercase leading-none"
+            style={{ fontSize: "clamp(48px, 12vw, 100px)", letterSpacing: "-0.02em" }}
+          >
+            HOW FAR DID
+            <br />
+            YOU GET?
+          </h1>
 
-      <footer className="relative z-10 mt-auto pt-12 text-center">
-        <p className="font-display text-xs text-[var(--md-ink-muted)]">
+          <p className="mt-3 max-w-lg text-[14px] leading-relaxed sm:text-[15px]">
+            Look up your bracket by name + PIN. Haven&rsquo;t entered yet? Play a{" "}
+            <Link href="/" className="font-bold text-[var(--md-blue)] underline">
+              Classic or Ranked
+            </Link>{" "}
+            season, then hit <strong>Enter Tournament</strong> on your result.
+          </p>
+        </section>
+      )}
+
+      {/* Double rule under masthead — only in lookup state */}
+      {!resultActive && <div className="md-rule-double relative z-10 mt-6" />}
+
+      {/* Main content.
+          TournamentLookup is always mounted (single instance preserves its
+          internal state). When a result is active, the sidebar is hidden and
+          the lookup fills the full width via CSS; no remount. */}
+      <div className={`relative z-10 mt-8 ${resultActive ? "" : "lg:grid lg:grid-cols-[1fr_320px] lg:gap-8"}`}>
+        {/* The lookup widget — fills the left column in lookup state, or full
+            width in result state. */}
+        <TournamentLookup
+          onBack={undefined}
+          initialTab={initialTab}
+          initialDaily={initialDaily}
+          onResultActive={handleResultActive}
+        />
+
+        {/* Right sidebar — earn-your-way-in callout (lookup state, desktop only).
+            Hidden when a result is active. */}
+        {!resultActive && (
+          <aside className="hidden flex-col gap-6 lg:flex">
+            <div>
+              <div className="mb-1 font-cond text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink-muted)]">
+                No bracket yet?
+              </div>
+              <div
+                className="font-archivo uppercase leading-tight"
+                style={{ fontSize: 28, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
+              >
+                Earn your way in.
+              </div>
+              <p className="mt-2 text-[13px] leading-relaxed text-[var(--md-ink-muted)]">
+                Every Classic and Ranked season can be entered into a tournament.
+                Finish a draft, then send your roster to a bracket.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-0 border-t-2 border-[var(--md-ink)]">
+              {[
+                { label: "Play Classic", href: "/" },
+                { label: "Play Ranked", href: "/" },
+                { label: "Host a Private Tournament", href: "/tournament?tab=private", cobalt: true },
+              ].map(({ label, href, cobalt }) => (
+                <Link
+                  key={label}
+                  href={href}
+                  className="flex items-center justify-between border-b border-[var(--md-paper-3)] py-3 font-cond text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors hover:text-[var(--md-coral)]"
+                  style={cobalt ? { color: "var(--md-cobalt)" } : undefined}
+                >
+                  {label}
+                  <span className="shrink-0">→</span>
+                </Link>
+              ))}
+            </div>
+          </aside>
+        )}
+      </div>
+
+      <footer className="relative z-10 mt-auto pt-16 text-center">
+        <div className="md-rule-double mb-6" />
+        <p className="font-byline text-[12px] text-[var(--md-ink-muted)]">
           Powered by{" "}
           <a
             href={MOTHERDUCK_URL}
@@ -69,7 +146,7 @@ export default function TournamentPage({
           </a>{" "}
           · <code>nba_box_scores_v2</code>
         </p>
-        <p className="mt-2 text-[11px] text-[var(--md-ink-muted)]">
+        <p className="mt-1 font-byline text-[11px] text-[var(--md-ink-muted)]">
           An independent project, not affiliated with or endorsed by the NBA.
         </p>
       </footer>

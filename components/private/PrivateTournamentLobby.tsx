@@ -133,203 +133,351 @@ export function PrivateTournamentLobby({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-4">
-      {/* Header card. */}
-      <div className="md-card md-card--lift flex flex-col gap-3 p-5">
-        <div className="text-center">
-          <div className="md-capsule mb-2">🏀 Private tournament</div>
-          <div className="font-display text-3xl font-bold break-words">
-            {data.name}
-          </div>
-          <div className="mt-1 font-display text-xs uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Hosted by {data.adminName}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <span
-            className="md-capsule"
-            style={
-              data.mode === "hoopiq"
-                ? { background: "var(--md-ink)", color: "var(--md-white)" }
-                : undefined
-            }
-          >
-            {privateModeLabel(data.mode)}
-          </span>
-          <span className="md-capsule">{data.size} teams</span>
-          <span className="md-capsule md-capsule--sky">
-            {data.submitted} submitted
+    <div className="flex flex-col gap-6">
+      {/* Page header — SLAM kicker + big title + meta */}
+      <div className="flex flex-col gap-2">
+        {/* PRIVATE TOURNAMENT cobalt kicker */}
+        <div>
+          <span className="md-capsule md-capsule--cobalt inline-flex text-[11px]">
+            Private Tournament
           </span>
         </div>
-
-        <div className="text-center font-display text-[13px] text-[var(--md-ink-muted)]">
-          Entry window closes in <ExpiryCountdown expiresAt={data.expiresAt} />
+        <h1
+          className="font-cover leading-none text-[var(--md-ink)]"
+          style={{ fontSize: "clamp(28px, 5vw, 56px)", textTransform: "uppercase" }}
+        >
+          {data.name}
+        </h1>
+        <div className="font-byline text-[11px] uppercase tracking-[0.1em] text-[var(--md-ink-muted)]">
+          Hosted by {data.adminName} · {data.size}-Team · Single Elim · {privateModeLabel(data.mode)}
         </div>
       </div>
 
-      {/* Your status (submitted) or the draft CTA. */}
-      {submitted ? (
-        <div className="md-card flex flex-col items-center gap-2 p-4 text-center">
-          <div className="md-capsule md-capsule--teal">Your team is in</div>
-          {you?.regW != null && you?.regL != null && (
-            <div className="font-display text-sm text-[var(--md-ink-muted)]">
-              Regular season: {you.regW}–{you.regL}
-              {you.seedNet != null && (
-                <>
-                  {" · "}
-                  <span
+      {/* Status bar: OPEN badge + count + countdown */}
+      <div
+        className="flex flex-wrap items-center gap-3 border-2 border-[var(--md-ink)] bg-[var(--md-ink)] px-4 py-3"
+        style={{ boxShadow: "var(--md-shadow-sm)" }}
+      >
+        <span
+          className="font-cond text-[13px] font-bold uppercase tracking-[0.1em]"
+          style={{ background: "var(--md-yellow)", color: "var(--md-ink)", padding: "2px 8px" }}
+        >
+          Open
+        </span>
+        <span className="font-cond text-[14px] font-semibold uppercase tracking-wide text-[var(--md-paper)]">
+          {data.filled} of {data.size} Entered
+        </span>
+        <span className="font-cond text-[14px] font-semibold uppercase tracking-wide text-[var(--md-coral)]">
+          · Locks in <ExpiryCountdown expiresAt={data.expiresAt} />
+        </span>
+      </div>
+
+      {/* Main body: two-column on desktop (entrants table left, invite card right) */}
+      <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-8">
+        {/* LEFT: entrants table */}
+        <div className="min-w-0 flex-1">
+          {/* Table header */}
+          <div className="flex items-baseline justify-between border-b-2 border-[var(--md-ink)] pb-2">
+            <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
+              Entrants
+            </span>
+            <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
+              {data.filled} / {data.size}
+            </span>
+          </div>
+          {/* Column headers */}
+          <div
+            className="grid font-cond text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--md-ink-muted)]"
+            style={{ gridTemplateColumns: "32px 1fr 96px 80px", borderBottom: "1px solid var(--md-paper-3)", paddingBottom: 4, paddingTop: 6 }}
+          >
+            <span className="pl-1">#</span>
+            <span>Player</span>
+            <span className="text-right">Record</span>
+            <span className="text-right pr-1">Status</span>
+          </div>
+
+          {data.entries.length === 0 ? (
+            <p className="mt-4 font-display text-[13px] text-[var(--md-ink-muted)]">
+              No one&rsquo;s joined yet. Be the first.
+            </p>
+          ) : (
+            <div className="flex flex-col">
+              {data.entries.map((e, i) => {
+                const isHost = e.userName.toUpperCase() === data.adminName.toUpperCase();
+                // Match the viewer's name (from saved creds) against entry userName.
+                const isMine = hasSaved && name.trim().toUpperCase() === e.userName.toUpperCase();
+                const isWaiting = e.status !== "submitted" && e.status !== "partial" && e.status !== "registered";
+                return (
+                  <div
+                    key={`${e.userName}-${i}`}
+                    className="grid items-center border-b border-[var(--md-paper-3)]"
                     style={{
-                      color: you.seedNet >= 0 ? "var(--md-teal)" : "var(--md-coral)",
+                      gridTemplateColumns: "32px 1fr 80px",
+                      paddingTop: 9,
+                      paddingBottom: 9,
+                      background: isMine ? "var(--md-yellow)" : undefined,
                     }}
                   >
-                    {you.seedNet >= 0 ? "+" : "−"}
-                    {Math.abs(you.seedNet).toFixed(1)} net
-                  </span>
-                </>
-              )}
+                    <span className="pl-1 font-mono text-[12px] tabular-nums text-[var(--md-ink-muted)]">
+                      {i + 1}
+                    </span>
+                    <span
+                      className="min-w-0 truncate font-archivo"
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 800,
+                        fontVariationSettings: '"wdth" 100',
+                        color: isWaiting ? "var(--md-ink-muted)" : "var(--md-ink)",
+                        fontStyle: isWaiting ? "italic" : undefined,
+                      }}
+                    >
+                      {e.teamName ?? e.userName}
+                      {isHost && (
+                        <span
+                          className="ml-2 font-cond text-[9px] font-semibold uppercase tracking-wide"
+                          style={{ background: "var(--md-cobalt)", color: "var(--md-white)", padding: "1px 5px" }}
+                        >
+                          Host
+                        </span>
+                      )}
+                      {isMine && (
+                        <span
+                          className="ml-2 font-cond text-[9px] font-semibold uppercase tracking-wide"
+                          style={{ background: "var(--md-coral)", color: "var(--md-white)", padding: "1px 5px" }}
+                        >
+                          You
+                        </span>
+                      )}
+                    </span>
+                    <span className="pr-1 text-right font-mono text-[10px] uppercase tracking-wide">
+                      {isWaiting ? (
+                        <span className="text-[var(--md-ink-muted)]">Waiting…</span>
+                      ) : (
+                        <span style={{ color: "var(--md-teal)" }}>
+                          {e.status === "submitted" ? "■ Locked In" : e.status === "partial" ? "Drafting" : "Joined"}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
-          {you?.provisionalRecordW != null && you?.provisionalRecordL != null && (
-            <div className="font-display text-sm text-[var(--md-ink-muted)]">
-              Provisional bracket: {you.provisionalRecordW}–{you.provisionalRecordL}
-              {you.provisionalStatus ? ` · ${you.provisionalStatus}` : ""}
-            </div>
-          )}
-          <p className="font-display text-[13px] text-[var(--md-ink-muted)]">
-            Final results post once every slot is in (or the window closes).
+
+          {/* Bracket note */}
+          <p className="mt-4 flex items-start gap-2 font-display text-[12px] text-[var(--md-ink-muted)]">
+            <span className="mt-0.5 shrink-0 text-[10px]">{"{}"}</span>
+            <span>The bracket forms automatically when all {data.size} seats fill.</span>
           </p>
-        </div>
-      ) : (
-        <div className="md-card flex flex-col gap-3 p-4">
-          {/* Creds: shown only when not logged in. */}
-          {!hasSaved && (
-            <>
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Your name
-                </span>
-                <input
-                  className="md-input md-input--name"
-                  value={name}
-                  maxLength={NAME_MAX_LEN}
-                  autoCapitalize="characters"
-                  onChange={(e) =>
-                    setName(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""))
-                  }
-                  placeholder="PHILJACKSON"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  PIN
-                </span>
-                <input
-                  className="md-input"
-                  value={pin}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4–6 digits"
-                />
-              </label>
-            </>
-          )}
-          {hasSaved && (
-            <div className="font-display text-[13px]">
-              Playing as{" "}
-              <strong className="text-[var(--md-orange-deep)]">{name}</strong>
+
+          {/* Draft / status CTA — shown below table on mobile, above invite on desktop */}
+          <div className="mt-4">
+            {submitted ? (
+              <div className="flex flex-col gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-4">
+                <div className="flex items-center gap-2">
+                  <span className="md-capsule md-capsule--teal text-[10px]">Your team is in</span>
+                </div>
+                {you?.regW != null && you?.regL != null && (
+                  <div className="font-mono text-[13px] text-[var(--md-ink-muted)] tabular-nums">
+                    Regular season: {you.regW}–{you.regL}
+                    {you.seedNet != null && (
+                      <>
+                        {" · "}
+                        <span
+                          style={{
+                            color: you.seedNet >= 0 ? "var(--md-teal)" : "var(--md-coral)",
+                          }}
+                        >
+                          {you.seedNet >= 0 ? "+" : "−"}
+                          {Math.abs(you.seedNet).toFixed(1)} net
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+                {you?.provisionalRecordW != null && you?.provisionalRecordL != null && (
+                  <div className="font-mono text-[13px] text-[var(--md-ink-muted)] tabular-nums">
+                    Provisional bracket: {you.provisionalRecordW}–{you.provisionalRecordL}
+                    {you.provisionalStatus ? ` · ${you.provisionalStatus}` : ""}
+                  </div>
+                )}
+                <p className="font-display text-[12px] text-[var(--md-ink-muted)]">
+                  Final results post once every slot is in (or the window closes).
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-4">
+                {/* Creds: shown only when not logged in. */}
+                {!hasSaved && (
+                  <>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                        Your name
+                      </span>
+                      <input
+                        className="md-input md-input--name"
+                        value={name}
+                        maxLength={NAME_MAX_LEN}
+                        autoCapitalize="characters"
+                        onChange={(e) =>
+                          setName(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""))
+                        }
+                        placeholder="PHILJACKSON"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                        PIN
+                      </span>
+                      <input
+                        className="md-input"
+                        value={pin}
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={6}
+                        onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                        placeholder="4–6 digits"
+                      />
+                    </label>
+                  </>
+                )}
+                {hasSaved && (
+                  <div className="font-display text-[13px]">
+                    Playing as{" "}
+                    <strong className="text-[var(--md-coral-deep)]">{name}</strong>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  className="md-btn md-btn--lg"
+                  disabled={registering}
+                  onClick={startDraft}
+                >
+                  {registering
+                    ? "Starting…"
+                    : midDraft
+                      ? "Continue draft"
+                      : isAdmin
+                        ? "Submit team"
+                        : "Register & draft"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Host-only teardown — quiet, confirm-gated. */}
+          {you?.isAdmin && (
+            <div className="mt-4 flex justify-start">
+              <DeleteTournamentControl tournamentId={data.tournamentId} />
             </div>
           )}
-
-          {error && (
-            <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
-              {error}
-            </div>
-          )}
-
-          <button
-            className="md-btn md-btn--lg md-btn--teal"
-            disabled={registering}
-            onClick={startDraft}
-          >
-            {registering
-              ? "Starting…"
-              : midDraft
-                ? "Continue draft"
-                : isAdmin
-                  ? "Submit team"
-                  : "Register & draft"}
-          </button>
         </div>
-      )}
 
-      {/* Share link. */}
-      <div className="md-card flex flex-col gap-1 p-4">
-        <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          Invite link
-        </span>
-        <div className="flex items-stretch gap-2">
-          <input
-            readOnly
-            value={fullShare}
-            className="md-input flex-1 text-[13px]"
-            onFocus={(e) => e.currentTarget.select()}
-          />
-          <button
-            type="button"
-            className="md-btn md-btn--sm md-btn--secondary"
-            onClick={async () => {
-              if (await copyText(fullShare)) {
-                setLinkCopied(true);
-                setTimeout(() => setLinkCopied(false), 1500);
-              }
+        {/* RIGHT: invite card (dark ink, cobalt accent) */}
+        <div className="shrink-0 md:w-[340px]">
+          <div
+            className="flex flex-col gap-4 border-2 border-[var(--md-coral)] p-5"
+            style={{
+              background: "var(--md-ink)",
+              backgroundImage: "radial-gradient(var(--md-ink-2) 1.4px, transparent 1.5px)",
+              backgroundSize: "8px 8px",
+              boxShadow: "var(--md-shadow-pop)",
             }}
           >
-            {linkCopied ? "Copied!" : "Copy"}
-          </button>
-        </div>
-      </div>
-
-      {/* Lobby roster (names + status only — no rosters before completion). */}
-      <div className="md-card flex flex-col gap-2 p-4">
-        <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          Entrants ({data.filled}/{data.size})
-        </span>
-        {data.entries.length === 0 ? (
-          <p className="font-display text-[13px] text-[var(--md-ink-muted)]">
-            No one&rsquo;s joined yet. Be the first.
-          </p>
-        ) : (
-          <div className="flex flex-col divide-y divide-[var(--md-paper-3)]">
-            {data.entries.map((e, i) => (
-              <div
-                key={`${e.userName}-${i}`}
-                className="flex items-center justify-between gap-2 py-1.5"
-              >
-                <span className="font-display text-sm font-bold">
-                  {e.teamName ?? e.userName}
-                </span>
-                <span className="font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  {e.status === "submitted"
-                    ? "✓ submitted"
-                    : e.status === "partial"
-                      ? "drafting"
-                      : "joined"}
-                </span>
+            <div>
+              <div className="font-cond text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--md-yellow)]">
+                Invite
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+              <div
+                className="font-cover text-[var(--md-paper)]"
+                style={{ fontSize: 24, textTransform: "uppercase", lineHeight: 1.05, marginTop: 2 }}
+              >
+                Bracket Forms When Full
+              </div>
+            </div>
 
-      {/* Host-only teardown — quiet, confirm-gated. */}
-      {you?.isAdmin && (
-        <div className="mt-1 flex justify-center">
-          <DeleteTournamentControl tournamentId={data.tournamentId} />
+            {/* Copy invite link button */}
+            <button
+              type="button"
+              className="md-btn md-btn--lg w-full"
+              style={{ justifyContent: "center" }}
+              onClick={async () => {
+                if (await copyText(fullShare)) {
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 1500);
+                }
+              }}
+            >
+              <span>⎘</span>
+              {linkCopied ? "Copied!" : "Copy Invite Link"}
+            </button>
+
+            {/* URL display */}
+            <div
+              className="border-2 border-[#3a322a] px-3 py-2 font-mono text-[12px] text-[var(--md-paper)]"
+              style={{ background: "var(--md-ink-2)" }}
+            >
+              {fullShare.replace(/^https?:\/\//, "")}
+            </div>
+
+            {/* Slots + bracket preview */}
+            <div className="font-cond text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--md-paper-3)]">
+              ■ {data.size} Slots · Single Elim
+            </div>
+
+            {/* Simple bracket silhouette */}
+            <div
+              className="mx-auto"
+              style={{ width: "100%", height: 80, position: "relative", opacity: 0.35 }}
+            >
+              <svg width="100%" height="80" viewBox="0 0 220 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Left bracket arms */}
+                <rect x="0" y="10" width="30" height="2" fill="#CFC5AD" />
+                <rect x="0" y="30" width="30" height="2" fill="#CFC5AD" />
+                <rect x="30" y="10" width="2" height="22" fill="#CFC5AD" />
+                <rect x="30" y="21" width="20" height="2" fill="#CFC5AD" />
+
+                <rect x="0" y="50" width="30" height="2" fill="#CFC5AD" />
+                <rect x="0" y="70" width="30" height="2" fill="#CFC5AD" />
+                <rect x="30" y="50" width="2" height="22" fill="#CFC5AD" />
+                <rect x="30" y="61" width="20" height="2" fill="#CFC5AD" />
+
+                {/* Middle */}
+                <rect x="50" y="21" width="2" height="42" fill="#CFC5AD" />
+                <rect x="50" y="42" width="20" height="2" fill="#CFC5AD" />
+
+                {/* Champion (dashed) */}
+                <rect x="70" y="35" width="30" height="14" stroke="#E5261F" strokeWidth="1.5" strokeDasharray="4 2" fill="none" />
+
+                {/* Right bracket arms */}
+                <rect x="190" y="10" width="30" height="2" fill="#CFC5AD" />
+                <rect x="190" y="30" width="30" height="2" fill="#CFC5AD" />
+                <rect x="188" y="10" width="2" height="22" fill="#CFC5AD" />
+                <rect x="168" y="21" width="22" height="2" fill="#CFC5AD" />
+
+                <rect x="190" y="50" width="30" height="2" fill="#CFC5AD" />
+                <rect x="190" y="70" width="30" height="2" fill="#CFC5AD" />
+                <rect x="188" y="50" width="2" height="22" fill="#CFC5AD" />
+                <rect x="168" y="61" width="22" height="2" fill="#CFC5AD" />
+
+                {/* Right middle */}
+                <rect x="168" y="21" width="2" height="42" fill="#CFC5AD" />
+                <rect x="150" y="42" width="20" height="2" fill="#CFC5AD" />
+              </svg>
+            </div>
+          </div>
+
+          <p className="mt-3 font-display text-[12px] leading-snug text-[var(--md-ink-muted)]">
+            Once all {data.size} seats fill, seeds lock and the bracket is drawn automatically. Host can lock early.
+          </p>
         </div>
-      )}
+      </div>
     </div>
   );
 }
