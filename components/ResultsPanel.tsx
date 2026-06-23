@@ -6,6 +6,7 @@ import { buildShareImage } from "@/lib/shareImage";
 import { type CardPlayer, usePlayerCardDeck } from "@/components/PlayerCard";
 import { presentShare } from "@/lib/shareActions";
 import { MIN_ELIGIBLE_WINS } from "@/lib/tier";
+import { splitPlayerName } from "@/lib/playerName";
 import { Button } from "@/components/ui";
 import { ShareAssetDialog } from "@/components/ui/ShareAssetDialog";
 import { RosterCard, ROSTER_CARD_ROW_HAIRLINE } from "@/components/RosterCard";
@@ -124,9 +125,7 @@ function TheFiveCard({
       <div className="flex flex-col">
         {roster.map((r, i) => {
           // Last name bold, "first · team 'yr" as subtitle.
-          const nameParts = r.player_name.split(" ");
-          const lastName = nameParts.at(-1) ?? r.player_name;
-          const firstName = nameParts.slice(0, -1).join(" ");
+          const { first: firstName, last: lastName } = splitPlayerName(r.player_name);
           const yearStr = String(r.best_season).slice(2);
           const allDefSuffix =
             mode === "classic" && r.allDef === 1
@@ -320,6 +319,52 @@ function MobileMoneyCard({
   );
 }
 
+// ---- Team Fit line (shared mobile + desktop) -----------------------------
+// The net rating shown above is the FINAL number — talent plus this Team Fit
+// adjustment (teamFit = net − talent − defense). The caption makes that
+// explicit so it doesn't read as a bonus added ON TOP of the net rating.
+function TeamFitLine({
+  fitSign,
+  fitAbs,
+  fitColor,
+  narrative,
+  className,
+}: {
+  fitSign: string;
+  fitAbs: string;
+  fitColor: string;
+  narrative: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="flex items-baseline flex-wrap gap-1">
+        <span
+          className="font-cond font-bold uppercase tracking-[0.12em]"
+          style={{ fontSize: 12, color: "var(--md-ink)" }}
+        >
+          Team Fit
+        </span>
+        <span
+          className="font-mono font-bold tabular-nums"
+          style={{ fontSize: 13, color: fitColor }}
+        >
+          {fitSign}{fitAbs}
+        </span>
+        <span className="font-mono" style={{ fontSize: 12, color: "var(--md-ink-muted)" }}>
+          · {narrative}
+        </span>
+      </div>
+      <span
+        className="mt-0.5 block font-byline"
+        style={{ fontSize: 11, color: "var(--md-ink-muted)" }}
+      >
+        Included in final rating.
+      </span>
+    </div>
+  );
+}
+
 // ---- Main component -------------------------------------------------------
 export function ResultsPanel({
   roster,
@@ -462,20 +507,11 @@ export function ResultsPanel({
         {/* Mobile header: Season Complete kicker + mode badge + marker kicker
             (desktop shows these inside the left grid column) */}
         <div className="lg:hidden flex flex-col gap-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Mode badge intentionally omitted — it lives on the money card just
+                below, so we don't repeat it here (was tripled on mobile). */}
             <span className="md-kicker--marker" style={{ fontSize: 20 }}>
               Season complete.
-            </span>
-            <span
-              className="font-cond font-bold uppercase tracking-[0.1em] px-2 py-0.5"
-              style={{
-                fontSize: 11,
-                background: "var(--md-coral)",
-                color: "var(--md-white)",
-                border: "2px solid var(--md-ink)",
-              }}
-            >
-              {modeLabel}
             </span>
           </div>
           <div
@@ -496,6 +532,16 @@ export function ResultsPanel({
           netRating={netRating}
           perfect={perfect}
           modeLabel={modeLabel}
+        />
+
+        {/* Team Fit — mobile only, directly under record + rating and ABOVE the
+            roster (871-0). Desktop keeps its copy inside the left column. */}
+        <TeamFitLine
+          fitSign={fitSign}
+          fitAbs={fitAbs}
+          fitColor={fitColor}
+          narrative={narrative}
+          className="lg:hidden"
         />
 
         {/*
@@ -594,27 +640,14 @@ export function ResultsPanel({
               </span>
             </div>
 
-            {/* Team fit — one line: label + signed value + narrative */}
-            <div className="flex items-baseline flex-wrap gap-1 mb-6">
-              <span
-                className="font-cond font-bold uppercase tracking-[0.12em]"
-                style={{ fontSize: 12, color: "var(--md-ink)" }}
-              >
-                Team Fit
-              </span>
-              <span
-                className="font-mono font-bold tabular-nums"
-                style={{ fontSize: 13, color: fitColor }}
-              >
-                {fitSign}{fitAbs}
-              </span>
-              <span
-                className="font-mono"
-                style={{ fontSize: 12, color: "var(--md-ink-muted)" }}
-              >
-                · {narrative}
-              </span>
-            </div>
+            {/* Team fit — desktop only (mobile renders it above the roster) */}
+            <TeamFitLine
+              fitSign={fitSign}
+              fitAbs={fitAbs}
+              fitColor={fitColor}
+              narrative={narrative}
+              className="hidden lg:block mb-6"
+            />
 
             {/* ---- CTAs ----
                 Two breakpoint-specific blocks because the mobile and desktop
@@ -710,14 +743,16 @@ export function ResultsPanel({
                     </button>
                   )}
 
-                  {/* Tiers 2 + 3 — SHARE RESULT (ink) + PLAY AGAIN (cream outline) */}
-                  <div className="flex flex-wrap items-stretch gap-4">
+                  {/* Tiers 2 + 3 — SHARE RESULT (ink) + PLAY AGAIN (cream outline).
+                      Full-width row; each button flex-1 so together they span the
+                      same width as the ENTER TOURNAMENT button above. */}
+                  <div className="flex w-full items-stretch gap-4">
                     {/* Tier 2 — SHARE RESULT: solid ink button with upload glyph */}
                     <button
                       type="button"
                       onClick={share}
                       disabled={!shareBlob || !shareReady}
-                      className="inline-flex items-center justify-center gap-2.5 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
+                      className="inline-flex flex-1 items-center justify-center gap-2.5 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
                       style={{
                         background: "var(--md-ink)",
                         color: "var(--md-paper)",
@@ -736,7 +771,7 @@ export function ResultsPanel({
                     <button
                       type="button"
                       onClick={onReset}
-                      className="inline-flex items-center justify-center gap-2 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5"
+                      className="inline-flex flex-1 items-center justify-center gap-2 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5"
                       style={{
                         background: "var(--md-paper)",
                         color: "var(--md-ink)",

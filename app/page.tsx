@@ -994,7 +994,9 @@ export default function Home() {
       onSignIn={() => setShowDailySignIn(true)}
       onHowToPlay={() => setShowHowTo(true)}
       headerRight={
-        phase === "play" ? (
+        // Live mode badge while DRAFTING only — the result screen shows the mode
+        // on its own card, so don't triplicate it in the masthead there.
+        phase === "play" && !result ? (
           <Capsule
             style={
               mode === "hoopiq"
