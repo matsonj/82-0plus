@@ -117,13 +117,11 @@ export function LineupDraftBoard({
       .filter(({ kind }) => canFill(player.positions, kind))
       .map(({ i }) => i);
     if (eligible.length === 0) return;
-    // Auto-place when exactly one slot fits — EXCEPT the final pick, which would
-    // instantly complete the roster (and kick off the sim) with no chance to
-    // confirm or swap him out. There, stash as pending so the user taps Assign
-    // (or "Cancel pick" to choose someone else).
-    const isFinalPick = placedCount === kinds.length - 1;
-    if (eligible.length === 1 && !isFinalPick) placeAt(player, eligible[0]);
-    else setPending(player);
+    // Always confirm: stash as pending so the eligible slot(s) glow and the user
+    // taps one (or "Assign") to place — and can "Cancel pick" to choose someone
+    // else. We never auto-place, even when only a single slot (e.g. a lone FLEX)
+    // fits, so a pick is never committed without a chance to back out.
+    setPending(player);
   };
 
   // Tap a slot: place the pending pick, or move/swap already-placed players. There
@@ -503,19 +501,19 @@ export function LineupDraftBoard({
       {/* ── MOBILE layout (hidden at lg) ── */}
       <div className="flex flex-col gap-5 lg:hidden">
         {/* Progress bar */}
-        <ProgressBar />
+        {ProgressBar({})}
 
         {/* Roll card */}
-        <RollCard />
+        {RollCard()}
 
         {/* Roster grid */}
-        <RosterColumn listLayout="grid" />
+        {RosterColumn({ listLayout: "grid" })}
 
         {/* Pending placement card */}
-        <PendingCard />
+        {PendingCard()}
 
         {/* Player list */}
-        <PlayerListSection />
+        {PlayerListSection()}
       </div>
 
       {/* ── DESKTOP layout (hidden below lg) ── */}
@@ -524,16 +522,16 @@ export function LineupDraftBoard({
         {/* LEFT column: folio + roll + player list */}
         <div className="flex min-w-0 flex-1 flex-col gap-5" style={{ flex: "1.6 1 0" }}>
           {/* Progress bar */}
-          <ProgressBar />
+          {ProgressBar({})}
 
           {/* Roll card */}
-          <RollCard />
+          {RollCard()}
 
           {/* Pending placement card */}
-          <PendingCard />
+          {PendingCard()}
 
           {/* Player list */}
-          <PlayerListSection />
+          {PlayerListSection()}
 
           {/* When all placed + no source: show rearrange hint in left col */}
           {allPlaced && (
@@ -548,7 +546,7 @@ export function LineupDraftBoard({
           className="flex shrink-0 flex-col"
           style={{ flex: "1 1 0", minWidth: 320, maxWidth: 480 }}
         >
-          <RosterColumn listLayout="list" />
+          {RosterColumn({ listLayout: "list" })}
           <SimGhost />
         </div>
       </div>
