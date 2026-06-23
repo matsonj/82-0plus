@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { GameMode, PublicPlayer } from "@/lib/types";
 import { canFill, type SlotKind } from "@/lib/positions";
 import { SlotMachine } from "@/components/SlotMachine";
@@ -85,6 +85,16 @@ export function LineupDraftBoard({
     setPending(null);
     setSelected(null);
   }, [sourceKey]);
+
+  // The player list waits for the slot reel to FULLY land before appearing, so
+  // the roster doesn't pop in while the reel is still spinning/settling. A roll
+  // (rolling=true) hides it; SlotMachine's onSettled reveals it once the reel
+  // has come to rest. (Cancelling a pick doesn't roll, so the list stays put.)
+  const [reelSettled, setReelSettled] = useState(true);
+  useEffect(() => {
+    if (rolling) setReelSettled(false);
+  }, [rolling]);
+  const handleReelSettled = useCallback(() => setReelSettled(true), []);
 
   const placedCount = lineup.filter(Boolean).length;
   const allPlaced = placedCount === kinds.length;
@@ -258,7 +268,7 @@ export function LineupDraftBoard({
               while the TEAM is rolling (full roll / team skip) and keeps it set
               through a decade skip, so a decade skip won't spin the team reel.
               (Don't gate on `rolling`, which is true for decade skips too.) */}
-          <SlotMachine team={source.team} decade={source.decade} size="lg" />
+          <SlotMachine team={source.team} decade={source.decade} size="lg" onSettled={handleReelSettled} />
           {controls && (
             <div className="flex flex-col items-end gap-2">
               {controls({ pending: pending !== null, rolling })}
@@ -283,7 +293,7 @@ export function LineupDraftBoard({
           )}
         </div>
         <div className="mt-3 w-full">
-          {!rolling && source.team !== null ? (
+          {reelSettled && !rolling && source.team !== null ? (
             <PlayerList
               team={source.team}
               decade={source.decade}

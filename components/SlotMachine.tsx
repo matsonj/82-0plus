@@ -17,6 +17,9 @@ const SPIN_MS = 620;
 // The year reel keeps screaming this much LONGER than the team reel, so the
 // reels stop left-to-right (team first, then year) like a real slot machine.
 const STAGGER_MS = 360;
+// The era reel's land animation (the longest) runs this long after it stops
+// spinning; we wait it out before signaling the reel has fully settled.
+const LAND_MS = 800;
 // Reel-scroll cadence: how fast the strip cycles one full pass while spinning.
 // Short = a fast, blurred scream. Retuned from the old per-tick flicker model
 // to a continuous CSS scroll, so this is a duration, not a setInterval tick.
@@ -26,26 +29,38 @@ export function SlotMachine({
   team,
   decade,
   size = "md",
+  onSettled,
 }: {
   team: string | null;
   decade: number;
   size?: "lg" | "md" | "sm";
+  // Fires once the reels have FULLY come to rest (both stopped spinning AND
+  // their land animation has played out). Lets the parent reveal the player
+  // list exactly when the reel stops, not while it's still settling.
+  onSettled?: () => void;
 }) {
   const [display, setDisplay] = useState(team ?? "···");
   const [spinning, setSpinning] = useState(false);
   // Bumped each time a reel lands, to retrigger the one-shot land animation.
   const [teamLand, setTeamLand] = useState(0);
-  // undefined sentinel → the reel also spins on first mount (the initial reveal,
-  // and the remount after a pick), not only on later prop changes.
-  const prev = useRef<string | null | undefined>(undefined);
+  // Seed prev to the CURRENT value so a fresh mount with an unchanged team does
+  // NOT spin (e.g. cancelling a pick remounts the roll card — the team didn't
+  // change, so it should just show, not re-spin). Genuine reveals still spin:
+  // they arrive as a null→value change while mounted. (A sentinel here would
+  // also break under StrictMode's mount double-invoke → spin-forever.)
+  const prev = useRef<string | null>(team);
 
   const [decadeDisplay, setDecadeDisplay] = useState(decade);
   const [decadeSpinning, setDecadeSpinning] = useState(false);
   const [decadeLand, setDecadeLand] = useState(0);
-  const prevDecade = useRef<number | undefined>(undefined);
+  const prevDecade = useRef<number>(decade);
   // True while a full roll's decade reel is held spinning, waiting for the team
   // to resolve so it can land a beat AFTER the team (left-to-right stop).
   const decadeWaiting = useRef(false);
+  // Settle detection (drives onSettled): whether a reel has been spinning, and
+  // the pending "fully landed" timer.
+  const wasSpinning = useRef(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Advance the strip's center by ONE code per tick (sequential, not random) so
   // the reel reads as a coherent run of symbols scrolling past — a believable
@@ -129,6 +144,35 @@ export function SlotMachine({
       };
     }
   }, [decade, team]);
+
+  // Signal "fully settled" once BOTH reels have stopped spinning and the (longest)
+  // land animation has played out — so the player list reveals right as the reel
+  // stops. A new spin cancels any pending signal. The timer-ref + null guard keeps
+  // it from re-arming on benign re-renders; a separate unmount cleanup avoids a
+  // stray fire after the card closes.
+  useEffect(() => {
+    if (spinning || decadeSpinning) {
+      wasSpinning.current = true;
+      if (settleTimer.current) {
+        clearTimeout(settleTimer.current);
+        settleTimer.current = null;
+      }
+      return;
+    }
+    if (wasSpinning.current && settleTimer.current === null) {
+      settleTimer.current = setTimeout(() => {
+        settleTimer.current = null;
+        wasSpinning.current = false;
+        onSettled?.();
+      }, LAND_MS);
+    }
+  }, [spinning, decadeSpinning, onSettled]);
+  useEffect(
+    () => () => {
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+    },
+    [],
+  );
 
   // Badge (team) + era-box sizing per size. The team chip is a self-contained
   // ink chip with cream Archivo type, so it reads on a dark "roll" card (ink-on-
