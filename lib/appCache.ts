@@ -211,6 +211,16 @@ const BUILD_TEAM_DECADE_WEIGHTS = `CREATE OR REPLACE TABLE ${ACDB}.team_decade_w
    WHERE b.period = 'FullGame' AND s.season_type = 'Regular Season'
    GROUP BY 1, 2`;
 
+// Cache SHAPE version — bump whenever the COLUMNS/grouping of any cached table
+// change (not the source data). It's folded into the fingerprint below, so a
+// deploy that changes a table's shape forces a rebuild on the next freshness
+// check even though the underlying NBA source is unchanged. Without this, a
+// pre-existing cache built on the old shape keeps serving stale-shaped rows until
+// the 24h max-age — e.g. player_season_stats merged-by-season rows would mask the
+// new per-(season,team) split rows the PlayerCard now expects.
+//   v2: player_season_stats split per (season, team) for mid-season trades.
+const CACHE_SCHEMA_VERSION = "2";
+
 // Cheap source fingerprint across EVERY table the cache derives from, so a
 // backfill/correction to any of them triggers a rebuild — not just new games in
 // `schedule`. (`game_quality` is a view of box_scores+schedule, so it needs no
@@ -225,7 +235,8 @@ const SOURCE_FINGERPRINT_SQL = `SELECT
 
 async function sourceFingerprint(): Promise<string> {
   const rows = await queryRW<{ fp: string }>(SOURCE_FINGERPRINT_SQL);
-  return rows[0]?.fp ?? "";
+  // Prefix the schema version so a shape change invalidates the stored fp.
+  return `v${CACHE_SCHEMA_VERSION}|${rows[0]?.fp ?? ""}`;
 }
 
 /**
