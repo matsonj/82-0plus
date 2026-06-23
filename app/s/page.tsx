@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { decodeShare } from "@/lib/shareCode";
-import { GlobalHeader } from "@/components/GlobalHeader";
-import { MOTHERDUCK_URL } from "@/lib/site";
+import { PageShell } from "@/components/layout/PageShell";
+import { Capsule } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -68,10 +68,12 @@ export default async function SharePage({
   const isPerfect = data?.p ?? false;
 
   return (
-    <main className="relative mx-auto flex min-h-full max-w-6xl flex-col px-4 pb-0">
-      <div className="md-sunbeam" />
-      <GlobalHeader />
-
+    <PageShell
+      width="wide"
+      paddingClassName="px-4 pb-0"
+      footerSticky={false}
+      footerClassName="mt-10 pb-5"
+    >
       {data ? (
         /* ── Two-column spread: left = hero score, right = roster panel ── */
         <div className="relative z-10 mt-6 flex flex-col gap-6 sm:mt-8 lg:flex-row lg:items-stretch lg:gap-0">
@@ -85,13 +87,13 @@ export default async function SharePage({
                   {sharerName} shared a season
                 </span>
                 {isPerfect ? (
-                  <span className="md-capsule md-capsule--teal text-[11px]">
+                  <Capsule tone="teal" className="text-[11px]">
                     Perfect
-                  </span>
+                  </Capsule>
                 ) : (
-                  <span className="md-capsule md-capsule--press font-cond text-[11px] font-bold uppercase tracking-[0.1em]">
+                  <Capsule tone="press" className="font-cond text-[11px] font-bold uppercase tracking-[0.1em]">
                     {modeLabel}
-                  </span>
+                  </Capsule>
                 )}
               </div>
 
@@ -338,23 +340,6 @@ export default async function SharePage({
         </div>
       )}
 
-      <footer className="relative z-10 mt-10 flex flex-col gap-1 border-t border-[var(--md-ink)] pb-5 pt-5 text-[var(--md-ink-muted)] sm:flex-row sm:items-center sm:justify-between">
-        <p className="font-byline text-[12px] tracking-[0.02em]">
-          Powered by{" "}
-          <a
-            href={MOTHERDUCK_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-[var(--md-ink)]"
-          >
-            MotherDuck
-          </a>{" "}
-          · <span className="font-mono">nba_box_scores_v2</span>
-        </p>
-        <p className="font-byline text-[12px] tracking-[0.02em]">
-          An independent project — not affiliated with or endorsed by the NBA.
-        </p>
-      </footer>
-    </main>
+    </PageShell>
   );
 }

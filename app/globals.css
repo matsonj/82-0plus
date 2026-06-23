@@ -85,139 +85,149 @@ body {
 .font-marker { font-family: var(--font-marker); }
 
 /* ---------- Capsule / pill ---------- */
-.md-capsule {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 14px;
-  border-radius: 999px;
-  background: var(--md-coral);
-  border: 2px solid var(--md-ink);
-  font-family: var(--font-cond);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--md-white);
-  line-height: 1.3;
+@layer components {
+  .md-capsule {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    background: var(--md-coral);
+    border: 2px solid var(--md-ink);
+    font-family: var(--font-cond);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--md-white);
+    line-height: 1.3;
+  }
+  .md-capsule--press,
+  .md-capsule--yellow { background: var(--md-yellow); color: var(--md-ink); }
+  .md-capsule--teal { background: var(--md-teal); color: var(--md-white); }
+  .md-capsule--coral { background: var(--md-coral); color: var(--md-white); }
+  .md-capsule--violet,
+  .md-capsule--sky { background: var(--md-sky); color: var(--md-white); }
+  .md-capsule--cobalt { background: var(--md-cobalt); color: var(--md-white); }
+  .md-capsule--ink { background: var(--md-ink); color: var(--md-white); }
 }
-.md-capsule--press,
-.md-capsule--yellow { background: var(--md-yellow); color: var(--md-ink); }
-.md-capsule--teal { background: var(--md-teal); color: var(--md-white); }
-.md-capsule--coral { background: var(--md-coral); color: var(--md-white); }
-.md-capsule--violet,
-.md-capsule--sky { background: var(--md-sky); color: var(--md-white); }
-.md-capsule--cobalt { background: var(--md-cobalt); color: var(--md-white); }
-.md-capsule--ink { background: var(--md-ink); color: var(--md-white); }
 
 /* ---------- Card ---------- */
 /* Two species: the clean "insert" (stock field, the default) and the dark
    "cover spread" used for hero / result / tournament money cards. */
-.md-card {
-  background: var(--md-white);
-  border: 2px solid var(--md-ink);
-  border-radius: 0;
-}
-.md-card--lift {
-  box-shadow: var(--md-shadow-md);
-}
-.md-card--cover {
-  background: var(--md-ink);
-  color: var(--md-white);
-  border: 3px solid var(--md-coral);
-  box-shadow: var(--md-shadow-pop);
-  /* halftone backdrop */
-  background-image: radial-gradient(var(--md-ink-2) 1.4px, transparent 1.5px);
-  background-size: 8px 8px;
+@layer components {
+  .md-card {
+    background: var(--md-white);
+    border: 2px solid var(--md-ink);
+    border-radius: 0;
+  }
+  .md-card--lift {
+    box-shadow: var(--md-shadow-md);
+  }
+  .md-card--cover {
+    background: var(--md-ink);
+    color: var(--md-white);
+    border: 3px solid var(--md-coral);
+    box-shadow: var(--md-shadow-pop);
+    /* halftone backdrop */
+    background-image: radial-gradient(var(--md-ink-2) 1.4px, transparent 1.5px);
+    background-size: 8px 8px;
+  }
 }
 
 /* ---------- Buttons ---------- */
-.md-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 13px 24px;
-  border: 2px solid var(--md-ink);
-  background: var(--md-coral);
-  color: var(--md-white);
-  font-family: var(--font-cond);
-  font-weight: 600;
-  font-size: 15px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: var(--md-shadow-md);
-  transition: transform 0.08s ease, box-shadow 0.08s ease;
-}
-.md-btn:hover:not(:disabled) {
-  transform: translate(-2px, -2px);
-  box-shadow: var(--md-shadow-pop);
-}
-.md-btn:active:not(:disabled) {
-  transform: translate(2px, 2px);
-  box-shadow: 0 0 0 0 var(--md-ink);
-}
-.md-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-.md-btn--secondary { background: var(--md-white); color: var(--md-ink); }
-.md-btn--ink { background: var(--md-ink); color: var(--md-white); border-color: var(--md-coral); }
-.md-btn--teal { background: var(--md-teal); color: var(--md-white); }
-.md-btn--yellow { background: var(--md-yellow); color: var(--md-ink); }
-.md-btn--lg { padding: 17px 34px; font-size: 18px; }
-.md-btn--sm { padding: 8px 14px; font-size: 12px; box-shadow: var(--md-shadow-sm); }
-.md-btn--sm:hover:not(:disabled) {
-  transform: translate(-1px, -1px);
-  box-shadow: var(--md-shadow-sm);
+@layer components {
+  .md-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 13px 24px;
+    border: 2px solid var(--md-ink);
+    background: var(--md-coral);
+    color: var(--md-white);
+    font-family: var(--font-cond);
+    font-weight: 600;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: var(--md-shadow-md);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  .md-btn:hover:not(:disabled) {
+    transform: translate(-2px, -2px);
+    box-shadow: var(--md-shadow-pop);
+  }
+  .md-btn:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 0 var(--md-ink);
+  }
+  .md-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  .md-btn--secondary { background: var(--md-white); color: var(--md-ink); }
+  .md-btn--ink { background: var(--md-ink); color: var(--md-white); border-color: var(--md-coral); }
+  .md-btn--teal { background: var(--md-teal); color: var(--md-white); }
+  .md-btn--yellow { background: var(--md-yellow); color: var(--md-ink); }
+  .md-btn--lg { padding: 17px 34px; font-size: 18px; }
+  .md-btn--sm { padding: 8px 14px; font-size: 12px; box-shadow: var(--md-shadow-sm); }
+  .md-btn--sm:hover:not(:disabled) {
+    transform: translate(-1px, -1px);
+    box-shadow: var(--md-shadow-sm);
+  }
 }
 
 /* ---------- Text input ---------- */
-.md-input {
-  display: block;
-  width: 100%;
-  padding: 12px 14px;
-  background: var(--md-white);
-  border: 2px solid var(--md-ink);
-  border-radius: 0;
-  box-shadow: var(--md-shadow-sm);
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 16px;
-  color: var(--md-ink);
-  line-height: 1.2;
-  outline: none;
-  caret-color: var(--md-coral);
-}
-.md-input::placeholder {
-  color: var(--md-ink-muted);
-  font-weight: 400;
-}
-.md-input:focus {
-  background: var(--md-paper);
-  box-shadow: var(--md-shadow-sm), 0 0 0 2px var(--md-coral);
-}
-/* A name field reads like an arcade high-score / contents-page byline entry. */
-.md-input--name {
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
+@layer components {
+  .md-input {
+    display: block;
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--md-white);
+    border: 2px solid var(--md-ink);
+    border-radius: 0;
+    box-shadow: var(--md-shadow-sm);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--md-ink);
+    line-height: 1.2;
+    outline: none;
+    caret-color: var(--md-coral);
+  }
+  .md-input::placeholder {
+    color: var(--md-ink-muted);
+    font-weight: 400;
+  }
+  .md-input:focus {
+    background: var(--md-paper);
+    box-shadow: var(--md-shadow-sm), 0 0 0 2px var(--md-coral);
+  }
+  /* A name field reads like an arcade high-score / contents-page byline entry. */
+  .md-input--name {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
 }
 
 /* ---------- Team badge ---------- */
-.md-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-cond);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  border: 2px solid var(--md-ink);
-  background: var(--md-ink);
-  color: var(--md-white);
+@layer components {
+  .md-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-cond);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    border: 2px solid var(--md-ink);
+    background: var(--md-ink);
+    color: var(--md-white);
+  }
 }
 
 /* ---------- Halftone field (replaces the retired yellow sunbeam) ---------- */
@@ -338,14 +348,122 @@ body {
   to { transform: translateX(-50%); }
 }
 
-/* ---------- Slot reel spin animation ---------- */
-@keyframes md-spin-flicker {
-  0%, 100% { transform: translateY(0); opacity: 1; }
-  50% { transform: translateY(-6px); opacity: 0.4; }
+/* ---------- Slot reel spin animation ----------
+   A real slot-machine reel: a vertical strip of codes scrolls up through a
+   masked window under motion blur (the "scream"), then lands with a hard,
+   decelerating snap + a single overshoot + settle, flashing a press-yellow
+   ring on the stop. Mechanics live here; SlotMachine.tsx drives the
+   spinning / landed state and keys the land replay.
+
+   .md-reel        — the window (clips the strip; holds the chip/era sizing)
+   .md-reel__face  — fills the window, centers content
+   .md-reel__strip — the scrolling column of codes (cells stacked vertically)
+   .md-reel__cell  — one code, sized to the window so the scroll reads discrete
+   .md-reel__land  — the just-landed result, playing the snap/settle one-shot   */
+.md-reel {
+  position: relative;
+  overflow: hidden;
+  /* Edge fade: symbols melt in/out at the top & bottom so the window reads as a
+     physical reel drum behind glass, not text clipped at a hard line. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24%, #000 76%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 24%, #000 76%, transparent 100%);
 }
-.md-spinning {
-  animation: md-spin-flicker 0.12s linear infinite;
-  filter: blur(0.4px);
+
+.md-reel__face {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* Heavy vertical motion blur on the spinning strip — reads as speed, not type. */
+.md-reel__face--spinning {
+  filter: blur(2.6px);
+}
+.md-reel__face--spinning.md-reel__face--era {
+  /* The era box is shorter; a touch less blur keeps the streak legible-as-motion. */
+  filter: blur(1.8px);
+}
+
+/* The strip is a column of code-cells taller than the window, anchored at the
+   window's vertical center and scrolling upward. Cell height is tied to the
+   font (1.05em line-box) so the mechanic is height-agnostic across sizes — the
+   window clips it and the heavy blur masks exact cell-to-window registration,
+   so it reads as a fast reel regardless of chip dimensions. */
+.md-reel__strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  will-change: transform;
+  transform: translateY(-50%);
+  animation: md-reel-spin 0.28s linear infinite;
+}
+.md-reel__cell {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 1.05em;
+  line-height: 1;
+}
+@keyframes md-reel-spin {
+  /* Travel two cells per loop (2 × 1.05em). The strip re-seeds (React) every
+     few frames so it reads as a continuous upward blur, not a hard wrap. */
+  from { transform: translateY(calc(-50% + 2.1em)); }
+  to   { transform: translateY(-50%); }
+}
+
+/* The settled result sits centered in the window. .md-reel__land layers the
+   land one-shot on top — only present after a real land (not at idle), keyed in
+   React so it replays each time: the result drops in on a decelerating ease,
+   overshoots by a hair, then settles, while a press-yellow ring flashes the
+   snap frame. */
+.md-reel__result {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.md-reel__land {
+  animation: md-reel-land 0.6s cubic-bezier(0.13, 0.72, 0.26, 1) both;
+}
+/* The era reel decelerates LONGER (lands last + slow) for the slot-machine
+   "will the era be good?" beat — it already lands a stagger after the team. */
+.md-reel__face--era .md-reel__land {
+  animation-duration: 0.8s;
+}
+@keyframes md-reel-land {
+  /* The final symbol scrolls UP into the window (matching the spin direction),
+     decelerating hard and sharpening (blur → 0) as it arrives — that ease-out IS
+     the slow-down — then thunks past center and settles. */
+  0%   { transform: translateY(135%) scale(1.02); filter: blur(3.2px); }
+  60%  { transform: translateY(0)    scale(1);    filter: blur(0); }
+  /* momentum carries it a hair past, then recoils back */
+  76%  { transform: translateY(-6%)  scale(0.99); }
+  90%  { transform: translateY(2.5%) scale(1.008); }
+  100% { transform: translateY(0)    scale(1); }
+}
+/* The yellow snap-ring: an inset box-shadow that flashes the instant the reel
+   stops, then fades. Layered on the face so it frames the landed code. */
+.md-reel:has(.md-reel__land) .md-reel__face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: md-reel-flash 1.26s ease-out both;
+}
+@keyframes md-reel-flash {
+  0%   { box-shadow: inset 0 0 0 0 var(--md-yellow); }
+  10%  { box-shadow: inset 0 0 0 3px var(--md-yellow); } /* pop */
+  70%  { box-shadow: inset 0 0 0 3px var(--md-yellow); } /* stay (3x longer) */
+  100% { box-shadow: inset 0 0 0 0 rgba(255, 196, 0, 0); } /* fade */
 }
 
 /* ---------- Stat grid (SACRED — clean insert, legibility first) ---------- */
@@ -390,6 +508,12 @@ body {
 
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
-  .md-spinning { animation: none; filter: none; }
+  /* Reel: no scroll, no blur, no land bounce or flash — snap straight to the
+     resolved code. The strip still renders its center cell, so a spinning reel
+     simply shows a static code until the result lands. */
+  .md-reel__face--spinning { filter: none; }
+  .md-reel__strip { animation: none; }
+  .md-reel__land { animation: none; }
+  .md-reel:has(.md-reel__land) .md-reel__face::after { animation: none; }
   .md-ticker__track { animation: none; }
 }

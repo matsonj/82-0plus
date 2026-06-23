@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { RosterList, playerKey } from "@/components/BracketView";
+import { ModalFrame } from "@/components/ui";
 import type { SavedUser } from "@/lib/tournamentSession";
 
 // "2026-06-10" → "Jun 10" (plain calendar date, no TZ shift).
@@ -81,103 +82,33 @@ export function DailyLeaderboard({
   }, [data]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(21,17,14,0.7)" }}
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden border-2 border-[var(--md-ink)]"
-        style={{ background: "var(--md-white)", boxShadow: "var(--md-shadow-md)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header — ink masthead band */}
-        <div
-          className="flex items-start justify-between gap-3 px-5 py-4"
-          style={{ background: "var(--md-ink)", borderBottom: "2px solid var(--md-coral)" }}
-        >
-          <div className="flex flex-col gap-1">
-            <h2
-              className="font-archivo leading-tight"
-              style={{ fontSize: 20, fontWeight: 800, fontVariationSettings: '"wdth" 88', color: "var(--md-white)" }}
-            >
-              Daily Leaderboard
-            </h2>
-            <div className="font-mono text-[12px] tabular-nums" style={{ color: "var(--md-paper-3)" }}>
-              {label(date)}
-              {data?.youRank != null && (
-                <>
-                  {" "}
-                  · you&rsquo;re{" "}
-                  <strong style={{ color: "var(--md-yellow)" }}>#{data.youRank}</strong>{" "}
-                  <span>of {data.total}</span>
-                </>
-              )}
-            </div>
-          </div>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className="font-cond text-lg font-bold transition-colors hover:text-[var(--md-coral)]"
-            style={{ color: "var(--md-paper-3)" }}
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Body — SACRED data table */}
-        <div className="md-scroll flex-1 overflow-auto" style={{ background: "var(--md-white)" }}>
-          {failed ? (
-            <div className="px-5 py-8 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
-              Couldn&rsquo;t load the leaderboard.
-            </div>
-          ) : !data ? (
-            <div className="px-5 py-8 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
-              Loading…
-            </div>
-          ) : (
+    <ModalFrame
+      title="Daily Leaderboard"
+      subtitle={
+        <div className="font-mono text-[12px] tabular-nums" style={{ color: "var(--md-paper-3)" }}>
+          {label(date)}
+          {data?.youRank != null && (
             <>
-              <Row header />
-              {data.top.map((e) => (
-                <Row
-                  key={e.id}
-                  entry={e}
-                  open={openId === e.id}
-                  onToggle={() =>
-                    setOpenId((cur) => (cur === e.id ? null : e.id))
-                  }
-                  compareKeys={e.isYou ? undefined : myKeys}
-                />
-              ))}
-              {data.around.length > 0 && (
-                <div
-                  className="flex items-center justify-center py-1.5 font-mono text-[14px] font-bold tracking-[0.2em]"
-                  style={{ background: "var(--md-paper-2)", color: "var(--md-paper-3)" }}
-                >
-                  · · ·
-                </div>
-              )}
-              {data.around.map((e) => (
-                <Row
-                  key={e.id}
-                  entry={e}
-                  open={openId === e.id}
-                  onToggle={() =>
-                    setOpenId((cur) => (cur === e.id ? null : e.id))
-                  }
-                  compareKeys={e.isYou ? undefined : myKeys}
-                />
-              ))}
+              {" "}
+              · you&rsquo;re{" "}
+              <strong style={{ color: "var(--md-yellow)" }}>#{data.youRank}</strong>{" "}
+              <span>of {data.total}</span>
             </>
           )}
         </div>
-
-        {/* Footer */}
-        <div
-          className="flex items-center justify-between border-t-2 border-[var(--md-ink)] px-5 py-3"
-          style={{ background: "var(--md-paper-2)" }}
-        >
+      }
+      onClose={onClose}
+      maxWidth="max-w-md"
+      paddingClassName="p-0"
+      className="flex max-h-[85vh] flex-col overflow-hidden"
+      overlayStyle={{ background: "rgba(21,17,14,0.7)" }}
+      panelStyle={{ boxShadow: "var(--md-shadow-md)" }}
+      headerClassName="border-b-2 border-[var(--md-coral)] bg-[var(--md-ink)] px-5 py-4"
+      titleStyle={{ color: "var(--md-white)" }}
+      closeClassName="font-cond text-lg font-bold transition-colors"
+      closeStyle={{ color: "var(--md-paper-3)" }}
+      footer={
+        <div className="flex items-center justify-between border-t-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-5 py-3">
           <span className="font-mono text-[11px] italic text-[var(--md-ink-muted)]">
             tap a row · italic = your pick too
           </span>
@@ -189,8 +120,54 @@ export function DailyLeaderboard({
             Close
           </button>
         </div>
+      }
+    >
+      <div className="md-scroll flex-1 overflow-auto bg-[var(--md-white)]">
+        {failed ? (
+          <div className="px-5 py-8 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
+            Couldn&rsquo;t load the leaderboard.
+          </div>
+        ) : !data ? (
+          <div className="px-5 py-8 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
+            Loading…
+          </div>
+        ) : (
+          <>
+            <Row header />
+            {data.top.map((e) => (
+              <Row
+                key={e.id}
+                entry={e}
+                open={openId === e.id}
+                onToggle={() =>
+                  setOpenId((cur) => (cur === e.id ? null : e.id))
+                }
+                compareKeys={e.isYou ? undefined : myKeys}
+              />
+            ))}
+            {data.around.length > 0 && (
+              <div
+                className="flex items-center justify-center py-1.5 font-mono text-[14px] font-bold tracking-[0.2em]"
+                style={{ background: "var(--md-paper-2)", color: "var(--md-paper-3)" }}
+              >
+                · · ·
+              </div>
+            )}
+            {data.around.map((e) => (
+              <Row
+                key={e.id}
+                entry={e}
+                open={openId === e.id}
+                onToggle={() =>
+                  setOpenId((cur) => (cur === e.id ? null : e.id))
+                }
+                compareKeys={e.isYou ? undefined : myKeys}
+              />
+            ))}
+          </>
+        )}
       </div>
-    </div>
+    </ModalFrame>
   );
 }
 

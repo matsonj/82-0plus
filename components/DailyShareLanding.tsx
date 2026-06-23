@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { GlobalHeader } from "@/components/GlobalHeader";
 import { DailySignIn } from "@/components/DailySignIn";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { normalizeName } from "@/lib/tournamentValidation";
-import { SITE_URL, MOTHERDUCK_URL } from "@/lib/site";
+import { SITE_URL } from "@/lib/site";
 import { presentShare } from "@/lib/shareActions";
 import type { DailyResult } from "@/lib/dailyResults";
 import type { TournamentLookupResponse } from "@/lib/types";
@@ -146,32 +147,30 @@ export function DailyShareLanding({
   })();
 
   return (
-    <main className="relative mx-auto flex min-h-full max-w-6xl flex-col px-4 pb-0">
-      <div className="md-sunbeam" />
-      <GlobalHeader />
-
+    <PageShell
+      width="wide"
+      paddingClassName="px-4 pb-0"
+      footerSticky={false}
+      footerClassName="mt-10 pb-5"
+    >
       <div className="relative z-10 mt-6 flex flex-col sm:mt-8">
-
-        {/* ── Folio bar on double rule ── */}
-        <div className="md-rule-double flex items-end justify-between pb-2">
-          <span className="md-folio uppercase">Daily · {shortDate(date)}</span>
-          {state.kind === "result" && sharer && !isSelfLink && (
-            <span className="md-folio uppercase">Shared result · Both played</span>
-          )}
-        </div>
-
-        {/* ── Main header: kicker + big title ── */}
-        {sharer && !isSelfLink ? (
-          <div className="mt-5">
-            <span className="md-kicker--marker">Head to head</span>
-            <h1
-              className="font-cover mt-1 flex flex-wrap items-baseline gap-x-3 uppercase"
-              style={{
-                fontSize: "clamp(44px, 9vw, 96px)",
-                lineHeight: 0.9,
-                letterSpacing: "-0.02em",
-              }}
-            >
+        <PageHeader
+          eyebrowLeft={<>Daily · {shortDate(date)}</>}
+          eyebrowRight={
+            state.kind === "result" && sharer && !isSelfLink
+              ? "Shared result · Both played"
+              : undefined
+          }
+          kicker={
+            sharer && !isSelfLink
+              ? "Head to head"
+              : isSelfLink
+                ? "Your result"
+                : "Daily challenge"
+          }
+          title={
+            sharer && !isSelfLink ? (
+              <>
               <span>You</span>
               <span
                 className="font-cond"
@@ -180,25 +179,25 @@ export function DailyShareLanding({
                 vs
               </span>
               <span style={{ color: "var(--md-coral)" }}>{sharer.name}</span>
-            </h1>
-          </div>
-        ) : (
-          <div className="mt-5">
-            <span className="md-kicker--marker">
-              {isSelfLink ? "Your result" : "Daily challenge"}
-            </span>
-            <h1
-              className="font-cover mt-1 uppercase"
-              style={{
-                fontSize: "clamp(36px, 7vw, 72px)",
-                lineHeight: 0.9,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              {prettyDate(date)}
-            </h1>
-          </div>
-        )}
+              </>
+            ) : (
+              prettyDate(date)
+            )
+          }
+          titleClassName={
+            sharer && !isSelfLink
+              ? "flex flex-wrap items-baseline gap-x-3"
+              : undefined
+          }
+          titleStyle={{
+            fontSize:
+              sharer && !isSelfLink
+                ? "clamp(44px, 9vw, 96px)"
+                : "clamp(36px, 7vw, 72px)",
+            lineHeight: 0.9,
+            letterSpacing: "-0.02em",
+          }}
+        />
 
         {/* ── Verdict stamp ── */}
         {verdict && (
@@ -359,25 +358,7 @@ export function DailyShareLanding({
           />
         </div>
       )}
-
-      <footer className="relative z-10 mt-10 flex flex-col gap-1 border-t border-[var(--md-ink)] pb-5 pt-5 text-[var(--md-ink-muted)] sm:flex-row sm:items-center sm:justify-between">
-        <p className="font-byline text-[12px] tracking-[0.02em]">
-          Powered by{" "}
-          <a
-            href={MOTHERDUCK_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-[var(--md-ink)]"
-          >
-            MotherDuck
-          </a>{" "}
-          · <span className="font-mono">nba_box_scores_v2</span>
-        </p>
-        <p className="font-byline text-[12px] tracking-[0.02em]">
-          An independent project — not affiliated with or endorsed by the NBA.
-        </p>
-      </footer>
-    </main>
+    </PageShell>
   );
 }
 

@@ -28,19 +28,6 @@ function round1(n: number): string {
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}`;
 }
 
-// A small seed chip — ink square, white label.
-function SeedBadge({ seed }: { seed?: number }) {
-  if (seed === undefined) return null;
-  return (
-    <span
-      className="md-badge inline-flex items-center justify-center shrink-0 font-mono text-[10px] leading-none"
-      style={{ width: 18, height: 18 }}
-    >
-      {seed}
-    </span>
-  );
-}
-
 // One signed line in a per-team breakdown.
 function BreakLine({ label, value }: { label: string; value: number }) {
   const v = Math.round(value * 10) / 10;
@@ -209,9 +196,95 @@ function RosterPanel({
 
 // ─── SERIES CARD ────────────────────────────────────────────────────────────
 // Used in both the stacked mobile view and the horizontal desktop tree.
-// Two rows: winner (ink bg, red score) + loser (muted). Optional per-game
-// scores expandable via "see scores" toggle.
+// GDU-0 treatment: a compact two-row card. The WINNER row is a filled bar —
+// ink (or cobalt when it's the viewer) with a white name and a flame-red score;
+// the LOSER row sits on the card field, muted. A "BEST OF N / SEE SCORES" rail
+// expands the per-game lines. When the viewer is in the matchup the whole card
+// is traced in cobalt (border + offset shadow).
 // NOTE: scoreHi/scoreLo are game-win counts (not best-of-7 series wins).
+
+// One team row inside a series card. `won` drives the filled-bar treatment;
+// `isYou` swaps the bar to cobalt (the viewer's path color).
+function SeriesTeamRow({
+  seed,
+  name,
+  record,
+  won,
+  isYou,
+  isGhost,
+  rosterOpen,
+  onToggleRoster,
+  py,
+  nameSize,
+  scoreWidth,
+}: {
+  seed?: number;
+  name: string;
+  record: string;
+  won: boolean;
+  isYou: boolean;
+  isGhost?: boolean;
+  rosterOpen: boolean;
+  onToggleRoster: () => void;
+  py: string;
+  nameSize: string;
+  scoreWidth: number;
+}) {
+  // Winner bar: ink, or cobalt when it's the viewer. Loser: card field.
+  const barBg = won ? (isYou ? "var(--md-cobalt)" : "var(--md-ink)") : undefined;
+  const seedColor = won
+    ? isYou
+      ? "var(--md-white)"
+      : "var(--md-yellow)"
+    : "var(--md-ink-muted)";
+  const nameColor = won ? "var(--md-white)" : "var(--md-ink-muted)";
+  const scoreColor = won
+    ? isYou
+      ? "var(--md-white)"
+      : "var(--md-coral)"
+    : "var(--md-ink-muted)";
+  const toggleColor = won ? "var(--md-white)" : "var(--md-ink-muted)";
+
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 ${py}`}
+      style={barBg ? { background: barBg } : undefined}
+    >
+      {/* Fixed seed lane (kept even when empty so both rows share a name lane) */}
+      <span
+        className="shrink-0 font-mono text-[11px] font-bold leading-none tabular-nums"
+        style={{ width: 16, color: seedColor }}
+      >
+        {seed ?? ""}
+      </span>
+      <button
+        type="button"
+        onClick={onToggleRoster}
+        className="min-w-0 flex-1 truncate text-left"
+        aria-expanded={rosterOpen}
+        style={{ cursor: "pointer" }}
+      >
+        <span
+          className={`font-cond ${nameSize} uppercase tracking-[0.02em]`}
+          style={{ fontWeight: won ? 700 : 500, color: nameColor }}
+        >
+          {isGhost ? "🤖 " : ""}
+          {name}
+          {isYou ? " ★" : ""}
+        </span>
+        <span className="ml-1 text-[9px]" style={{ color: toggleColor }}>
+          {rosterOpen ? "▴" : "▾"}
+        </span>
+      </button>
+      <span
+        className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums"
+        style={{ color: scoreColor, minWidth: scoreWidth }}
+      >
+        {record}
+      </span>
+    </div>
+  );
+}
 
 function SeriesCard({
   series,
@@ -244,123 +317,74 @@ function SeriesCard({
   const hiIsYou = series.hiId === youId;
   const loIsYou = series.loId === youId;
 
-  // Series record: "4-1 (W)" / "1-4 (L)".
-  // scoreHi and scoreLo hold game-win counts for each side.
-  const hiRecord = `${series.scoreHi}-${series.scoreLo} (${hiWon ? "W" : "L"})`;
-  const loRecord = `${series.scoreLo}-${series.scoreHi} (${hiWon ? "L" : "W"})`;
+  // "4–0 W" / "0–4 L". scoreHi/scoreLo are game-win counts for each side.
+  const hiRecord = `${series.scoreHi}–${series.scoreLo} ${hiWon ? "W" : "L"}`;
+  const loRecord = `${series.scoreLo}–${series.scoreHi} ${hiWon ? "L" : "W"}`;
 
   const py = compact ? "py-1.5" : "py-2";
-  const nameSize = compact ? "text-[11px]" : "text-[12px] sm:text-[13px]";
-  const scoreWidth = compact ? 64 : 72;
+  const nameSize = compact ? "text-[14px]" : "text-[14px] sm:text-[15px]";
+  const scoreWidth = compact ? 50 : 56;
+
+  // The viewer's path is traced in cobalt — border + offset shadow on the
+  // whole card. Non-viewer cards keep the ink border; only the final gets a lift.
+  const accent = involvesYou ? "var(--md-cobalt)" : "var(--md-ink)";
+  const shadow = involvesYou
+    ? "3px 3px 0 0 var(--md-cobalt)"
+    : isFinal
+      ? "var(--md-shadow-sm)"
+      : undefined;
 
   return (
     <div
-      className={`border-2 border-[var(--md-ink)]`}
+      className="flex flex-col"
       style={{
         background: "var(--md-white)",
-        boxShadow: involvesYou || isFinal ? "var(--md-shadow-sm)" : undefined,
+        border: `2px solid ${accent}`,
+        boxShadow: shadow,
       }}
     >
       {/* Hi team row */}
-      <div
-        className={`flex items-center gap-2 border-b border-[var(--md-paper-3)] px-2 ${py}`}
-        style={
-          hiIsYou
-            ? { background: "rgba(43,75,255,0.15)", boxShadow: "inset 4px 0 0 var(--md-cobalt)" }
-            : undefined
-        }
-      >
-        <SeedBadge seed={hiTeam?.seed} />
-        <button
-          type="button"
-          onClick={() => toggleRoster("hi")}
-          className="min-w-0 flex-1 truncate text-left"
-          aria-expanded={rosterOpen === "hi"}
-          style={{ cursor: "pointer" }}
-        >
-          <span
-            className={`font-mono ${nameSize} uppercase tracking-[0.02em]`}
-            style={{
-              fontWeight: hiWon ? 700 : 400,
-              color: hiWon ? "var(--md-ink)" : "var(--md-ink-muted)",
-            }}
-          >
-            {hiTeam?.isGhost ? "🤖 " : ""}
-            {nameOf(series.hiId)}
-            {hiIsYou ? " ★" : ""}
-          </span>
-          <span className="ml-1 text-[9px] text-[var(--md-ink-muted)]">
-            {rosterOpen === "hi" ? "▴" : "▾"}
-          </span>
-        </button>
-        <span
-          className="shrink-0 font-mono text-[13px] font-bold tabular-nums"
-          style={{
-            color: hiWon ? "var(--md-coral)" : "var(--md-ink-muted)",
-            minWidth: scoreWidth,
-            textAlign: "right",
-          }}
-        >
-          {hiRecord}
-        </span>
-      </div>
+      <SeriesTeamRow
+        seed={hiTeam?.seed}
+        name={nameOf(series.hiId)}
+        record={hiRecord}
+        won={hiWon}
+        isYou={hiIsYou}
+        isGhost={hiTeam?.isGhost}
+        rosterOpen={rosterOpen === "hi"}
+        onToggleRoster={() => toggleRoster("hi")}
+        py={py}
+        nameSize={nameSize}
+        scoreWidth={scoreWidth}
+      />
       {rosterOpen === "hi" && (
         <RosterPanel team={hiTeam} compareKeys={compareFor(series.hiId)} />
       )}
 
       {/* Lo team row */}
-      <div
-        className={`flex items-center gap-2 px-2 ${py}`}
-        style={
-          loIsYou
-            ? { background: "rgba(43,75,255,0.15)", boxShadow: "inset 4px 0 0 var(--md-cobalt)" }
-            : undefined
-        }
-      >
-        <SeedBadge seed={loTeam?.seed} />
-        <button
-          type="button"
-          onClick={() => toggleRoster("lo")}
-          className="min-w-0 flex-1 truncate text-left"
-          aria-expanded={rosterOpen === "lo"}
-          style={{ cursor: "pointer" }}
-        >
-          <span
-            className={`font-mono ${nameSize} uppercase tracking-[0.02em]`}
-            style={{
-              fontWeight: hiWon ? 400 : 700,
-              color: hiWon ? "var(--md-ink-muted)" : "var(--md-ink)",
-            }}
-          >
-            {loTeam?.isGhost ? "🤖 " : ""}
-            {nameOf(series.loId)}
-            {loIsYou ? " ★" : ""}
-          </span>
-          <span className="ml-1 text-[9px] text-[var(--md-ink-muted)]">
-            {rosterOpen === "lo" ? "▴" : "▾"}
-          </span>
-        </button>
-        <span
-          className="shrink-0 font-mono text-[13px] font-bold tabular-nums"
-          style={{
-            color: hiWon ? "var(--md-ink-muted)" : "var(--md-coral)",
-            minWidth: scoreWidth,
-            textAlign: "right",
-          }}
-        >
-          {loRecord}
-        </span>
-      </div>
+      <SeriesTeamRow
+        seed={loTeam?.seed}
+        name={nameOf(series.loId)}
+        record={loRecord}
+        won={!hiWon}
+        isYou={loIsYou}
+        isGhost={loTeam?.isGhost}
+        rosterOpen={rosterOpen === "lo"}
+        onToggleRoster={() => toggleRoster("lo")}
+        py={py}
+        nameSize={nameSize}
+        scoreWidth={scoreWidth}
+      />
       {rosterOpen === "lo" && (
         <RosterPanel team={loTeam} compareKeys={compareFor(series.loId)} />
       )}
 
-      {/* Per-game scores toggle */}
+      {/* Per-game scores rail — BEST OF N / SEE SCORES */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between border-t-2 border-[var(--md-ink)] px-2 py-1 text-left font-mono text-[9px] uppercase tracking-wide text-[var(--md-ink-muted)]"
-        style={{ cursor: "pointer", background: "var(--md-paper-2)" }}
+        className="flex w-full items-center justify-between border-t border-[var(--md-paper-3)] px-3 py-1 text-left font-cond text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]"
+        style={{ cursor: "pointer" }}
         aria-expanded={open}
       >
         <span>best of {series.bestOf}</span>
@@ -582,11 +606,11 @@ function TreeColumn({
 }) {
   return (
     <div className="flex flex-col" style={{ width, flexShrink: 0 }}>
-      {/* Column header */}
+      {/* Column header — ink for the early rounds, flame for FINAL (GDU-0). */}
       <div className="mb-3 flex items-center gap-2">
         <span
-          className="font-cond text-[11px] font-semibold uppercase tracking-[0.16em]"
-          style={{ color: isFinalLabel ? "var(--md-coral)" : "var(--md-ink-muted)" }}
+          className="font-cond text-[14px] font-bold uppercase tracking-[0.16em]"
+          style={{ color: isFinalLabel ? "var(--md-coral)" : "var(--md-ink)" }}
         >
           {label}
         </span>
@@ -645,21 +669,22 @@ function ChampionColumn({
     }
   }
   // "Undefeated" only when the champion dropped ZERO playoff games.
-  const record = lost === 0 ? `${won}-0 · Undefeated` : `${won}-${lost} · Ran the table`;
+  const recordLine = `${won}–${lost}`;
+  const verdict = lost === 0 ? "Undefeated" : "Ran the table";
   const isGhost = teamOf(championId)?.isGhost;
 
   return (
-    // Full-height flex column with header + centered champion box
-    <div className="flex flex-col" style={{ width: 140, flexShrink: 0 }}>
-      {/* Column header */}
+    // Full-height flex column with header + centered champion terminus
+    <div className="flex flex-col" style={{ width: 146, flexShrink: 0 }}>
+      {/* Column header — flame, matches FINAL */}
       <div className="mb-3">
-        <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--md-coral)]">
+        <span className="font-cond text-[14px] font-bold uppercase tracking-[0.16em] text-[var(--md-coral)]">
           Champion
         </span>
       </div>
-      {/* Champion card — press-yellow, ink border, vertically centered */}
+      {/* Champion terminus — gold card, ink offset shadow, vertically centered */}
       <div className="flex flex-1 flex-col items-stretch justify-center">
-        {/* Left connecting arm from Final column */}
+        {/* Flame connecting arm from the Final card into the terminus */}
         <div className="relative flex flex-col">
           <div
             className="pointer-events-none absolute"
@@ -667,34 +692,53 @@ function ChampionColumn({
               top: "50%",
               left: 0,
               width: 24,
-              height: 1,
-              background: "var(--md-ink)",
-              transform: "translateY(-0.5px)",
+              height: 2,
+              background: "var(--md-coral)",
+              transform: "translateY(-1px)",
             }}
           />
           <div
-            className="flex flex-col gap-2 px-3 py-3"
+            className="flex flex-col items-start gap-3 px-4 pt-4 pb-5"
             style={{
               marginLeft: 24,
               background: "var(--md-yellow)",
-              border: "2px solid var(--md-ink)",
               boxShadow: "var(--md-shadow-sm)",
             }}
           >
-            <div className="flex items-center gap-2">
-              <span className="text-[18px] leading-none">♛</span>
-              <span className="font-cond text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
-                Champion
-              </span>
-            </div>
+            {/* Crown / trophy mark */}
+            <svg
+              width="30"
+              height="30"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+              style={{ flexShrink: 0 }}
+              aria-hidden="true"
+            >
+              <path d="M3 7L7 11L12 4L17 11L21 7L19.5 19H4.5L3 7Z" fill="var(--md-ink)" />
+              <rect x="4.5" y="19.5" width="15" height="2.2" fill="var(--md-ink)" />
+            </svg>
+            <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.18em] text-[var(--md-ink)]">
+              Champion
+            </span>
             <div
-              className="font-archivo leading-tight text-[var(--md-ink)]"
-              style={{ fontSize: 15, fontWeight: 800, fontVariationSettings: '"wdth" 100', wordBreak: "break-word" }}
+              className="font-cover uppercase leading-none text-[var(--md-ink)]"
+              style={{ fontSize: 40, letterSpacing: "0.005em", wordBreak: "break-word" }}
             >
               {isGhost ? "🤖 " : ""}
               {championName}
             </div>
-            <div className="font-mono text-[10px] text-[var(--md-ink)]">{record}</div>
+            <div
+              className="shrink-0"
+              style={{ width: 114, height: 1.5, opacity: 0.35, background: "var(--md-ink)" }}
+            />
+            <div className="flex flex-col items-start gap-1">
+              <div className="font-mono text-[15px] font-bold tabular-nums text-[var(--md-ink)]">
+                {recordLine}
+              </div>
+              <div className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink)]">
+                {verdict}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -818,19 +862,29 @@ function MobileStackedBracket({
                   />
                 ))}
               </div>
-              {/* Champion capsule */}
+              {/* Champion terminus — gold card, crown + name + verdict */}
               <div
-                className="flex items-center gap-3 px-4 py-3 font-cond"
-                style={{ background: "var(--md-yellow)", border: "2px solid var(--md-ink)", boxShadow: "var(--md-shadow-md)" }}
+                className="flex items-center gap-4 px-4 py-4"
+                style={{ background: "var(--md-yellow)", boxShadow: "var(--md-shadow-md)" }}
               >
-                <span className="text-[20px]">♛</span>
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
+                <svg
+                  width="34"
+                  height="34"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                  style={{ flexShrink: 0 }}
+                  aria-hidden="true"
+                >
+                  <path d="M3 7L7 11L12 4L17 11L21 7L19.5 19H4.5L3 7Z" fill="var(--md-ink)" />
+                  <rect x="4.5" y="19.5" width="15" height="2.2" fill="var(--md-ink)" />
+                </svg>
+                <div className="min-w-0">
+                  <div className="font-cond text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--md-ink)]">
                     Champion
                   </div>
                   <div
-                    className="font-archivo leading-tight"
-                    style={{ fontSize: 18, fontWeight: 800, fontVariationSettings: '"wdth" 100', color: "var(--md-ink)" }}
+                    className="font-cover uppercase leading-none text-[var(--md-ink)]"
+                    style={{ fontSize: 28, letterSpacing: "0.005em", wordBreak: "break-word" }}
                   >
                     {teamOf(bracket.championId)?.isGhost ? "🤖 " : ""}
                     {bracket.championName}

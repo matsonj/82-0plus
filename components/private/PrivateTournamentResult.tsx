@@ -15,6 +15,7 @@ import {
 import type { PrivateCompletedEntry } from "@/components/private/types";
 import { copyText } from "@/lib/copyText";
 import { SITE_URL } from "@/lib/site";
+import { Button, Capsule } from "@/components/ui";
 
 // Final standings rank: most playoff wins first, then better net margin. A
 // timed-out (bot_replaced) entrant is DISPLAYED as "Bot (timed out)" with its
@@ -79,9 +80,9 @@ export function PrivateTournamentResult({
       <div className="flex flex-col gap-2 border-b-2 border-[var(--md-ink)] pb-5 md:flex-row md:items-start md:justify-between">
         <div className="flex flex-col gap-2">
           <div>
-            <span className="md-capsule md-capsule--cobalt inline-flex text-[11px]">
+            <Capsule tone="cobalt" className="inline-flex text-[11px]">
               Private Tournament
-            </span>
+            </Capsule>
           </div>
           <h1
             className="font-cover leading-none text-[var(--md-ink)]"
@@ -277,9 +278,10 @@ export function PrivateTournamentResult({
           )}
         </div>
 
-        <button
+        <Button
           type="button"
-          className="md-btn md-btn--lg shrink-0"
+          size="lg"
+          className="shrink-0"
           style={{ boxShadow: "var(--md-shadow-pop)" }}
           onClick={async () => {
             if (await copyText(fullShare)) {
@@ -290,7 +292,7 @@ export function PrivateTournamentResult({
         >
           <span>⎘</span>
           {shareCopied ? "Copied!" : "Share the Bracket"}
-        </button>
+        </Button>
       </div>
 
       {/* Host-only teardown — quiet, confirm-gated. */}

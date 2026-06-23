@@ -3,8 +3,8 @@
 import { use, useState, useCallback } from "react";
 import Link from "next/link";
 import { TournamentLookup, type LookupChrome } from "@/components/TournamentLookup";
-import { GlobalHeader } from "@/components/GlobalHeader";
-import { MOTHERDUCK_URL } from "@/lib/site";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 
 // Lookup-only landing. You ENTER the tournament from a finished Classic/Ranked
 // game (the "Enter Tournament" button on the results), which carries your drafted
@@ -31,51 +31,39 @@ export default function TournamentPage({
   const showLookupChrome = chrome === "lookup";
 
   return (
-    <main className="relative mx-auto flex min-h-full max-w-6xl flex-col px-4 pb-16 sm:pb-20">
-      {/* Faint halftone field behind the whole page — newsprint texture */}
-      <div className="md-sunbeam" />
-
-      <GlobalHeader />
-
+    <PageShell
+      width="wide"
+      paddingClassName="px-4 pb-16 sm:pb-20"
+      footerCentered
+    >
       {/* Page masthead: folio bar + cover-line headline.
           Only in the logged-out lookup state. Hidden for the logged-in list
           (it owns its own "MY TEAMS" title) and bracket results (their own
           masthead) — both of those go full-width. */}
       {showLookupChrome && (
-        <section className="relative z-10 mt-4 sm:mt-6">
-          {/* Folio bar — Special Elite, muted, small */}
-          <div className="mb-3 flex items-center gap-4 border-b border-[var(--md-paper-3)] pb-2">
-            <span className="font-byline text-[11px] text-[var(--md-ink-muted)]">
-              MY TEAMS · THE BRACKET DESK
-            </span>
-          </div>
-
-          {/* Kicker — flame italic script above headline */}
-          <div
-            className="font-byline mb-1"
-            style={{ fontSize: 18, color: "var(--md-coral)", fontStyle: "italic" }}
-          >
-            Roll call —
-          </div>
-
-          {/* Cover-line headline — Anton */}
-          <h1
-            className="font-cover uppercase leading-none"
-            style={{ fontSize: "clamp(48px, 12vw, 100px)", letterSpacing: "-0.02em" }}
-          >
-            HOW FAR DID
-            <br />
-            YOU GET?
-          </h1>
-
-          <p className="mt-3 max-w-lg text-[14px] leading-relaxed sm:text-[15px]">
-            Look up your bracket by name + PIN. Haven&rsquo;t entered yet? Play a{" "}
-            <Link href="/" className="font-bold text-[var(--md-blue)] underline">
-              Classic or Ranked
-            </Link>{" "}
-            season, then hit <strong>Enter Tournament</strong> on your result.
-          </p>
-        </section>
+        <PageHeader
+          className="mt-4 sm:mt-6"
+          eyebrowVariant="line"
+          eyebrowLeft="MY TEAMS · THE BRACKET DESK"
+          contentClassName="mt-3"
+          kicker="Roll call —"
+          kickerClassName="font-byline mb-1 block text-[18px] italic text-[var(--md-coral)]"
+          title={<>HOW FAR DID<br />YOU GET?</>}
+          titleClassName="leading-none"
+          titleStyle={{
+            fontSize: "clamp(48px, 12vw, 100px)",
+            letterSpacing: "-0.02em",
+          }}
+          description={
+            <>
+              Look up your bracket by name + PIN. Haven&rsquo;t entered yet? Play a{" "}
+              <Link href="/" className="font-bold text-[var(--md-blue)] underline">
+                Classic or Ranked
+              </Link>{" "}
+              season, then hit <strong>Enter Tournament</strong> on your result.
+            </>
+          }
+        />
       )}
 
       {/* Double rule under masthead — only in lookup state */}
@@ -136,25 +124,6 @@ export default function TournamentPage({
           </aside>
         )}
       </div>
-
-      <footer className="relative z-10 mt-auto pt-16 text-center">
-        <div className="md-rule-double mb-6" />
-        <p className="font-byline text-[12px] text-[var(--md-ink-muted)]">
-          Powered by{" "}
-          <a
-            href={MOTHERDUCK_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-[var(--md-ink)]"
-          >
-            MotherDuck
-          </a>{" "}
-          · <code>nba_box_scores_v2</code>
-        </p>
-        <p className="mt-1 font-byline text-[11px] text-[var(--md-ink-muted)]">
-          An independent project, not affiliated with or endorsed by the NBA.
-        </p>
-      </footer>
-    </main>
+    </PageShell>
   );
 }

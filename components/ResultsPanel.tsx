@@ -1,28 +1,93 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
-import { PlayerCardCarousel, type CardPlayer } from "@/components/PlayerCard";
-import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
+import { type CardPlayer, usePlayerCardDeck } from "@/components/PlayerCard";
 import { presentShare } from "@/lib/shareActions";
-import { copyText } from "@/lib/copyText";
 import { MIN_ELIGIBLE_WINS } from "@/lib/tier";
+import { splitPlayerName } from "@/lib/playerName";
+import { Button } from "@/components/ui";
+import { ShareAssetDialog } from "@/components/ui/ShareAssetDialog";
+import { RosterCard, ROSTER_CARD_ROW_HAIRLINE } from "@/components/RosterCard";
 
 // ---- Fit narrative -------------------------------------------------------
-// One-sentence summary of the team fit adjustment. The mockup shows a single
-// human-readable line: "Balanced roster — no usage clashes." Derived from the
-// simulation result fields. Never shows the raw factor numbers.
+// One sentence on the Team Fit adjustment, in SLAM editorial voice (em-dash,
+// no raw numbers — the signed Team Fit value is shown right beside it).
+//
+// The card's old version walked a fixed threshold ladder and fell through to a
+// happy "Balanced roster" default, so a heavily-penalized lineup whose specific
+// factors missed those exact cutoffs got the wrong, cheerful line. Instead we
+// find the SINGLE DOMINANT penalty — the biggest of the five magnitudes that
+// were subtracted off the talent base (all positive points: usagePen,
+// outsidePen, ballhogPen, balancePen, sizePen) — and describe THAT, scaling the
+// tone to how badly it hurt. A negative teamFit can therefore never read as
+// "balanced." Only a roughly-neutral-or-positive teamFit takes the clean /
+// synergy lines.
+//
+// balancePen is itself a sum (no-guard 16 + skew 7/extra), so we re-derive which
+// half is biting from roleCounts rather than trusting the lumped magnitude.
 function fitNarrative(r: SimResult): string {
-  if (r.usageFactor < 0.85) return "Heavy usage overlap — ball-dominant lineup.";
-  if (r.usageFactor < 0.94) return "Some usage overlap — crowded halfcourt.";
-  if (r.nonShooters >= 3) return "Floor-spacing issue — three non-shooters.";
-  if (r.nonShooters === 2) return "Two non-shooters — floor spacing is tight.";
-  if (r.assistFactor < 0.80) return "Ball-hogging tendency — low assist rate.";
-  if (r.synergyBonus > 0.5) return "Complementary stars — strong chemistry bonus.";
-  if (r.balancePen < -1.0) return "Lopsided scoring load — imbalanced attack.";
-  return "Balanced roster — no usage clashes.";
+  const { usagePen, outsidePen, ballhogPen, balancePen, sizePen } = r;
+  const { G, W, B } = r.roleCounts;
+
+  // Which single factor cost the most net? (All are positive magnitudes.)
+  const factors = [
+    { key: "usage", pen: usagePen },
+    { key: "outside", pen: outsidePen },
+    { key: "ballhog", pen: ballhogPen },
+    { key: "balance", pen: balancePen },
+    { key: "size", pen: sizePen },
+  ];
+  const worst = factors.reduce((a, b) => (b.pen > a.pen ? b : a));
+
+  // Roughly-neutral-or-positive fit, or no penalty bites: clean / synergy lines.
+  // (teamFit is already rounded to 1dp; -0.5 is the threshold below which the
+  // negative magnitude is worth calling out as a real construction problem.)
+  if (r.teamFit > -0.5 || worst.pen < 0.5) {
+    if (r.synergyBonus > 0.5) return "Complementary stars — the parts fit.";
+    return "Solid construction — no real flaws.";
+  }
+
+  // A genuine negative fit: name the dominant problem, specifically, and let the
+  // tone track severity. "severe" gates the harshest phrasing for big penalties.
+  switch (worst.key) {
+    case "balance": {
+      // balancePen = no-guard (16) and/or skew (4+ in one spot, 7/extra). Lead
+      // with whichever is actually present; no-guard is the heavier, more common
+      // failure so it wins if both apply.
+      if (G === 0) return "No point guard — nobody to run the offense.";
+      const max = Math.max(G, W, B);
+      if (B >= 4) return "Four bigs — a frontcourt logjam, no spacing.";
+      if (max >= 4) {
+        const spot = G === max ? "guards" : W === max ? "wings" : "bigs";
+        return `Stacked at one spot — too many ${spot}, no balance.`;
+      }
+      return "Lopsided lineup — the positions don't fit together.";
+    }
+    case "outside": {
+      if (r.nonShooters >= 3)
+        return "Three non-shooters — the paint is hopelessly clogged.";
+      return "Two non-shooters — the floor's too tight to breathe.";
+    }
+    case "usage": {
+      const severe = usagePen >= 8;
+      return severe
+        ? "Too many ball-dominant stars — they can't all eat."
+        : "Some usage overlap — the shot diet's a touch crowded.";
+    }
+    case "ballhog": {
+      const severe = ballhogPen >= 8;
+      return severe
+        ? "Iso-heavy — the ball sticks and never moves."
+        : "Ball movement runs light — a little too much iso.";
+    }
+    case "size": {
+      return "Undersized — this lineup gets bullied on the glass.";
+    }
+    default:
+      return "Construction issues — the pieces don't quite fit.";
+  }
 }
 
 // ---- Cover-line kicker ("You built a contender") -------------------------
@@ -38,99 +103,12 @@ function resultKicker(wins: number, netRating: number, perfect: boolean): string
   return "Back to the draft board.";
 }
 
-// ---- Share overlay -------------------------------------------------------
-function ShareOverlay({
-  shareUrl,
-  shareLink,
-  autoCopied,
-  onClose,
-}: {
-  shareUrl: string;
-  shareLink: string;
-  autoCopied: boolean;
-  onClose: () => void;
-}) {
-  const [linkCopied, setLinkCopied] = useState(false);
-  // Portal to <body> so the fixed overlay escapes any ancestor stacking context
-  // and reliably sits above page chrome/footer (it was bleeding under the footer).
-  // Mirrors the PlayerCard overlay, which portals for the same reason.
-  if (typeof document === "undefined") return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(21,17,14,0.75)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm p-5"
-        style={{
-          background: "var(--md-white)",
-          border: "2px solid var(--md-ink)",
-          boxShadow: "var(--md-shadow-lg)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h3
-            className="font-archivo leading-tight"
-            style={{ fontSize: 18, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
-          >
-            Share your season
-          </h3>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className="font-mono text-[16px] text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
-          >
-            ✕
-          </button>
-        </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={shareUrl}
-          alt="Your daily82 result card"
-          className="mt-3 w-full border-2 border-[var(--md-ink)]"
-        />
-        <p className="mt-2 text-center font-mono text-[12px] leading-snug text-[var(--md-ink-muted)]">
-          <strong>Right-click to copy and share.</strong>{" "}
-          {autoCopied
-            ? "The link is already on your clipboard."
-            : 'Use "Copy link" below to copy the link.'}
-        </p>
-        <div className="mt-3 flex flex-wrap justify-center gap-2">
-          <a
-            className="md-btn md-btn--sm md-btn--secondary"
-            href={shareUrl}
-            download="daily82-season.png"
-          >
-            Download
-          </a>
-          <button
-            className="md-btn md-btn--sm md-btn--secondary"
-            onClick={async () => {
-              const ok = await copyText(shareLink);
-              if (ok) {
-                setLinkCopied(true);
-                setTimeout(() => setLinkCopied(false), 1500);
-              }
-            }}
-          >
-            {linkCopied ? "Link copied!" : "Copy link"}
-          </button>
-          <button className="md-btn md-btn--sm md-btn--ink" onClick={onClose}>
-            Done
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
 // ---- THE FIVE: ink-spread lineup table -----------------------------------
-// The right-column dark card on desktop; a standalone section on mobile.
-// Ink background, flame border + hard offset shadow. Fixed-width stat lanes.
+// The right-column dark card on desktop; a standalone section on mobile. Built on
+// the shared RosterCard shell (flame frame + #0E0B09 column band + 6px flame
+// offset shadow) so it stays visually locked to the draft "YOUR ROSTER" card.
+// Result variant: gold-outlined seed chips 1–5, PTS/REB/AST lanes, and a gold
+// TEAM / GAME totals row. Fixed-width stat lanes. Matches artboard 894-0.
 function TheFiveCard({
   roster,
   result,
@@ -144,81 +122,74 @@ function TheFiveCard({
   mode: GameMode;
   onCardOpen: (i: number) => void;
 }) {
-  // Fixed-width right-aligned stat cell: matches column lanes in the mockup.
-  const statW = 44;
+  // Fixed-width right-aligned stat cell: matches the column lanes in 894-0.
+  const statW = 56;
+  // Fixed-width seed-chip cell (the gold-outlined 1–5 box lives inside it).
+  const seedW = 44;
 
-  return (
-    <div
-      className="w-full overflow-hidden"
+  // Column-band / row-hairline values shared with the draft card.
+  const bandLabel = (col: string, width?: number, alignRight = false) => (
+    <span
+      key={col}
+      className={`font-cond font-semibold uppercase ${alignRight ? "text-right" : ""}`}
       style={{
-        background: "var(--md-ink)",
-        border: "3px solid var(--md-coral)",
-        boxShadow: "var(--md-shadow-pop)",
-        color: "var(--md-white)",
+        fontSize: 12,
+        letterSpacing: "0.16em",
+        color: "#9a8f79",
+        ...(width ? { width, flexShrink: 0 } : { flex: 1 }),
       }}
     >
-      {/* Card header */}
-      <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-3">
-        <div>
-          <h2
-            className="font-cover leading-none uppercase"
-            style={{ fontSize: "clamp(28px, 5vw, 40px)", letterSpacing: "-0.02em" }}
-          >
-            The Five
-          </h2>
-          <div
-            className="mt-1 font-cond font-semibold uppercase tracking-[0.14em]"
-            style={{ fontSize: 10, color: "var(--md-paper-3)" }}
-          >
-            Per-game averages · Simulated 82-game season
-          </div>
-        </div>
+      {col}
+    </span>
+  );
+
+  return (
+    <RosterCard
+      title="The Five"
+      rightLabel="Starting Lineup"
+      subtitle="Per-game averages · Simulated 82-game season"
+      groundFocal="top-left"
+      columnHeader={
+        <>
+          {bandLabel("#", seedW)}
+          {bandLabel("Player")}
+          {bandLabel("PTS", statW, true)}
+          {bandLabel("REB", statW, true)}
+          {bandLabel("AST", statW, true)}
+        </>
+      }
+      footer={
+        // Team totals footer — flame top rule, gold TEAM / GAME label.
         <div
-          className="font-cond font-semibold uppercase tracking-[0.14em] shrink-0 mt-1"
-          style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
+          className="flex items-center px-4 py-3.5"
+          style={{ borderTop: "2px solid var(--md-coral)" }}
         >
-          Starting Lineup
-        </div>
-      </div>
-
-      {/* Column header row — slate/navy band */}
-      <div
-        className="flex items-center gap-0 px-4 py-2"
-        style={{ background: "rgba(40,55,80,0.85)" }}
-      >
-        {/* # */}
-        <span
-          className="font-cond font-bold uppercase tracking-[0.12em] text-[var(--md-white)] shrink-0"
-          style={{ fontSize: 11, width: 34 }}
-        >
-          #
-        </span>
-        {/* PLAYER */}
-        <span
-          className="flex-1 font-cond font-bold uppercase tracking-[0.12em] text-[var(--md-white)]"
-          style={{ fontSize: 11 }}
-        >
-          Player
-        </span>
-        {/* PTS / REB / AST */}
-        {(["PTS", "REB", "AST"] as const).map((col) => (
+          <span className="shrink-0" style={{ width: seedW }} />
           <span
-            key={col}
-            className="font-cond font-bold uppercase tracking-[0.12em] text-[var(--md-white)] shrink-0"
-            style={{ fontSize: 11, width: statW, textAlign: "right" }}
+            className="flex-1 font-cond font-semibold uppercase"
+            style={{ fontSize: 15, letterSpacing: "0.16em", color: "var(--md-yellow)" }}
           >
-            {col}
+            Team / Game
           </span>
-        ))}
-      </div>
-
+          {([result.teamBox.pts, result.teamBox.reb, result.teamBox.ast] as number[]).map(
+            (v, si) => (
+              <span
+                key={si}
+                className="font-mono font-bold tabular-nums shrink-0 text-right"
+                style={{ fontSize: 17, width: statW, color: si === 0 ? "var(--md-white)" : "var(--md-paper-3)" }}
+              >
+                {v.toFixed(1)}
+              </span>
+            ),
+          )}
+        </div>
+      }
+    >
       {/* Player rows */}
       <div className="flex flex-col">
         {roster.map((r, i) => {
-          // Mockup shows last name bold, first · team · year as subtitle.
-          const nameParts = r.player_name.split(" ");
-          const lastName = nameParts.at(-1) ?? r.player_name;
-          const firstName = nameParts.slice(0, -1).join(" ");
+          // Last name bold, "first · team 'yr" as subtitle.
+          const { first: firstName, last: lastName } = splitPlayerName(r.player_name);
           const yearStr = String(r.best_season).slice(2);
           const allDefSuffix =
             mode === "classic" && r.allDef === 1
@@ -226,48 +197,49 @@ function TheFiveCard({
               : mode === "classic" && r.allDef === 2
                 ? " 🥈"
                 : "";
+          const isLast = i === roster.length - 1;
 
           const rowContent = (
             <div
-              className="flex items-center gap-0 px-4 py-3 border-b"
-              style={{ borderColor: "rgba(255,255,255,0.07)" }}
+              className="flex items-center px-4 py-3.5"
+              style={isLast ? undefined : { borderBottom: `1px solid ${ROSTER_CARD_ROW_HAIRLINE}` }}
             >
-              {/* Press-yellow number badge */}
-              <span
-                className="inline-flex items-center justify-center font-mono font-bold shrink-0 mr-2"
-                style={{
-                  width: 22,
-                  height: 22,
-                  background: "var(--md-yellow)",
-                  color: "var(--md-ink)",
-                  border: "1px solid var(--md-ink)",
-                  fontSize: 10,
-                  fontWeight: 700,
-                }}
-              >
-                {i + 1}
+              {/* Gold-outlined seed chip in a fixed-width cell */}
+              <span className="shrink-0" style={{ width: seedW }}>
+                <span
+                  className="inline-flex items-center justify-center font-mono font-bold tabular-nums"
+                  style={{
+                    width: 26,
+                    height: 26,
+                    border: "1.5px solid var(--md-yellow)",
+                    color: "var(--md-yellow)",
+                    fontSize: 14,
+                  }}
+                >
+                  {i + 1}
+                </span>
               </span>
               {/* Name + subtitle */}
               <div className="flex-1 min-w-0">
                 <div
-                  className="font-archivo truncate leading-tight"
-                  style={{ fontSize: 15, fontWeight: 700, color: "var(--md-white)" }}
+                  className="font-mono truncate leading-tight"
+                  style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--md-white)" }}
                 >
                   {lastName}{allDefSuffix}
                 </div>
                 <div
-                  className="font-mono leading-none mt-0.5"
-                  style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
+                  className="font-mono leading-none mt-1"
+                  style={{ fontSize: 12, letterSpacing: "0.02em", color: "#7a7060" }}
                 >
                   {firstName} · {r.team} &rsquo;{yearStr}
                 </div>
               </div>
-              {/* Stats — fixed-width right-aligned */}
+              {/* Stats — fixed-width right-aligned. PTS bold/white, REB·AST regular/cream. */}
               {([r.pts, r.reb, r.ast] as number[]).map((v, si) => (
                 <span
                   key={si}
-                  className="font-mono font-bold tabular-nums shrink-0"
-                  style={{ fontSize: 14, width: statW, textAlign: "right", color: "var(--md-white)" }}
+                  className={`font-mono tabular-nums shrink-0 text-right ${si === 0 ? "font-bold" : ""}`}
+                  style={{ fontSize: 17, width: statW, color: si === 0 ? "var(--md-white)" : "var(--md-paper-3)" }}
                 >
                   {v.toFixed(1)}
                 </span>
@@ -289,32 +261,7 @@ function TheFiveCard({
           );
         })}
       </div>
-
-      {/* Team totals footer — press-yellow on dark */}
-      <div
-        className="flex items-center gap-0 px-4 py-3 border-t-2"
-        style={{ borderColor: "var(--md-coral)", background: "rgba(0,0,0,0.25)" }}
-      >
-        <span className="shrink-0 mr-2" style={{ width: 22 }} />
-        <span
-          className="flex-1 font-cond font-bold uppercase tracking-[0.12em]"
-          style={{ fontSize: 11, color: "var(--md-yellow)" }}
-        >
-          Team / Game
-        </span>
-        {([result.teamBox.pts, result.teamBox.reb, result.teamBox.ast] as number[]).map(
-          (v, si) => (
-            <span
-              key={si}
-              className="font-mono font-bold tabular-nums shrink-0"
-              style={{ fontSize: 14, width: statW, textAlign: "right", color: "var(--md-yellow)" }}
-            >
-              {v.toFixed(1)}
-            </span>
-          ),
-        )}
-      </div>
-    </div>
+    </RosterCard>
   );
 }
 
@@ -436,6 +383,52 @@ function MobileMoneyCard({
   );
 }
 
+// ---- Team Fit line (shared mobile + desktop) -----------------------------
+// The net rating shown above is the FINAL number — talent plus this Team Fit
+// adjustment (teamFit = net − talent − defense). The caption makes that
+// explicit so it doesn't read as a bonus added ON TOP of the net rating.
+function TeamFitLine({
+  fitSign,
+  fitAbs,
+  fitColor,
+  narrative,
+  className,
+}: {
+  fitSign: string;
+  fitAbs: string;
+  fitColor: string;
+  narrative: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="flex items-baseline flex-wrap gap-1">
+        <span
+          className="font-cond font-bold uppercase tracking-[0.12em]"
+          style={{ fontSize: 12, color: "var(--md-ink)" }}
+        >
+          Team Fit
+        </span>
+        <span
+          className="font-mono font-bold tabular-nums"
+          style={{ fontSize: 13, color: fitColor }}
+        >
+          {fitSign}{fitAbs}
+        </span>
+        <span className="font-mono" style={{ fontSize: 12, color: "var(--md-ink-muted)" }}>
+          · {narrative}
+        </span>
+      </div>
+      <span
+        className="mt-0.5 block font-byline"
+        style={{ fontSize: 11, color: "var(--md-ink-muted)" }}
+      >
+        Included in final rating.
+      </span>
+    </div>
+  );
+}
+
 // ---- Main component -------------------------------------------------------
 export function ResultsPanel({
   roster,
@@ -484,7 +477,6 @@ export function ResultsPanel({
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [autoCopied, setAutoCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [cardIndex, setCardIndex] = useState<number | null>(null);
 
   // Career cards reveal stats — Classic only (not Daily).
   const cardsOn = mode === "classic" && !isDaily;
@@ -501,10 +493,14 @@ export function ResultsPanel({
       })),
     [roster],
   );
-
-  useEffect(() => {
-    if (cardsOn) for (const c of cardPlayers) prefetchPlayerSeasons(c.entityId);
-  }, [cardsOn, cardPlayers]);
+  const {
+    carousel: playerCardCarousel,
+    openCard,
+  } = usePlayerCardDeck({
+    players: cardPlayers,
+    enabled: cardsOn,
+    prefetchAll: true,
+  });
 
   useEffect(() => {
     let active = true;
@@ -556,18 +552,15 @@ export function ResultsPanel({
   return (
     <>
       {/* Career card carousel modal (Classic only) */}
-      {cardIndex !== null && cardPlayers[cardIndex] && (
-        <PlayerCardCarousel
-          players={cardPlayers}
-          index={cardIndex}
-          onClose={() => setCardIndex(null)}
-        />
-      )}
+      {playerCardCarousel}
 
       {/* Share overlay */}
       {shareUrl && (
-        <ShareOverlay
-          shareUrl={shareUrl}
+        <ShareAssetDialog
+          title="Share your season"
+          imageUrl={shareUrl}
+          imageAlt="Your daily82 result card"
+          downloadName="daily82-season.png"
           shareLink={shareLink}
           autoCopied={autoCopied}
           onClose={closeShare}
@@ -578,20 +571,11 @@ export function ResultsPanel({
         {/* Mobile header: Season Complete kicker + mode badge + marker kicker
             (desktop shows these inside the left grid column) */}
         <div className="lg:hidden flex flex-col gap-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Mode badge intentionally omitted — it lives on the money card just
+                below, so we don't repeat it here (was tripled on mobile). */}
             <span className="md-kicker--marker" style={{ fontSize: 20 }}>
               Season complete.
-            </span>
-            <span
-              className="font-cond font-bold uppercase tracking-[0.1em] px-2 py-0.5"
-              style={{
-                fontSize: 11,
-                background: "var(--md-coral)",
-                color: "var(--md-white)",
-                border: "2px solid var(--md-ink)",
-              }}
-            >
-              {modeLabel}
             </span>
           </div>
           <div
@@ -612,6 +596,16 @@ export function ResultsPanel({
           netRating={netRating}
           perfect={perfect}
           modeLabel={modeLabel}
+        />
+
+        {/* Team Fit — mobile only, directly under record + rating and ABOVE the
+            roster (871-0). Desktop keeps its copy inside the left column. */}
+        <TeamFitLine
+          fitSign={fitSign}
+          fitAbs={fitAbs}
+          fitColor={fitColor}
+          narrative={narrative}
+          className="lg:hidden"
         />
 
         {/*
@@ -710,33 +704,18 @@ export function ResultsPanel({
               </span>
             </div>
 
-            {/* Team fit — one line: label + signed value + narrative */}
-            <div className="flex items-baseline flex-wrap gap-1 mb-6">
-              <span
-                className="font-cond font-bold uppercase tracking-[0.12em]"
-                style={{ fontSize: 12, color: "var(--md-ink)" }}
-              >
-                Team Fit
-              </span>
-              <span
-                className="font-mono font-bold tabular-nums"
-                style={{ fontSize: 13, color: fitColor }}
-              >
-                {fitSign}{fitAbs}
-              </span>
-              <span
-                className="font-mono"
-                style={{ fontSize: 12, color: "var(--md-ink-muted)" }}
-              >
-                · {narrative}
-              </span>
-            </div>
+            {/* Team fit — desktop only (mobile renders it above the roster) */}
+            <TeamFitLine
+              fitSign={fitSign}
+              fitAbs={fitAbs}
+              fitColor={fitColor}
+              narrative={narrative}
+              className="hidden lg:block mb-6"
+            />
 
             {/* ---- CTAs ----
-                Two breakpoint-specific blocks live in PLAIN-DIV wrappers, not
-                on the buttons themselves: `.md-btn` is unlayered CSS so its
-                `display:inline-flex` beats Tailwind's `lg:hidden`/`hidden lg:flex`
-                display utilities — those only work on non-md-btn elements. */}
+                Two breakpoint-specific blocks because the mobile and desktop
+                action rows intentionally use different hierarchy. */}
             {!entryOnly && (
               <>
                 {/* Mobile (871-0): full-width flame share, tournament block, play again */}
@@ -790,9 +769,11 @@ export function ResultsPanel({
                   </button>
                 </div>
 
-                {/* Desktop (872-0): ONE flame CTA + outline Play Again side-by-side,
-                    Share Result as a text link below. */}
-                <div className="hidden lg:flex lg:flex-col lg:gap-4 lg:pt-2">
+                {/* Desktop (872-0 / Action Row 8CD-0): three distinct tiers.
+                    ENTER TOURNAMENT (flame, full-width) on top; SHARE RESULT (solid
+                    ink) + PLAY AGAIN (cream outline) side-by-side below. Consistent
+                    ink 6px hard offset shadow across all three. */}
+                <div className="hidden lg:flex lg:flex-col lg:items-start lg:gap-4 lg:pt-2">
                   {onEnterTournament && !isEligible && (
                     <div className="self-start border-2 border-[var(--md-paper-3)] px-4 py-3" style={{ background: "var(--md-paper-2)" }}>
                       <div className="font-cond font-bold uppercase tracking-[0.1em]" style={{ fontSize: 12, color: "var(--md-ink-muted)" }}>
@@ -804,53 +785,81 @@ export function ResultsPanel({
                     </div>
                   )}
 
-                  <div className="flex flex-wrap items-center gap-4">
-                    {onEnterTournament && isEligible && (
-                      <button
-                        className="md-btn md-btn--lg"
-                        style={{
-                          background: "var(--md-coral)",
-                          color: "var(--md-white)",
-                          border: "3px solid var(--md-ink)",
-                          boxShadow: "6px 6px 0 0 var(--md-ink)",
-                        }}
-                        onClick={onEnterTournament}
-                      >
-                        {entryCtaLabel ?? "Enter Tournament"}
-                        <span>→</span>
-                      </button>
-                    )}
-                    {/* Play Again — flat outline, no fill (matches 872-0) */}
+                  {/* Tier 1 — ENTER TOURNAMENT: flame primary, full-width */}
+                  {onEnterTournament && isEligible && (
+                    <button
+                      type="button"
+                      onClick={onEnterTournament}
+                      className="inline-flex w-full items-center justify-center gap-3 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5"
+                      style={{
+                        background: "var(--md-coral)",
+                        color: "var(--md-white)",
+                        border: "3px solid var(--md-ink)",
+                        boxShadow: "6px 6px 0 0 var(--md-ink)",
+                        fontSize: 16,
+                        letterSpacing: "0.12em",
+                        padding: "16px 22px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {entryCtaLabel ?? "Enter Tournament"}
+                      <span style={{ fontSize: 18 }}>→</span>
+                    </button>
+                  )}
+
+                  {/* Tiers 2 + 3 — SHARE RESULT (ink) + PLAY AGAIN (cream outline).
+                      Full-width row; each button flex-1 so together they span the
+                      same width as the ENTER TOURNAMENT button above. */}
+                  <div className="flex w-full items-stretch gap-4">
+                    {/* Tier 2 — SHARE RESULT: solid ink button with upload glyph */}
+                    <button
+                      type="button"
+                      onClick={share}
+                      disabled={!shareBlob || !shareReady}
+                      className="inline-flex flex-1 items-center justify-center gap-2.5 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
+                      style={{
+                        background: "var(--md-ink)",
+                        color: "var(--md-paper)",
+                        boxShadow: "6px 6px 0 0 var(--md-ink)",
+                        fontSize: 16,
+                        letterSpacing: "0.12em",
+                        padding: "16px 22px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span style={{ fontSize: 15 }}>↑</span>
+                      {shareBlob && shareReady ? "Share Result" : "Preparing…"}
+                    </button>
+
+                    {/* Tier 3 — PLAY AGAIN: cream + ink outline */}
                     <button
                       type="button"
                       onClick={onReset}
-                      className="inline-flex items-center gap-2 border-2 border-[var(--md-ink)] px-7 py-[15px] font-cond font-semibold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
-                      style={{ fontSize: 15, cursor: "pointer" }}
+                      className="inline-flex flex-1 items-center justify-center gap-2 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5"
+                      style={{
+                        background: "var(--md-paper)",
+                        color: "var(--md-ink)",
+                        border: "1.5px solid var(--md-ink)",
+                        boxShadow: "6px 6px 0 0 var(--md-ink)",
+                        fontSize: 15,
+                        letterSpacing: "0.1em",
+                        padding: "16px 22px",
+                        cursor: "pointer",
+                      }}
                     >
                       <span>↺</span>
                       {resetLabel ?? "Play Again"}
                     </button>
                   </div>
-
-                  {/* Share — text link with upload glyph */}
-                  <button
-                    type="button"
-                    onClick={share}
-                    disabled={!shareBlob || !shareReady}
-                    className="inline-flex items-center gap-2 self-start font-cond font-semibold uppercase tracking-[0.12em] underline underline-offset-4 transition-opacity disabled:opacity-40"
-                    style={{ fontSize: 15, color: "var(--md-ink)", cursor: "pointer" }}
-                  >
-                    <span style={{ fontSize: 15 }}>↑</span>
-                    {shareBlob && shareReady ? "Share Result" : "Preparing…"}
-                  </button>
                 </div>
               </>
             )}
 
             {/* entryOnly: just the entry CTA */}
             {entryOnly && onEnterTournament && (
-              <button
-                className="md-btn md-btn--lg w-full"
+              <Button
+                size="lg"
+                fullWidth
                 style={{
                   background: "var(--md-coral)",
                   color: "var(--md-white)",
@@ -859,7 +868,7 @@ export function ResultsPanel({
                 onClick={onEnterTournament}
               >
                 {entryCtaLabel ?? "Enter Tournament"}
-              </button>
+              </Button>
             )}
           </div>
 
@@ -873,7 +882,7 @@ export function ResultsPanel({
               result={result}
               cardsOn={cardsOn}
               mode={mode}
-              onCardOpen={setCardIndex}
+              onCardOpen={openCard}
             />
           </div>
         </div>

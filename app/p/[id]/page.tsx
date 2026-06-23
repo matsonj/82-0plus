@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { GlobalHeader } from "@/components/GlobalHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { PrivateTournamentLobby } from "@/components/private/PrivateTournamentLobby";
 import { PrivateTournamentResult } from "@/components/private/PrivateTournamentResult";
@@ -92,10 +92,11 @@ export default function PrivateTournamentPage({
   }, [load]);
 
   return (
-    <main className="relative mx-auto flex min-h-full max-w-6xl flex-col px-4 pb-12 sm:px-6 sm:pb-16">
-      <div className="md-sunbeam" />
-      <GlobalHeader />
-
+    <PageShell
+      width="wide"
+      paddingClassName="px-4 pb-12 sm:px-6 sm:pb-16"
+      footer={false}
+    >
       <section className="relative z-10">
         {status === "loading" && (
           <div className="py-20 text-center font-cond text-sm uppercase tracking-widest text-[var(--md-ink-muted)]">
@@ -146,6 +147,6 @@ export default function PrivateTournamentPage({
           <PrivateTournamentResult data={data as PrivateCompletedResponse} />
         )}
       </section>
-    </main>
+    </PageShell>
   );
 }
