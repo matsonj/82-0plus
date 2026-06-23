@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 // Codes that streak past in the reel window while a slot "spins". Order is the
 // physical reel order — the strip scrolls through them so the eye reads motion,
@@ -11,28 +11,66 @@ const FLICKER = [
 ];
 const DECADE_FLICKER = [1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
 
-// How long a reel keeps screaming before it lands once the result is known.
-// The land (decelerate + snap + settle) is a CSS one-shot layered on top.
-const SPIN_MS = 620;
+// How long a reel scrolls before it locks once the result is known. Long
+// enough that the decel TAIL crawls — the symbols slow to a near-readable
+// crawl at the end to tease the result (the easing in .md-reel__strip is a
+// long ease-out). The lock wobble is a CSS one-shot layered on top.
+const SPIN_MS = 1300;
 // The year reel keeps screaming this much LONGER than the team reel, so the
 // reels stop left-to-right (team first, then year) like a real slot machine.
-const STAGGER_MS = 360;
-// The era reel's land animation (the longest) runs this long after it stops
+const STAGGER_MS = 440;
+// The era reel's lock animation (the longest) runs this long after it stops
 // spinning; we wait it out before signaling the reel has fully settled.
-const LAND_MS = 800;
-// Reel-scroll cadence: how fast the strip cycles one full pass while spinning.
-// Short = a fast, blurred scream. Retuned from the old per-tick flicker model
-// to a continuous CSS scroll, so this is a duration, not a setInterval tick.
-const TICK_MS = 70; // kept exported-name parity; now the JS strip-shuffle cadence
+const LAND_MS = 900;
+// More lead-in cells = more symbols to crawl through during the long decel
+// tail (the tease). The strip is [current, ...lead-in, target].
+const REEL_ITEMS_BEFORE_TARGET = 16;
+// Each reel cell is this fraction of the window height, so several symbols
+// stack inside the drum (denser than one-symbol-per-window). The edge-fade
+// mask in .md-reel fades the partial neighbours above/below the centred one.
+const REEL_CELL_FRACTION = 0.6;
+
+type ReelValue = string | number;
+
+function buildReelStrip<T extends ReelValue>(
+  current: T,
+  target: T,
+  pool: readonly T[],
+): T[] {
+  const candidates = pool.filter((item) => item !== target);
+  const source =
+    candidates.length > 0
+      ? candidates
+      : pool.length > 0
+        ? pool
+        : [current];
+  const leadIn: T[] = [];
+  for (let i = 0; i < REEL_ITEMS_BEFORE_TARGET; i++) {
+    leadIn.push(source[Math.floor(Math.random() * source.length)]);
+  }
+  return [current, ...leadIn, target];
+}
+
+function reelStyle(items: readonly ReelValue[], durationMs: number = SPIN_MS) {
+  return {
+    "--reel-count": items.length,
+    "--reel-cell": REEL_CELL_FRACTION,
+    "--reel-duration": `${durationMs}ms`,
+  } as CSSProperties;
+}
 
 export function SlotMachine({
   team,
   decade,
+  teamPool,
+  decadePool,
   size = "md",
   onSettled,
 }: {
   team: string | null;
   decade: number;
+  teamPool?: string[];
+  decadePool?: number[];
   size?: "lg" | "md" | "sm";
   // Fires once the reels have FULLY come to rest (both stopped spinning AND
   // their land animation has played out). Lets the parent reveal the player
@@ -40,6 +78,7 @@ export function SlotMachine({
   onSettled?: () => void;
 }) {
   const [display, setDisplay] = useState(team ?? "···");
+  const [teamStrip, setTeamStrip] = useState<string[]>([team ?? "···"]);
   const [spinning, setSpinning] = useState(false);
   // Bumped each time a reel lands, to retrigger the one-shot land animation.
   const [teamLand, setTeamLand] = useState(0);
@@ -51,8 +90,15 @@ export function SlotMachine({
   const prev = useRef<string | null>(team);
 
   const [decadeDisplay, setDecadeDisplay] = useState(decade);
+  const [decadeStrip, setDecadeStrip] = useState<number[]>([decade]);
   const [decadeSpinning, setDecadeSpinning] = useState(false);
   const [decadeLand, setDecadeLand] = useState(0);
+  // How long the era strip SCROLLS. On a full roll it's held to land a beat
+  // after the team, so its scroll must last that whole time (SPIN_MS+STAGGER)
+  // or it stops scrolling early and sits static while the team is still going —
+  // making both reels appear to stop together with an offset ring flash. A
+  // standalone decade skip just uses SPIN_MS.
+  const [decadeSpinMs, setDecadeSpinMs] = useState(SPIN_MS);
   const prevDecade = useRef<number>(decade);
   // True while a full roll's decade reel is held spinning, waiting for the team
   // to resolve so it can land a beat AFTER the team (left-to-right stop).
@@ -65,19 +111,14 @@ export function SlotMachine({
   const wasSpinning = useRef(false);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Advance the strip's center by ONE code per tick (sequential, not random) so
-  // the reel reads as a coherent run of symbols scrolling past — a believable
-  // physical reel — rather than random frames flickering under the blur.
-  const teamTick = () =>
-    setDisplay((d) => {
-      const i = FLICKER.indexOf(d);
-      return FLICKER[(i + 1 + FLICKER.length) % FLICKER.length];
-    });
-  const decadeTick = () =>
-    setDecadeDisplay((d) => {
-      const i = DECADE_FLICKER.indexOf(d);
-      return DECADE_FLICKER[(i + 1 + DECADE_FLICKER.length) % DECADE_FLICKER.length];
-    });
+  const teamChoices = useMemo(
+    () => (teamPool && teamPool.length > 0 ? teamPool : FLICKER),
+    [teamPool],
+  );
+  const decadeChoices = useMemo(
+    () => (decadePool && decadePool.length > 0 ? decadePool : DECADE_FLICKER),
+    [decadePool],
+  );
 
   // Team reel: spins ONLY when the team value changes (a team skip, a full roll,
   // or first mount). While the team is still being fetched (null) it scrolls
@@ -86,22 +127,18 @@ export function SlotMachine({
   useEffect(() => {
     if (team === prev.current) return;
     prev.current = team;
+    if (team === null) return;
+    setTeamStrip(buildReelStrip(display, team, teamChoices));
     setSpinning(true);
-    const iv = setInterval(teamTick, TICK_MS);
-    if (team === null) {
-      return () => clearInterval(iv);
-    }
     const to = setTimeout(() => {
-      clearInterval(iv);
       setDisplay(team);
       setSpinning(false);
       setTeamLand((n) => n + 1);
     }, SPIN_MS);
     return () => {
-      clearInterval(iv);
       clearTimeout(to);
     };
-  }, [team]);
+  }, [display, team, teamChoices]);
 
   // Decade reel: spins when the decade value changes (a decade skip, or a full
   // roll while mounted) OR on a FRESH MOUNT that's mid-full-roll (team === null).
@@ -117,21 +154,24 @@ export function SlotMachine({
     const changed = decade !== prevDecade.current;
     if (changed || (firstRun && team === null)) {
       prevDecade.current = decade;
+      setDecadeStrip(buildReelStrip(decadeDisplay, decade, decadeChoices));
       setDecadeSpinning(true);
-      const iv = setInterval(decadeTick, TICK_MS);
       if (team === null) {
+        // Full roll: held until the team lands. Scroll for the whole held
+        // window so the reel keeps spinning right up to its (staggered) land
+        // instead of stopping early next to the team.
+        setDecadeSpinMs(SPIN_MS + STAGGER_MS);
         decadeWaiting.current = true; // full roll: wait for the team to land first
-        return () => clearInterval(iv);
+        return;
       }
+      setDecadeSpinMs(SPIN_MS);
       decadeWaiting.current = false;
       const to = setTimeout(() => {
-        clearInterval(iv);
         setDecadeDisplay(decade);
         setDecadeSpinning(false);
         setDecadeLand((n) => n + 1);
       }, SPIN_MS);
       return () => {
-        clearInterval(iv);
         clearTimeout(to);
       };
     }
@@ -139,19 +179,16 @@ export function SlotMachine({
     // just resolved. Land the decade a beat after the team (left-to-right stop).
     if (decadeWaiting.current && team !== null) {
       decadeWaiting.current = false;
-      const iv = setInterval(decadeTick, TICK_MS);
       const to = setTimeout(() => {
-        clearInterval(iv);
         setDecadeDisplay(decade);
         setDecadeSpinning(false);
         setDecadeLand((n) => n + 1);
       }, SPIN_MS + STAGGER_MS);
       return () => {
-        clearInterval(iv);
         clearTimeout(to);
       };
     }
-  }, [decade, team]);
+  }, [decade, decadeChoices, decadeDisplay, team]);
 
   // Signal "fully settled" once BOTH reels have stopped spinning and the (longest)
   // land animation has played out — so the player list reveals right as the reel
@@ -208,12 +245,6 @@ export function SlotMachine({
     letterSpacing: "-0.01em",
   } as const;
 
-  // While spinning, render a vertical reel strip (multiple codes stacked) that
-  // scrolls under motion blur — that's the "scream". When landed, render just
-  // the result and replay the land one-shot (decelerate → snap → settle).
-  const teamStrip = reelStrip(display, FLICKER);
-  const decadeStrip = reelStrip(decadeDisplay, DECADE_FLICKER).map((d) => `${d}s`);
-
   return (
     <div className="flex items-center gap-3 sm:gap-4">
       {/* Team reel. The result is ALWAYS in flow so the window keeps its size in
@@ -233,7 +264,11 @@ export function SlotMachine({
             {display}
           </span>
           {spinning && (
-            <span className="md-reel__strip" aria-hidden="true">
+            <span
+              className="md-reel__strip"
+              style={reelStyle(teamStrip)}
+              aria-hidden="true"
+            >
               {teamStrip.map((code, i) => (
                 <span key={i} className="md-reel__cell">
                   {code}
@@ -264,10 +299,14 @@ export function SlotMachine({
             {decadeDisplay}s
           </span>
           {decadeSpinning && (
-            <span className="md-reel__strip" aria-hidden="true">
-              {decadeStrip.map((code, i) => (
+            <span
+              className="md-reel__strip"
+              style={reelStyle(decadeStrip, decadeSpinMs)}
+              aria-hidden="true"
+            >
+              {decadeStrip.map((decadeCode, i) => (
                 <span key={i} className="md-reel__cell">
-                  {code}
+                  {decadeCode}s
                 </span>
               ))}
             </span>
@@ -276,13 +315,4 @@ export function SlotMachine({
       </div>
     </div>
   );
-}
-
-// Build a short vertical strip centered on `current`, drawn from `pool`, so the
-// scrolling reel shows a believable run of neighbors rather than one repeated
-// code. Five cells is plenty for a blurred scroll window.
-function reelStrip<T>(current: T, pool: T[]): T[] {
-  const idx = Math.max(0, pool.indexOf(current as T));
-  const n = pool.length;
-  return [-2, -1, 0, 1, 2].map((o) => pool[(idx + o + n * 2) % n]);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   GameMode,
   PublicPlayer,
@@ -141,6 +141,8 @@ export default function Home() {
   // and the decade-skip, attached to each drafted player so the tournament can
   // verify provenance. "" for Daily's seeded slots (which never enter a tournament).
   const [currentReceipt, setCurrentReceipt] = useState<string>("");
+  const [teamReelPool, setTeamReelPool] = useState<string[]>([]);
+  const [decadeReelPool, setDecadeReelPool] = useState<number[]>([]);
   const [simulating, setSimulating] = useState(false);
   const [booting, setBooting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -197,6 +199,8 @@ export default function Home() {
     setDailySlots([]);
     setDailyBench(null);
     setDailyRosters({});
+    setTeamReelPool([]);
+    setDecadeReelPool([]);
     setError(null);
   }, []);
 
@@ -219,12 +223,15 @@ export default function Home() {
       setCurrentDecade(decade);
       setCurrentTeam(null);
       setCurrentPlayers(null);
+      setTeamReelPool([]);
+      setDecadeReelPool(decades);
       try {
         const url = `/api/slot?decade=${decade}${excludes.length ? `&exclude=${excludes.join(",")}` : ""}&includePlayers=1&mode=${mode}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("roll failed");
         const data = await res.json();
         if (rollSeq.current !== myId) return; // a newer roll superseded this one
+        setTeamReelPool(Array.isArray(data.reelTeams) ? data.reelTeams : []);
         setCurrentTeam(data.team);
         setCurrentReceipt(data.receipt ?? "");
         setCurrentPlayers(Array.isArray(data.players) ? data.players : null);
@@ -541,6 +548,8 @@ export default function Home() {
     setDailySlots([]);
     setDailyBench(null);
     setDailyRosters({});
+    setTeamReelPool([]);
+    setDecadeReelPool([]);
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
@@ -648,6 +657,7 @@ export default function Home() {
       }
       // Same team, new era — adopt the freshly-minted receipt for that era.
       const newDecade = pickWeightedDecade(others, usage);
+      setDecadeReelPool(teamDecades ?? []);
       setCurrentDecade(newDecade);
       setCurrentReceipt(receipts?.[newDecade] ?? "");
       setCurrentPlayers(null);
@@ -732,6 +742,19 @@ export default function Home() {
   // Whether the data needed to play has loaded (a failed initial fetch leaves
   // this false → we show a failed-start state instead of an empty board).
   const loaded = gameType === "daily" ? dailySlots.length > 0 : decades.length > 0;
+  const draftReelPools = useMemo(
+    () =>
+      gameType === "daily"
+        ? {
+            teams: dailySlots.map((slot) => slot.team),
+            decades: dailySlots.map((slot) => slot.decade),
+          }
+        : {
+            teams: teamReelPool,
+            decades: decadeReelPool.length > 0 ? decadeReelPool : decades,
+          },
+    [dailySlots, decadeReelPool, decades, gameType, teamReelPool],
+  );
 
   const modeLabel =
     gameType === "daily"
@@ -1153,6 +1176,7 @@ export default function Home() {
                 : null
             }
             sourcePlayersMode={currentTeam && currentDecade !== null ? mode : null}
+            sourcePools={draftReelPools}
             rolling={rolling}
             mode={mode}
             allowRespin={gameType === "free"}

@@ -30,6 +30,7 @@ export function LineupDraftBoard({
   source,
   sourcePlayers = null,
   sourcePlayersMode = null,
+  sourcePools,
   rolling = false,
   mode,
   allowRespin = false,
@@ -51,6 +52,7 @@ export function LineupDraftBoard({
   source: { team: string | null; decade: number; receipt?: string } | null;
   sourcePlayers?: PublicPlayer[] | null;
   sourcePlayersMode?: GameMode | null;
+  sourcePools?: { teams?: string[]; decades?: number[] };
   rolling?: boolean;
   mode: GameMode;
   allowRespin?: boolean;
@@ -268,7 +270,14 @@ export function LineupDraftBoard({
               while the TEAM is rolling (full roll / team skip) and keeps it set
               through a decade skip, so a decade skip won't spin the team reel.
               (Don't gate on `rolling`, which is true for decade skips too.) */}
-          <SlotMachine team={source.team} decade={source.decade} size="lg" onSettled={handleReelSettled} />
+          <SlotMachine
+            team={source.team}
+            decade={source.decade}
+            teamPool={sourcePools?.teams}
+            decadePool={sourcePools?.decades}
+            size="lg"
+            onSettled={handleReelSettled}
+          />
           {controls && (
             <div className="flex flex-col items-end gap-2">
               {controls({ pending: pending !== null, rolling })}
