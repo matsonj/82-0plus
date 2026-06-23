@@ -130,14 +130,23 @@ export function SlotMachine({
 
   return (
     <div className="flex items-center gap-3 sm:gap-4">
+      {/* Team reel. The result is ALWAYS in flow so the window keeps its size in
+          every state (idle / spin / land) — no collapse-to-a-sliver. It's just
+          hidden while spinning, with the scrolling strip overlaid on top. */}
       <div className={`md-reel ${dim}`}>
         <div
           className={`md-badge md-reel__face ${spinning ? "md-reel__face--spinning" : ""}`}
           style={archivo}
-          // teamLand keys the element so the land animation replays on each land.
-          key={`team-${teamLand}`}
         >
-          {spinning ? (
+          <span
+            // teamLand keys it so the land one-shot replays on each landing.
+            key={`team-${teamLand}`}
+            className={`md-reel__result ${!spinning && teamLand > 0 ? "md-reel__land" : ""}`}
+            style={spinning ? { visibility: "hidden" } : undefined}
+          >
+            {display}
+          </span>
+          {spinning && (
             <span className="md-reel__strip" aria-hidden="true">
               {teamStrip.map((code, i) => (
                 <span key={i} className="md-reel__cell">
@@ -145,32 +154,32 @@ export function SlotMachine({
                 </span>
               ))}
             </span>
-          ) : (
-            <span className={`md-reel__result ${teamLand > 0 ? "md-reel__land" : ""}`}>
-              {display}
-            </span>
           )}
         </div>
       </div>
+      {/* Era reel — same in-flow-result trick (this is the box that was
+          collapsing to "-" because it has no fixed height). */}
       <div
         className={`md-reel inline-flex items-center border-2 border-[var(--md-ink)] bg-[var(--md-coral)] leading-none text-[var(--md-paper)] ${eraCls}`}
         style={archivo}
       >
         <div
           className={`md-reel__face md-reel__face--era ${decadeSpinning ? "md-reel__face--spinning" : ""}`}
-          key={`decade-${decadeLand}`}
         >
-          {decadeSpinning ? (
+          <span
+            key={`decade-${decadeLand}`}
+            className={`md-reel__result ${!decadeSpinning && decadeLand > 0 ? "md-reel__land" : ""}`}
+            style={decadeSpinning ? { visibility: "hidden" } : undefined}
+          >
+            {decadeDisplay}s
+          </span>
+          {decadeSpinning && (
             <span className="md-reel__strip" aria-hidden="true">
               {decadeStrip.map((code, i) => (
                 <span key={i} className="md-reel__cell">
                   {code}
                 </span>
               ))}
-            </span>
-          ) : (
-            <span className={`md-reel__result ${decadeLand > 0 ? "md-reel__land" : ""}`}>
-              {decadeDisplay}s
             </span>
           )}
         </div>
