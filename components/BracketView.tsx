@@ -264,7 +264,11 @@ function SeriesCard({
       {/* Hi team row */}
       <div
         className={`flex items-center gap-2 border-b border-[var(--md-paper-3)] px-2 ${py}`}
-        style={hiIsYou ? { boxShadow: "inset 4px 0 0 var(--md-cobalt)" } : undefined}
+        style={
+          hiIsYou
+            ? { background: "rgba(43,75,255,0.15)", boxShadow: "inset 4px 0 0 var(--md-cobalt)" }
+            : undefined
+        }
       >
         <SeedBadge seed={hiTeam?.seed} />
         <button
@@ -307,7 +311,11 @@ function SeriesCard({
       {/* Lo team row */}
       <div
         className={`flex items-center gap-2 px-2 ${py}`}
-        style={loIsYou ? { boxShadow: "inset 4px 0 0 var(--md-cobalt)" } : undefined}
+        style={
+          loIsYou
+            ? { background: "rgba(43,75,255,0.15)", boxShadow: "inset 4px 0 0 var(--md-cobalt)" }
+            : undefined
+        }
       >
         <SeedBadge seed={loTeam?.seed} />
         <button
