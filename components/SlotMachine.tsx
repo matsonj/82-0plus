@@ -57,6 +57,9 @@ export function SlotMachine({
   // True while a full roll's decade reel is held spinning, waiting for the team
   // to resolve so it can land a beat AFTER the team (left-to-right stop).
   const decadeWaiting = useRef(false);
+  // First effect run of THIS mount — used to spin the year on a fresh full-roll
+  // mount (where its value is already set, so there's no change to detect).
+  const decadeFirstRun = useRef(true);
   // Settle detection (drives onSettled): whether a reel has been spinning, and
   // the pending "fully landed" timer.
   const wasSpinning = useRef(false);
@@ -100,14 +103,19 @@ export function SlotMachine({
     };
   }, [team]);
 
-  // Decade reel: spins ONLY when the decade value changes (a decade skip, a full
-  // roll, or first mount), so a team-only skip leaves it static. On a FULL roll
-  // (decade changes while team === null) it's held spinning and lands STAGGER_MS
-  // AFTER the team — the reels stop left-to-right. A standalone decade skip lands
-  // on its own SPIN_MS timer.
+  // Decade reel: spins when the decade value changes (a decade skip, or a full
+  // roll while mounted) OR on a FRESH MOUNT that's mid-full-roll (team === null).
+  // The post-pick remount seeds prevDecade to the new value, wiping the change
+  // signal, so team===null is what tells us a roll is underway and the year
+  // should spin. A team-only skip is a MOUNTED transition (not firstRun) with an
+  // unchanged decade, so it stays static — only the team spins there. On a full
+  // roll the year is held spinning and lands STAGGER_MS AFTER the team
+  // (left-to-right stop); a standalone decade skip lands on its own SPIN_MS timer.
   useEffect(() => {
+    const firstRun = decadeFirstRun.current;
+    decadeFirstRun.current = false;
     const changed = decade !== prevDecade.current;
-    if (changed) {
+    if (changed || (firstRun && team === null)) {
       prevDecade.current = decade;
       setDecadeSpinning(true);
       const iv = setInterval(decadeTick, TICK_MS);
