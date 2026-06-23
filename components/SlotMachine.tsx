@@ -47,14 +47,19 @@ export function SlotMachine({
   // to resolve so it can land a beat AFTER the team (left-to-right stop).
   const decadeWaiting = useRef(false);
 
-  // Re-seed the blurred strip occasionally so a long fetch doesn't show the
-  // same frozen codes — keeps the scream alive when team stays null.
+  // Advance the strip's center by ONE code per tick (sequential, not random) so
+  // the reel reads as a coherent run of symbols scrolling past — a believable
+  // physical reel — rather than random frames flickering under the blur.
   const teamTick = () =>
-    setDisplay(FLICKER[Math.floor(Math.random() * FLICKER.length)]);
+    setDisplay((d) => {
+      const i = FLICKER.indexOf(d);
+      return FLICKER[(i + 1 + FLICKER.length) % FLICKER.length];
+    });
   const decadeTick = () =>
-    setDecadeDisplay(
-      DECADE_FLICKER[Math.floor(Math.random() * DECADE_FLICKER.length)],
-    );
+    setDecadeDisplay((d) => {
+      const i = DECADE_FLICKER.indexOf(d);
+      return DECADE_FLICKER[(i + 1 + DECADE_FLICKER.length) % DECADE_FLICKER.length];
+    });
 
   // Team reel: spins ONLY when the team value changes (a team skip, a full roll,
   // or first mount). While the team is still being fetched (null) it scrolls

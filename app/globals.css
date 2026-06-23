@@ -363,6 +363,10 @@ body {
 .md-reel {
   position: relative;
   overflow: hidden;
+  /* Edge fade: symbols melt in/out at the top & bottom so the window reads as a
+     physical reel drum behind glass, not text clipped at a hard line. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24%, #000 76%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 24%, #000 76%, transparent 100%);
 }
 
 .md-reel__face {
@@ -428,18 +432,23 @@ body {
   line-height: 1;
 }
 .md-reel__land {
-  animation: md-reel-land 0.42s cubic-bezier(0.16, 0.84, 0.3, 1) both;
+  animation: md-reel-land 0.6s cubic-bezier(0.13, 0.72, 0.26, 1) both;
+}
+/* The era reel decelerates LONGER (lands last + slow) for the slot-machine
+   "will the era be good?" beat — it already lands a stagger after the team. */
+.md-reel__face--era .md-reel__land {
+  animation-duration: 0.8s;
 }
 @keyframes md-reel-land {
-  /* incoming from above, blurred + fast */
-  0%   { transform: translateY(-46%) scale(1.03); filter: blur(2px); }
-  55%  { transform: translateY(0) scale(1); filter: blur(0); }
-  /* hard stop → tiny overshoot down */
-  70%  { transform: translateY(7%) scale(0.985); }
-  /* recoil up past rest */
-  84%  { transform: translateY(-3%) scale(1.012); }
-  /* settle */
-  100% { transform: translateY(0) scale(1); }
+  /* The final symbol scrolls UP into the window (matching the spin direction),
+     decelerating hard and sharpening (blur → 0) as it arrives — that ease-out IS
+     the slow-down — then thunks past center and settles. */
+  0%   { transform: translateY(135%) scale(1.02); filter: blur(3.2px); }
+  60%  { transform: translateY(0)    scale(1);    filter: blur(0); }
+  /* momentum carries it a hair past, then recoils back */
+  76%  { transform: translateY(-6%)  scale(0.99); }
+  90%  { transform: translateY(2.5%) scale(1.008); }
+  100% { transform: translateY(0)    scale(1); }
 }
 /* The yellow snap-ring: an inset box-shadow that flashes the instant the reel
    stops, then fades. Layered on the face so it frames the landed code. */
