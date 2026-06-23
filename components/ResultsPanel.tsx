@@ -642,10 +642,8 @@ export function ResultsPanel({
             </div>
 
             {/* ---- CTAs ----
-                Two breakpoint-specific blocks live in PLAIN-DIV wrappers, not
-                on the buttons themselves: `.md-btn` is unlayered CSS so its
-                `display:inline-flex` beats Tailwind's `lg:hidden`/`hidden lg:flex`
-                display utilities — those only work on non-md-btn elements. */}
+                Two breakpoint-specific blocks because the mobile and desktop
+                action rows intentionally use different hierarchy. */}
             {!entryOnly && (
               <>
                 {/* Mobile (871-0): full-width flame share, tournament block, play again */}
