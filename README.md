@@ -1,8 +1,12 @@
-# 82-0+ 🦆
+# daily82 🦆
 
-A MotherDuck-branded clone of [82-0.com](https://82-0.com): draft an NBA roster
-across the decades and see if it can go **82-0**. Powered by the
-`nba_box_scores_v2` MotherDuck database.
+**daily82** — draft an NBA roster across the decades and see if it can go a
+perfect **82-0**. The namesake **Daily** mode rolls one date-seeded challenge for
+everyone (the same five team/era rolls, once per Pacific day); there's also
+free-play Classic/Ranked and a Tournament bracket. Powered by the
+`nba_box_scores_v2` MotherDuck database and styled as a 90s hoops-magazine
+"SLAM Editorial" theme. An homage to [82-0.com](https://82-0.com) — independent
+and unaffiliated.
 
 ## How it works
 
@@ -153,7 +157,9 @@ npx tsx scripts/tuneTournament.ts [N] [seedKey]
   adjustments → net rating → wins)
 - `app/api/{decades,slot,players,simulate,daily,team-decades,og}/route.ts` —
   Node.js route handlers (`/api/og` renders the dynamic share image)
-- `app/page.tsx` + `components/*` — the game UI (MotherDuck design system)
+- `app/page.tsx` + `components/*` — the game UI (SLAM Editorial design system;
+  `--md-*` token names are kept in `app/globals.css`, only the values changed —
+  see `docs/themes/05-slam-editorial.md`)
 
 ## Deploying to Vercel
 
