@@ -55,11 +55,18 @@ export function PageShell({
       />
       {children}
       {footer && (
-        <SiteFooter
-          centered={footerCentered}
-          sticky={footerSticky}
-          className={footerClassName}
-        />
+        <>
+          {/* Spacer for the sticky footer: mt-auto absorbs free space (pinning the
+              footer to the bottom on short pages) while h-10 guarantees a gap on
+              tall pages — so the footer rule never collides with content + its hard
+              offset shadows. (Non-sticky footers manage their own margin.) */}
+          {footerSticky && <div className="mt-auto h-10 shrink-0" aria-hidden />}
+          <SiteFooter
+            centered={footerCentered}
+            sticky={false}
+            className={footerClassName}
+          />
+        </>
       )}
     </main>
   );
