@@ -8,6 +8,7 @@ import { presentShare } from "@/lib/shareActions";
 import { MIN_ELIGIBLE_WINS } from "@/lib/tier";
 import { Button } from "@/components/ui";
 import { ShareAssetDialog } from "@/components/ui/ShareAssetDialog";
+import { RosterCard, ROSTER_CARD_ROW_HAIRLINE } from "@/components/RosterCard";
 
 // ---- Fit narrative -------------------------------------------------------
 // One-sentence summary of the team fit adjustment. The mockup shows a single
@@ -38,8 +39,11 @@ function resultKicker(wins: number, netRating: number, perfect: boolean): string
 }
 
 // ---- THE FIVE: ink-spread lineup table -----------------------------------
-// The right-column dark card on desktop; a standalone section on mobile.
-// Ink background, flame border + hard offset shadow. Fixed-width stat lanes.
+// The right-column dark card on desktop; a standalone section on mobile. Built on
+// the shared RosterCard shell (flame frame + #0E0B09 column band + 6px flame
+// offset shadow) so it stays visually locked to the draft "YOUR ROSTER" card.
+// Result variant: gold-outlined seed chips 1–5, PTS/REB/AST lanes, and a gold
+// TEAM / GAME totals row. Fixed-width stat lanes. Matches artboard 894-0.
 function TheFiveCard({
   roster,
   result,
@@ -53,78 +57,73 @@ function TheFiveCard({
   mode: GameMode;
   onCardOpen: (i: number) => void;
 }) {
-  // Fixed-width right-aligned stat cell: matches column lanes in the mockup.
-  const statW = 44;
+  // Fixed-width right-aligned stat cell: matches the column lanes in 894-0.
+  const statW = 56;
+  // Fixed-width seed-chip cell (the gold-outlined 1–5 box lives inside it).
+  const seedW = 44;
 
-  return (
-    <div
-      className="w-full overflow-hidden"
+  // Column-band / row-hairline values shared with the draft card.
+  const bandLabel = (col: string, width?: number, alignRight = false) => (
+    <span
+      key={col}
+      className={`font-cond font-semibold uppercase ${alignRight ? "text-right" : ""}`}
       style={{
-        background: "var(--md-ink)",
-        border: "3px solid var(--md-coral)",
-        boxShadow: "var(--md-shadow-pop)",
-        color: "var(--md-white)",
+        fontSize: 12,
+        letterSpacing: "0.16em",
+        color: "#9a8f79",
+        ...(width ? { width, flexShrink: 0 } : { flex: 1 }),
       }}
     >
-      {/* Card header */}
-      <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-3">
-        <div>
-          <h2
-            className="font-cover leading-none uppercase"
-            style={{ fontSize: "clamp(28px, 5vw, 40px)", letterSpacing: "-0.02em" }}
-          >
-            The Five
-          </h2>
-          <div
-            className="mt-1 font-cond font-semibold uppercase tracking-[0.14em]"
-            style={{ fontSize: 10, color: "var(--md-paper-3)" }}
-          >
-            Per-game averages · Simulated 82-game season
-          </div>
-        </div>
+      {col}
+    </span>
+  );
+
+  return (
+    <RosterCard
+      title="The Five"
+      rightLabel="Starting Lineup"
+      subtitle="Per-game averages · Simulated 82-game season"
+      groundFocal="top-left"
+      columnHeader={
+        <>
+          {bandLabel("#", seedW)}
+          {bandLabel("Player")}
+          {bandLabel("PTS", statW, true)}
+          {bandLabel("REB", statW, true)}
+          {bandLabel("AST", statW, true)}
+        </>
+      }
+      footer={
+        // Team totals footer — flame top rule, gold TEAM / GAME label.
         <div
-          className="font-cond font-semibold uppercase tracking-[0.14em] shrink-0 mt-1"
-          style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
+          className="flex items-center px-4 py-3.5"
+          style={{ borderTop: "2px solid var(--md-coral)" }}
         >
-          Starting Lineup
-        </div>
-      </div>
-
-      {/* Column header row — slate/navy band */}
-      <div
-        className="flex items-center gap-0 px-4 py-2"
-        style={{ background: "rgba(40,55,80,0.85)" }}
-      >
-        {/* # */}
-        <span
-          className="font-cond font-bold uppercase tracking-[0.12em] text-[var(--md-white)] shrink-0"
-          style={{ fontSize: 11, width: 34 }}
-        >
-          #
-        </span>
-        {/* PLAYER */}
-        <span
-          className="flex-1 font-cond font-bold uppercase tracking-[0.12em] text-[var(--md-white)]"
-          style={{ fontSize: 11 }}
-        >
-          Player
-        </span>
-        {/* PTS / REB / AST */}
-        {(["PTS", "REB", "AST"] as const).map((col) => (
+          <span className="shrink-0" style={{ width: seedW }} />
           <span
-            key={col}
-            className="font-cond font-bold uppercase tracking-[0.12em] text-[var(--md-white)] shrink-0"
-            style={{ fontSize: 11, width: statW, textAlign: "right" }}
+            className="flex-1 font-cond font-semibold uppercase"
+            style={{ fontSize: 15, letterSpacing: "0.16em", color: "var(--md-yellow)" }}
           >
-            {col}
+            Team / Game
           </span>
-        ))}
-      </div>
-
+          {([result.teamBox.pts, result.teamBox.reb, result.teamBox.ast] as number[]).map(
+            (v, si) => (
+              <span
+                key={si}
+                className="font-mono font-bold tabular-nums shrink-0 text-right"
+                style={{ fontSize: 17, width: statW, color: si === 0 ? "var(--md-white)" : "var(--md-paper-3)" }}
+              >
+                {v.toFixed(1)}
+              </span>
+            ),
+          )}
+        </div>
+      }
+    >
       {/* Player rows */}
       <div className="flex flex-col">
         {roster.map((r, i) => {
-          // Mockup shows last name bold, first · team · year as subtitle.
+          // Last name bold, "first · team 'yr" as subtitle.
           const nameParts = r.player_name.split(" ");
           const lastName = nameParts.at(-1) ?? r.player_name;
           const firstName = nameParts.slice(0, -1).join(" ");
@@ -135,48 +134,49 @@ function TheFiveCard({
               : mode === "classic" && r.allDef === 2
                 ? " 🥈"
                 : "";
+          const isLast = i === roster.length - 1;
 
           const rowContent = (
             <div
-              className="flex items-center gap-0 px-4 py-3 border-b"
-              style={{ borderColor: "rgba(255,255,255,0.07)" }}
+              className="flex items-center px-4 py-3.5"
+              style={isLast ? undefined : { borderBottom: `1px solid ${ROSTER_CARD_ROW_HAIRLINE}` }}
             >
-              {/* Press-yellow number badge */}
-              <span
-                className="inline-flex items-center justify-center font-mono font-bold shrink-0 mr-2"
-                style={{
-                  width: 22,
-                  height: 22,
-                  background: "var(--md-yellow)",
-                  color: "var(--md-ink)",
-                  border: "1px solid var(--md-ink)",
-                  fontSize: 10,
-                  fontWeight: 700,
-                }}
-              >
-                {i + 1}
+              {/* Gold-outlined seed chip in a fixed-width cell */}
+              <span className="shrink-0" style={{ width: seedW }}>
+                <span
+                  className="inline-flex items-center justify-center font-mono font-bold tabular-nums"
+                  style={{
+                    width: 26,
+                    height: 26,
+                    border: "1.5px solid var(--md-yellow)",
+                    color: "var(--md-yellow)",
+                    fontSize: 14,
+                  }}
+                >
+                  {i + 1}
+                </span>
               </span>
               {/* Name + subtitle */}
               <div className="flex-1 min-w-0">
                 <div
-                  className="font-archivo truncate leading-tight"
-                  style={{ fontSize: 15, fontWeight: 700, color: "var(--md-white)" }}
+                  className="font-mono truncate leading-tight"
+                  style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--md-white)" }}
                 >
                   {lastName}{allDefSuffix}
                 </div>
                 <div
-                  className="font-mono leading-none mt-0.5"
-                  style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
+                  className="font-mono leading-none mt-1"
+                  style={{ fontSize: 12, letterSpacing: "0.02em", color: "#7a7060" }}
                 >
                   {firstName} · {r.team} &rsquo;{yearStr}
                 </div>
               </div>
-              {/* Stats — fixed-width right-aligned */}
+              {/* Stats — fixed-width right-aligned. PTS bold/white, REB·AST regular/cream. */}
               {([r.pts, r.reb, r.ast] as number[]).map((v, si) => (
                 <span
                   key={si}
-                  className="font-mono font-bold tabular-nums shrink-0"
-                  style={{ fontSize: 14, width: statW, textAlign: "right", color: "var(--md-white)" }}
+                  className={`font-mono tabular-nums shrink-0 text-right ${si === 0 ? "font-bold" : ""}`}
+                  style={{ fontSize: 17, width: statW, color: si === 0 ? "var(--md-white)" : "var(--md-paper-3)" }}
                 >
                   {v.toFixed(1)}
                 </span>
@@ -198,32 +198,7 @@ function TheFiveCard({
           );
         })}
       </div>
-
-      {/* Team totals footer — press-yellow on dark */}
-      <div
-        className="flex items-center gap-0 px-4 py-3 border-t-2"
-        style={{ borderColor: "var(--md-coral)", background: "rgba(0,0,0,0.25)" }}
-      >
-        <span className="shrink-0 mr-2" style={{ width: 22 }} />
-        <span
-          className="flex-1 font-cond font-bold uppercase tracking-[0.12em]"
-          style={{ fontSize: 11, color: "var(--md-yellow)" }}
-        >
-          Team / Game
-        </span>
-        {([result.teamBox.pts, result.teamBox.reb, result.teamBox.ast] as number[]).map(
-          (v, si) => (
-            <span
-              key={si}
-              className="font-mono font-bold tabular-nums shrink-0"
-              style={{ fontSize: 14, width: statW, textAlign: "right", color: "var(--md-yellow)" }}
-            >
-              {v.toFixed(1)}
-            </span>
-          ),
-        )}
-      </div>
-    </div>
+    </RosterCard>
   );
 }
 
@@ -697,9 +672,11 @@ export function ResultsPanel({
                   </button>
                 </div>
 
-                {/* Desktop (872-0): ONE flame CTA + outline Play Again side-by-side,
-                    Share Result as a text link below. */}
-                <div className="hidden lg:flex lg:flex-col lg:gap-4 lg:pt-2">
+                {/* Desktop (872-0 / Action Row 8CD-0): three distinct tiers.
+                    ENTER TOURNAMENT (flame, full-width) on top; SHARE RESULT (solid
+                    ink) + PLAY AGAIN (cream outline) side-by-side below. Consistent
+                    ink 6px hard offset shadow across all three. */}
+                <div className="hidden lg:flex lg:flex-col lg:items-start lg:gap-4 lg:pt-2">
                   {onEnterTournament && !isEligible && (
                     <div className="self-start border-2 border-[var(--md-paper-3)] px-4 py-3" style={{ background: "var(--md-paper-2)" }}>
                       <div className="font-cond font-bold uppercase tracking-[0.1em]" style={{ fontSize: 12, color: "var(--md-ink-muted)" }}>
@@ -711,45 +688,70 @@ export function ResultsPanel({
                     </div>
                   )}
 
-                  <div className="flex flex-wrap items-center gap-4">
-                    {onEnterTournament && isEligible && (
-                      <button
-                        className="md-btn md-btn--lg"
-                        style={{
-                          background: "var(--md-coral)",
-                          color: "var(--md-white)",
-                          border: "3px solid var(--md-ink)",
-                          boxShadow: "6px 6px 0 0 var(--md-ink)",
-                        }}
-                        onClick={onEnterTournament}
-                      >
-                        {entryCtaLabel ?? "Enter Tournament"}
-                        <span>→</span>
-                      </button>
-                    )}
-                    {/* Play Again — flat outline, no fill (matches 872-0) */}
+                  {/* Tier 1 — ENTER TOURNAMENT: flame primary, full-width */}
+                  {onEnterTournament && isEligible && (
+                    <button
+                      type="button"
+                      onClick={onEnterTournament}
+                      className="inline-flex w-full items-center justify-center gap-3 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5"
+                      style={{
+                        background: "var(--md-coral)",
+                        color: "var(--md-white)",
+                        border: "3px solid var(--md-ink)",
+                        boxShadow: "6px 6px 0 0 var(--md-ink)",
+                        fontSize: 16,
+                        letterSpacing: "0.12em",
+                        padding: "16px 22px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {entryCtaLabel ?? "Enter Tournament"}
+                      <span style={{ fontSize: 18 }}>→</span>
+                    </button>
+                  )}
+
+                  {/* Tiers 2 + 3 — SHARE RESULT (ink) + PLAY AGAIN (cream outline) */}
+                  <div className="flex flex-wrap items-stretch gap-4">
+                    {/* Tier 2 — SHARE RESULT: solid ink button with upload glyph */}
+                    <button
+                      type="button"
+                      onClick={share}
+                      disabled={!shareBlob || !shareReady}
+                      className="inline-flex items-center justify-center gap-2.5 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
+                      style={{
+                        background: "var(--md-ink)",
+                        color: "var(--md-paper)",
+                        boxShadow: "6px 6px 0 0 var(--md-ink)",
+                        fontSize: 16,
+                        letterSpacing: "0.12em",
+                        padding: "16px 22px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span style={{ fontSize: 15 }}>↑</span>
+                      {shareBlob && shareReady ? "Share Result" : "Preparing…"}
+                    </button>
+
+                    {/* Tier 3 — PLAY AGAIN: cream + ink outline */}
                     <button
                       type="button"
                       onClick={onReset}
-                      className="inline-flex items-center gap-2 border-2 border-[var(--md-ink)] px-7 py-[15px] font-cond font-semibold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
-                      style={{ fontSize: 15, cursor: "pointer" }}
+                      className="inline-flex items-center justify-center gap-2 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5"
+                      style={{
+                        background: "var(--md-paper)",
+                        color: "var(--md-ink)",
+                        border: "1.5px solid var(--md-ink)",
+                        boxShadow: "6px 6px 0 0 var(--md-ink)",
+                        fontSize: 15,
+                        letterSpacing: "0.1em",
+                        padding: "16px 22px",
+                        cursor: "pointer",
+                      }}
                     >
                       <span>↺</span>
                       {resetLabel ?? "Play Again"}
                     </button>
                   </div>
-
-                  {/* Share — text link with upload glyph */}
-                  <button
-                    type="button"
-                    onClick={share}
-                    disabled={!shareBlob || !shareReady}
-                    className="inline-flex items-center gap-2 self-start font-cond font-semibold uppercase tracking-[0.12em] underline underline-offset-4 transition-opacity disabled:opacity-40"
-                    style={{ fontSize: 15, color: "var(--md-ink)", cursor: "pointer" }}
-                  >
-                    <span style={{ fontSize: 15 }}>↑</span>
-                    {shareBlob && shareReady ? "Share Result" : "Preparing…"}
-                  </button>
                 </div>
               </>
             )}
