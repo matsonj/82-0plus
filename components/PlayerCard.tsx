@@ -160,8 +160,14 @@ function GqChart({
 
         return (
           <g key={s.season}>
-            {/* Off-team: hollow grey circle */}
-            {isAway ? (
+            {/* Drafted/best season is ALWAYS the flame "this card" dot — even when
+                the season aggregates to another team (a mid-season trade, where the
+                modal team isn't this card's franchise). This card IS that season, so
+                it must read as "this card", never a hollow "another team" circle. */}
+            {isDrafted ? (
+              <circle cx={cx} cy={cy} r={r} fill="var(--md-coral)" stroke="var(--md-ink)" strokeWidth={1} />
+            ) : isAway ? (
+              /* Off-team: hollow grey circle */
               <circle
                 cx={cx}
                 cy={cy}
@@ -170,9 +176,6 @@ function GqChart({
                 stroke="var(--md-ink-muted)"
                 strokeWidth={1.5}
               />
-            ) : isDrafted ? (
-              /* Drafted/best season: large flame dot */
-              <circle cx={cx} cy={cy} r={r} fill="var(--md-coral)" stroke="var(--md-ink)" strokeWidth={1} />
             ) : (
               /* On-team: solid ink dot */
               <circle cx={cx} cy={cy} r={r} fill="var(--md-ink)" stroke="var(--md-ink)" strokeWidth={1} />
