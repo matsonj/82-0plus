@@ -1125,7 +1125,7 @@ export default function Home() {
               <div className="flex flex-col gap-4 md:col-start-2 md:row-start-1">
                 <div className="md-rule-double flex items-end justify-between pb-2">
                   <span className="font-cond text-[14px] font-bold uppercase tracking-[0.18em]">
-                    Ways to Play
+                    More Ways to Play
                   </span>
                   <span className="md-folio">THREE MODES</span>
                 </div>
