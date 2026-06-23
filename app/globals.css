@@ -364,10 +364,12 @@ body {
   position: relative;
   overflow: hidden;
 }
-/* Edge-fade "drum" window: only while the strip is scrolling, fade the partial
-   neighbour symbols at the top/bottom so the centred symbol reads as the one in
-   the drum. Scoped to the spin so the LANDED result + snap-ring stay crisp. */
-.md-reel:has(.md-reel__strip) {
+/* Edge-fade "drum" window: only while a strip is scrolling (the landing strip OR
+   the loading blur), fade the partial neighbour symbols at the top/bottom so the
+   centred symbol reads as the one in the drum. Scoped to the spin so the LANDED
+   result + snap-ring stay crisp. */
+.md-reel:has(.md-reel__strip),
+.md-reel:has(.md-reel__blur) {
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0%,
@@ -416,7 +418,10 @@ body {
   height: calc(var(--reel-count) * var(--reel-cell, 1) * 100%);
   will-change: transform;
   transform: translateY(calc(-100% + (50% / var(--reel-count))));
-  animation: md-reel-spin var(--reel-duration) cubic-bezier(0.16, 0.72, 0.1, 1) both;
+  /* Monotonic ease-out (easeOutQuint): starts fast — at ~the loading-blur speed,
+     for a seamless hand-off — then decelerates over a long tail (the tease). No
+     mid-scroll acceleration, so the reel never speeds UP once it's landing. */
+  animation: md-reel-spin var(--reel-duration) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .md-reel__cell {
   flex: 0 0 calc(100% / var(--reel-count));
@@ -430,6 +435,30 @@ body {
   /* current symbol centred → target symbol centred (last cell). */
   from { transform: translateY(calc(-50% / var(--reel-count))); }
   to { transform: translateY(calc(-100% + (50% / var(--reel-count)))); }
+}
+
+/* The "loading" blur shown WHILE the result is still being fetched: a constant
+   (linear), seamless loop — no deceleration — so it doesn't slow to a crawl
+   before the result arrives. The strip is rendered as two identical halves, so
+   translating by exactly one half (-50%) loops with no visible seam. Its speed
+   (set via --blur-duration) is tuned to ~match the landing scroll's INITIAL
+   speed, so the hand-off to the decelerating land reads as one continuous
+   motion rather than a speed jump. */
+.md-reel__blur {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: calc(var(--reel-count) * var(--reel-cell, 1) * 100%);
+  will-change: transform;
+  animation: md-reel-blur var(--blur-duration, 200ms) linear infinite;
+}
+@keyframes md-reel-blur {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
 }
 
 /* The settled result sits centered in the window. .md-reel__land layers the
@@ -532,6 +561,7 @@ body {
      simply shows a static code until the result lands. */
   .md-reel__face--spinning { filter: none; }
   .md-reel__strip { animation: none; }
+  .md-reel__blur { animation: none; }
   .md-reel__land { animation: none; }
   .md-reel:has(.md-reel__land) .md-reel__face::after { animation: none; }
   .md-ticker__track { animation: none; }

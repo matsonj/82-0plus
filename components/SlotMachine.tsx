@@ -29,6 +29,12 @@ const REEL_ITEMS_BEFORE_TARGET = 16;
 // stack inside the drum (denser than one-symbol-per-window). The edge-fade
 // mask in .md-reel fades the partial neighbours above/below the centred one.
 const REEL_CELL_FRACTION = 0.6;
+// The "loading" blur loops a 12-symbol set (×2 for a seamless loop) every
+// BLUR_MS, tuned so its constant speed ≈ the landing scroll's INITIAL speed
+// (easeOutQuint start). That way the hand-off from blur → decelerating land
+// reads as one continuous motion — no speed jump when the team resolves.
+const BLUR_MS = 150;
+const BLUR_SET = 12;
 
 type ReelValue = string | number;
 
@@ -56,6 +62,23 @@ function reelStyle(items: readonly ReelValue[], durationMs: number = SPIN_MS) {
     "--reel-count": items.length,
     "--reel-cell": REEL_CELL_FRACTION,
     "--reel-duration": `${durationMs}ms`,
+  } as CSSProperties;
+}
+
+// The constant-blur loop strip: BLUR_SET symbols from the pool, DUPLICATED so a
+// translateY(-50%) loop is seamless (the second half is identical to the first).
+function buildBlurStrip<T extends ReelValue>(pool: readonly T[]): T[] {
+  if (pool.length === 0) return [];
+  const half: T[] = [];
+  for (let i = 0; i < BLUR_SET; i++) half.push(pool[i % pool.length]);
+  return [...half, ...half];
+}
+
+function blurStyle(items: readonly ReelValue[]) {
+  return {
+    "--reel-count": items.length,
+    "--reel-cell": REEL_CELL_FRACTION,
+    "--blur-duration": `${BLUR_MS}ms`,
   } as CSSProperties;
 }
 
@@ -132,6 +155,9 @@ export function SlotMachine({
     () => (decadePool && decadePool.length > 0 ? decadePool : DECADE_FLICKER),
     [decadePool],
   );
+  // Loading-blur strips (constant loop shown while team === null / fetching).
+  const teamBlur = useMemo(() => buildBlurStrip(teamChoices), [teamChoices]);
+  const decadeBlur = useMemo(() => buildBlurStrip(decadeChoices), [decadeChoices]);
 
   // Team reel: starts spinning when the team value changes (team skip / full
   // roll) AND on a fresh full-roll mount where team === null (still being
@@ -299,20 +325,36 @@ export function SlotMachine({
           >
             {display}
           </span>
-          {spinning && (
-            <span
-              key={teamStripKey}
-              className="md-reel__strip"
-              style={reelStyle(teamStrip, teamSpinMs)}
-              aria-hidden="true"
-            >
-              {teamStrip.map((code, i) => (
-                <span key={i} className="md-reel__cell">
-                  {code}
-                </span>
-              ))}
-            </span>
-          )}
+          {spinning &&
+            (team === null ? (
+              // Still fetching: constant blur loop (no deceleration).
+              <span
+                key="team-blur"
+                className="md-reel__blur"
+                style={blurStyle(teamBlur)}
+                aria-hidden="true"
+              >
+                {teamBlur.map((code, i) => (
+                  <span key={i} className="md-reel__cell">
+                    {code}
+                  </span>
+                ))}
+              </span>
+            ) : (
+              // Team known: decelerating scroll that lands on the result.
+              <span
+                key={teamStripKey}
+                className="md-reel__strip"
+                style={reelStyle(teamStrip, teamSpinMs)}
+                aria-hidden="true"
+              >
+                {teamStrip.map((code, i) => (
+                  <span key={i} className="md-reel__cell">
+                    {code}
+                  </span>
+                ))}
+              </span>
+            ))}
         </div>
       </div>
       {/* Era reel — same in-flow-result trick (this is the box that was
@@ -335,20 +377,36 @@ export function SlotMachine({
           >
             {decadeDisplay}s
           </span>
-          {decadeSpinning && (
-            <span
-              key={decadeStripKey}
-              className="md-reel__strip"
-              style={reelStyle(decadeStrip, decadeSpinMs)}
-              aria-hidden="true"
-            >
-              {decadeStrip.map((decadeCode, i) => (
-                <span key={i} className="md-reel__cell">
-                  {decadeCode}s
-                </span>
-              ))}
-            </span>
-          )}
+          {decadeSpinning &&
+            (team === null ? (
+              // Held while the team fetches: constant blur loop (no decel).
+              <span
+                key="decade-blur"
+                className="md-reel__blur"
+                style={blurStyle(decadeBlur)}
+                aria-hidden="true"
+              >
+                {decadeBlur.map((decadeCode, i) => (
+                  <span key={i} className="md-reel__cell">
+                    {decadeCode}s
+                  </span>
+                ))}
+              </span>
+            ) : (
+              // Resolved: decelerating scroll that lands on the year.
+              <span
+                key={decadeStripKey}
+                className="md-reel__strip"
+                style={reelStyle(decadeStrip, decadeSpinMs)}
+                aria-hidden="true"
+              >
+                {decadeStrip.map((decadeCode, i) => (
+                  <span key={i} className="md-reel__cell">
+                    {decadeCode}s
+                  </span>
+                ))}
+              </span>
+            ))}
         </div>
       </div>
     </div>
