@@ -14,6 +14,9 @@ const DECADE_FLICKER = [1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
 // How long a reel keeps screaming before it lands once the result is known.
 // The land (decelerate + snap + settle) is a CSS one-shot layered on top.
 const SPIN_MS = 620;
+// The year reel keeps screaming this much LONGER than the team reel, so the
+// reels stop left-to-right (team first, then year) like a real slot machine.
+const STAGGER_MS = 360;
 // Reel-scroll cadence: how fast the strip cycles one full pass while spinning.
 // Short = a fast, blurred scream. Retuned from the old per-tick flicker model
 // to a continuous CSS scroll, so this is a duration, not a setInterval tick.
@@ -30,17 +33,16 @@ export function SlotMachine({
 }) {
   const [display, setDisplay] = useState(team ?? "···");
   const [spinning, setSpinning] = useState(false);
-  // Bumped each time the team reel lands, to retrigger the one-shot land anim.
+  // Bumped each time a reel lands, to retrigger the one-shot land animation.
   const [teamLand, setTeamLand] = useState(0);
-  const prev = useRef<string | null>(team);
+  // undefined sentinel → the reel also spins on first mount (the initial reveal,
+  // and the remount after a pick), not only on later prop changes.
+  const prev = useRef<string | null | undefined>(undefined);
 
   const [decadeDisplay, setDecadeDisplay] = useState(decade);
   const [decadeSpinning, setDecadeSpinning] = useState(false);
   const [decadeLand, setDecadeLand] = useState(0);
-  const prevDecade = useRef<number>(decade);
-  // True while the decade reel is held spinning on a full roll, waiting for the
-  // team fetch to land so both reels can resolve at the same moment.
-  const decadeWaiting = useRef(false);
+  const prevDecade = useRef<number | undefined>(undefined);
 
   // Re-seed the blurred strip occasionally so a long fetch doesn't show the
   // same frozen codes — keeps the scream alive when team stays null.
@@ -51,76 +53,52 @@ export function SlotMachine({
       DECADE_FLICKER[Math.floor(Math.random() * DECADE_FLICKER.length)],
     );
 
-  // Team reel: spins when the team value changes (a team skip or a full roll).
-  // While the team is still being fetched (null) it scrolls indefinitely; once
-  // it arrives it screams for SPIN_MS then lands (decelerate + snap). A decade
-  // skip keeps the same team, so this stays static.
+  // BOTH reels spin on any reveal (a full roll, a team skip, a decade skip, or
+  // the first mount), and they stop left-to-right: the TEAM lands first, then
+  // the YEAR a beat (STAGGER_MS) later — like a real slot machine. While the
+  // team is still being fetched (team === null) both keep screaming; the lands
+  // are scheduled from the moment the team resolves.
   useEffect(() => {
-    if (team === prev.current) return;
+    const teamChanged = team !== prev.current;
+    const decadeChanged = decade !== prevDecade.current;
+    if (!teamChanged && !decadeChanged) return;
     prev.current = team;
+    prevDecade.current = decade;
+
     setSpinning(true);
-    const iv = setInterval(teamTick, TICK_MS);
+    setDecadeSpinning(true);
+    const tiv = setInterval(teamTick, TICK_MS);
+    const div = setInterval(decadeTick, TICK_MS);
+
+    // Can't land the team until the fetch resolves — keep both screaming until
+    // a later run arrives with the team known.
     if (team === null) {
-      // Rolling — keep scrolling until the team lands (next effect run).
-      return () => clearInterval(iv);
+      return () => {
+        clearInterval(tiv);
+        clearInterval(div);
+      };
     }
-    const to = setTimeout(() => {
-      clearInterval(iv);
+
+    const teamTo = setTimeout(() => {
+      clearInterval(tiv);
       setDisplay(team);
       setSpinning(false);
       setTeamLand((n) => n + 1);
     }, SPIN_MS);
-    return () => {
-      clearInterval(iv);
-      clearTimeout(to);
-    };
-  }, [team]);
+    const decadeTo = setTimeout(() => {
+      clearInterval(div);
+      setDecadeDisplay(decade);
+      setDecadeSpinning(false);
+      setDecadeLand((n) => n + 1);
+    }, SPIN_MS + STAGGER_MS);
 
-  // Decade reel. A decade skip (team unchanged) spins and lands on its own
-  // timer. A FULL roll changes the decade while the team is still being fetched
-  // (team === null) — there we hold the decade reel spinning and land it
-  // together with the team the moment the fetch resolves. A team skip leaves the
-  // decade untouched, so this stays static — the user sees which skip they spent.
-  useEffect(() => {
-    const changed = decade !== prevDecade.current;
-    if (changed) {
-      prevDecade.current = decade;
-      setDecadeSpinning(true);
-      const iv = setInterval(decadeTick, TICK_MS);
-      if (team === null) {
-        // Full roll: hold until the team lands.
-        decadeWaiting.current = true;
-        return () => clearInterval(iv);
-      }
-      decadeWaiting.current = false;
-      const to = setTimeout(() => {
-        clearInterval(iv);
-        setDecadeDisplay(decade);
-        setDecadeSpinning(false);
-        setDecadeLand((n) => n + 1);
-      }, SPIN_MS);
-      return () => {
-        clearInterval(iv);
-        clearTimeout(to);
-      };
-    }
-    // Decade value didn't change, but a full roll was waiting on the team — and
-    // it just arrived. Settle + land in lockstep with the team reel.
-    if (decadeWaiting.current && team !== null) {
-      decadeWaiting.current = false;
-      const iv = setInterval(decadeTick, TICK_MS);
-      const to = setTimeout(() => {
-        clearInterval(iv);
-        setDecadeDisplay(decade);
-        setDecadeSpinning(false);
-        setDecadeLand((n) => n + 1);
-      }, SPIN_MS);
-      return () => {
-        clearInterval(iv);
-        clearTimeout(to);
-      };
-    }
-  }, [decade, team]);
+    return () => {
+      clearInterval(tiv);
+      clearInterval(div);
+      clearTimeout(teamTo);
+      clearTimeout(decadeTo);
+    };
+  }, [team, decade]);
 
   // Badge (team) + era-box sizing per size. The team chip is a self-contained
   // ink chip with cream Archivo type, so it reads on a dark "roll" card (ink-on-
