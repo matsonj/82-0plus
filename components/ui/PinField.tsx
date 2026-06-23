@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { TextField } from "@/components/ui/TextField";
 
-export function normalizePinInput(value: string): string {
+function normalizePinInput(value: string): string {
   return value.replace(/\D/g, "");
 }
 
