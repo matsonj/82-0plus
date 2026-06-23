@@ -88,6 +88,18 @@ export function SlotMachine({
   // they arrive as a null→value change while mounted. (A sentinel here would
   // also break under StrictMode's mount double-invoke → spin-forever.)
   const prev = useRef<string | null>(team);
+  // How long the team strip SCROLLS. While the team is being fetched it spins
+  // filler for the long (held) duration; once the team resolves it restarts at
+  // SPIN_MS and lands.
+  const [teamSpinMs, setTeamSpinMs] = useState(SPIN_MS);
+  // Bumped to (re)start the team strip's CSS scroll — once on a full roll's
+  // fresh mount (filler while fetching) and again the instant the team resolves,
+  // so the scroll-to-target is keyed off the response, not the request.
+  const [teamStripKey, setTeamStripKey] = useState(0);
+  // First effect run of THIS mount — lets the team reel start spinning on a
+  // fresh full-roll mount (team === null) so it screams alongside the year
+  // during the fetch instead of sitting static until the DB responds.
+  const teamFirstRun = useRef(true);
 
   const [decadeDisplay, setDecadeDisplay] = useState(decade);
   const [decadeStrip, setDecadeStrip] = useState<number[]>([decade]);
@@ -121,16 +133,31 @@ export function SlotMachine({
     [decadePool],
   );
 
-  // Team reel: spins ONLY when the team value changes (a team skip, a full roll,
-  // or first mount). While the team is still being fetched (null) it scrolls
-  // until it arrives, then screams for SPIN_MS and lands. A decade-only skip
-  // leaves the team untouched → this stays static.
+  // Team reel: starts spinning when the team value changes (team skip / full
+  // roll) AND on a fresh full-roll mount where team === null (still being
+  // fetched) — so it screams ALONGSIDE the year during the fetch instead of
+  // waiting for the DB (which, under deploy latency, leaves it visibly static
+  // while the year already spins). While team === null it scrolls filler; the
+  // instant the team resolves it RESTARTS the scroll (new strip + key bump) and
+  // lands after SPIN_MS, so both the scroll-to-target and the land are keyed off
+  // the response, not the request. A decade-only skip or a cancel remount leaves
+  // the team unchanged → it stays static.
   useEffect(() => {
-    if (team === prev.current) return;
+    const firstRun = teamFirstRun.current;
+    teamFirstRun.current = false;
+    const changed = team !== prev.current;
+    if (!changed && !(firstRun && team === null)) return;
     prev.current = team;
-    if (team === null) return;
-    setTeamStrip(buildReelStrip(display, team, teamChoices));
+    setTeamStrip(buildReelStrip(display, team ?? display, teamChoices));
+    setTeamStripKey((k) => k + 1);
     setSpinning(true);
+    if (team === null) {
+      // Held: spin filler for the long window so it keeps screaming (not
+      // crawling) until the response restarts it below.
+      setTeamSpinMs(SPIN_MS + STAGGER_MS);
+      return;
+    }
+    setTeamSpinMs(SPIN_MS);
     const to = setTimeout(() => {
       setDisplay(team);
       setSpinning(false);
@@ -274,8 +301,9 @@ export function SlotMachine({
           </span>
           {spinning && (
             <span
+              key={teamStripKey}
               className="md-reel__strip"
-              style={reelStyle(teamStrip)}
+              style={reelStyle(teamStrip, teamSpinMs)}
               aria-hidden="true"
             >
               {teamStrip.map((code, i) => (
