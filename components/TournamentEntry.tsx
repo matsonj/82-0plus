@@ -85,6 +85,9 @@ export function TournamentEntry({
   const [currentTeam, setCurrentTeam] = useState<string | null>(null);
   const [currentPlayers, setCurrentPlayers] = useState<PublicPlayer[] | null>(null);
   const [currentReceipt, setCurrentReceipt] = useState<string>("");
+  const [teamReelPool, setTeamReelPool] = useState<string[]>([]);
+  const [decadeReelPool, setDecadeReelPool] = useState<number[]>([]);
+  const [benchReelSettled, setBenchReelSettled] = useState(true);
   const [teamSkips, setTeamSkips] = useState(1);
   const [rolling, setRolling] = useState(false);
   const [rollError, setRollError] = useState<string | null>(null);
@@ -186,6 +189,9 @@ export function TournamentEntry({
       setCurrentDecade(decade);
       setCurrentTeam(null);
       setCurrentPlayers(null);
+      setTeamReelPool([]);
+      setDecadeReelPool(decades);
+      setBenchReelSettled(false);
       const url = `/api/slot?decade=${decade}${
         excludes.length ? `&exclude=${excludes.join(",")}` : ""
       }&includePlayers=1&mode=${listMode}`;
@@ -196,6 +202,7 @@ export function TournamentEntry({
         })
         .then((data) => {
           if (rollSeq.current !== myId) return;
+          setTeamReelPool(Array.isArray(data.reelTeams) ? data.reelTeams : []);
           setCurrentTeam(data.team);
           setCurrentReceipt(data.receipt ?? "");
           setCurrentPlayers(Array.isArray(data.players) ? data.players : null);
@@ -226,6 +233,11 @@ export function TournamentEntry({
   useEffect(() => {
     if (!benchIsFixed || !dailyBench || result) return;
     if (step !== "sixth" || currentDecade !== null) return;
+    setTeamReelPool([dailyBench.team, ...starters.map((entry) => entry.team)]);
+    setDecadeReelPool([
+      dailyBench.decade,
+      ...starters.map((entry) => entry.decade),
+    ]);
     setCurrentTeam(dailyBench.team);
     setCurrentDecade(dailyBench.decade);
   }, [benchIsFixed, dailyBench, result, step, currentDecade]);
@@ -472,7 +484,14 @@ export function TournamentEntry({
                 : "Draft your Sixth Man · any position"}
           </div>
           {currentDecade !== null && (
-            <SlotMachine team={currentTeam} decade={currentDecade} size="lg" />
+            <SlotMachine
+              team={currentTeam}
+              decade={currentDecade}
+              teamPool={teamReelPool}
+              decadePool={decadeReelPool.length > 0 ? decadeReelPool : decades}
+              size="lg"
+              onSettled={() => setBenchReelSettled(true)}
+            />
           )}
           {!benchIsFixed && (
             <div className="flex flex-wrap justify-center gap-2">
@@ -487,7 +506,7 @@ export function TournamentEntry({
             </div>
           )}
           <div className="w-full">
-            {currentTeam && currentDecade !== null && !rolling ? (
+            {benchReelSettled && currentTeam && currentDecade !== null && !rolling ? (
               <PlayerList
                 team={currentTeam}
                 decade={currentDecade}

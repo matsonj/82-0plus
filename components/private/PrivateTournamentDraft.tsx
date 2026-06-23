@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   GameMode,
   PublicPlayer,
@@ -199,6 +199,13 @@ export function PrivateTournamentDraft({
   // The board's five starter slots are a reveal order; the next reveal is the slot
   // at index placedCount (lockOnPick commits picks strictly in order).
   const reveal = placedCount < KINDS.length ? board.slots[placedCount] : null;
+  const revealPools = useMemo(
+    () => ({
+      teams: board.slots.map((slot) => slot.team),
+      decades: board.slots.map((slot) => slot.decade),
+    }),
+    [board.slots],
+  );
 
   // ---- Interstitial: persist the five server-side + get the full season. ----
   const goToInterstitial = useCallback(async () => {
@@ -314,6 +321,7 @@ export function PrivateTournamentDraft({
         source={reveal ? { team: reveal.team, decade: reveal.decade, receipt: "" } : null}
         sourcePlayers={reveal ? rosters?.[draftSourceKey(reveal)] ?? null : null}
         sourcePlayersMode={reveal ? gameMode : null}
+        sourcePools={revealPools}
         mode={gameMode}
         allowCancelPending={false}
         allowRespin={false}

@@ -363,10 +363,6 @@ body {
 .md-reel {
   position: relative;
   overflow: hidden;
-  /* Edge fade: symbols melt in/out at the top & bottom so the window reads as a
-     physical reel drum behind glass, not text clipped at a hard line. */
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24%, #000 76%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 24%, #000 76%, transparent 100%);
 }
 
 .md-reel__face {
@@ -378,46 +374,37 @@ body {
   height: 100%;
 }
 
-/* Heavy vertical motion blur on the spinning strip — reads as speed, not type. */
+/* Keep symbols sharp while spinning so every row-to-row transition is visible. */
 .md-reel__face--spinning {
-  filter: blur(2.6px);
-}
-.md-reel__face--spinning.md-reel__face--era {
-  /* The era box is shorter; a touch less blur keeps the streak legible-as-motion. */
-  filter: blur(1.8px);
+  filter: none;
 }
 
-/* The strip is a column of code-cells taller than the window, anchored at the
-   window's vertical center and scrolling upward. Cell height is tied to the
-   font (1.05em line-box) so the mechanic is height-agnostic across sizes — the
-   window clips it and the heavy blur masks exact cell-to-window registration,
-   so it reads as a fast reel regardless of chip dimensions. */
+/* The strip is precomputed in React as [current, ...lead-in, target]. It rolls
+   once through full-height cells, then the landed face takes over. */
 .md-reel__strip {
   position: absolute;
   left: 0;
   right: 0;
-  top: 50%;
+  top: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  height: calc(var(--reel-count) * 100%);
   will-change: transform;
-  transform: translateY(-50%);
-  animation: md-reel-spin 0.28s linear infinite;
+  transform: translateY(calc(-100% + (100% / var(--reel-count))));
+  animation: md-reel-spin var(--reel-duration) cubic-bezier(0.16, 0.86, 0.22, 1) both;
 }
 .md-reel__cell {
-  flex: 0 0 auto;
+  flex: 0 0 calc(100% / var(--reel-count));
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 1.05em;
   line-height: 1;
 }
 @keyframes md-reel-spin {
-  /* Travel two cells per loop (2 × 1.05em). The strip re-seeds (React) every
-     few frames so it reads as a continuous upward blur, not a hard wrap. */
-  from { transform: translateY(calc(-50% + 2.1em)); }
-  to   { transform: translateY(-50%); }
+  from { transform: translateY(0); }
+  to { transform: translateY(calc(-100% + (100% / var(--reel-count)))); }
 }
 
 /* The settled result sits centered in the window. .md-reel__land layers the
