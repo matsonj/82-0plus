@@ -64,7 +64,7 @@ export function AccountFields({
   nameLabel?: string;
   pinLabel?: string;
 }) {
-  const labelClassName = dark
+  const labelColorClassName = dark
     ? "text-[var(--md-paper-3)]"
     : "text-[var(--md-ink-muted)]";
 
@@ -75,13 +75,13 @@ export function AccountFields({
         value={name}
         maxLength={NAME_MAX_LEN}
         onChange={(event) => onName(event.target.value)}
-        labelClassName={labelClassName}
+        labelColorClassName={labelColorClassName}
       />
       <PinField
         label={pinLabel}
         value={pin}
         onChange={(event) => onPin(event.target.value)}
-        labelClassName={labelClassName}
+        labelColorClassName={labelColorClassName}
       />
     </>
   );

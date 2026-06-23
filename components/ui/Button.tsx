@@ -2,8 +2,8 @@ import Link from "next/link";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 import { cx } from "@/components/ui/classNames";
 
-type ButtonVariant = "primary" | "secondary" | "ink" | "teal" | "yellow";
-type ButtonSize = "sm" | "md" | "lg";
+export type ButtonVariant = "primary" | "secondary" | "ink" | "teal" | "yellow";
+export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   primary: "",
@@ -47,6 +47,7 @@ export function Button({
   fullWidth = false,
   className,
   children,
+  type = "button",
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
@@ -56,6 +57,7 @@ export function Button({
 }) {
   return (
     <button
+      type={type}
       className={buttonClassName({ variant, size, fullWidth, className })}
       {...props}
     >

@@ -907,7 +907,10 @@ export function TournamentLookup({
 
             {!showCreate &&
               (privateLoading ? (
-                <LoadingState className="py-6 font-mono text-[13px] normal-case tracking-normal">
+                <LoadingState
+                  spacingClassName="py-6"
+                  textClassName="font-mono text-[13px] normal-case tracking-normal"
+                >
                   Loading your private tournaments…
                 </LoadingState>
               ) : privateRows && privateRows.length > 0 ? (

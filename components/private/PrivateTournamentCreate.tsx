@@ -461,7 +461,7 @@ export function PrivateTournamentCreate({
       )}
 
       {error && (
-        <Notice tone="error" className="font-display">
+        <Notice tone="error" textClassName="font-display text-sm">
           {error}
         </Notice>
       )}

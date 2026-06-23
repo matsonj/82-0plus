@@ -6,7 +6,11 @@ export function TextField({
   hint,
   inputClassName,
   labelClassName,
+  labelColorClassName = "text-[var(--md-ink-muted)]",
+  labelTextClassName = "text-xs",
   hintClassName,
+  hintColorClassName = "text-[var(--md-ink-muted)]",
+  hintTextClassName = "text-[11px]",
   className,
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & {
@@ -14,13 +18,19 @@ export function TextField({
   hint?: ReactNode;
   inputClassName?: string;
   labelClassName?: string;
+  labelColorClassName?: string;
+  labelTextClassName?: string;
   hintClassName?: string;
+  hintColorClassName?: string;
+  hintTextClassName?: string;
 }) {
   return (
     <label className={cx("flex flex-col gap-1", className)}>
       <span
         className={cx(
-          "font-cond text-xs font-semibold uppercase tracking-[0.18em] text-[var(--md-ink-muted)]",
+          "font-cond font-semibold uppercase tracking-[0.18em]",
+          labelTextClassName,
+          labelColorClassName,
           labelClassName,
         )}
       >
@@ -30,7 +40,9 @@ export function TextField({
       {hint && (
         <span
           className={cx(
-            "font-mono text-[11px] text-[var(--md-ink-muted)]",
+            "font-mono",
+            hintTextClassName,
+            hintColorClassName,
             hintClassName,
           )}
         >

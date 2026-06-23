@@ -5,11 +5,13 @@ type NoticeTone = "neutral" | "error" | "success";
 
 export function Notice({
   tone = "neutral",
+  textClassName = "font-mono text-[13px]",
   className,
   children,
   ...props
 }: HTMLAttributes<HTMLDivElement> & {
   tone?: NoticeTone;
+  textClassName?: string;
   children: ReactNode;
 }) {
   const color =
@@ -22,7 +24,8 @@ export function Notice({
   return (
     <div
       className={cx(
-        "border-2 bg-[var(--md-white)] p-2 font-mono text-sm",
+        "border-2 bg-[var(--md-white)] p-2",
+        textClassName,
         color,
         className,
       )}

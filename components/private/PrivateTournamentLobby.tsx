@@ -315,13 +315,13 @@ export function PrivateTournamentLobby({
                       value={name}
                       maxLength={NAME_MAX_LEN}
                       onChange={(event) => setName(event.target.value)}
-                      labelClassName="text-[10px]"
+                      labelTextClassName="text-[10px]"
                     />
                     <PinField
                       label="PIN"
                       value={pin}
                       onChange={(event) => setPin(event.target.value)}
-                      labelClassName="text-[10px]"
+                      labelTextClassName="text-[10px]"
                     />
                   </>
                 )}
@@ -333,7 +333,7 @@ export function PrivateTournamentLobby({
                 )}
 
                 {error && (
-                  <Notice tone="error" className="font-display">
+                  <Notice tone="error" textClassName="font-display text-sm">
                     {error}
                   </Notice>
                 )}
@@ -387,10 +387,15 @@ export function PrivateTournamentLobby({
             </div>
 
             <CopyLinkField
-              label="Invite link"
               value={fullShare}
+              layout="button"
               copyLabel="Copy Invite Link"
-              hint={fullShare.replace(/^https?:\/\//, "")}
+              buttonSize="lg"
+              buttonFullWidth
+              buttonPrefix={<span>⎘</span>}
+              displayValue={fullShare.replace(/^https?:\/\//, "")}
+              displayClassName="border-2 border-[#3a322a] px-3 py-2 text-[var(--md-paper)]"
+              displayStyle={{ background: "var(--md-ink-2)" }}
             />
 
             {/* Slots + bracket preview */}
