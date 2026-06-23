@@ -638,53 +638,32 @@ function TreeColumn({
   );
 }
 
-// The champion box: press-yellow card with trophy + name + record.
-// Sits in the rightmost column, vertically centered in the full bracket height.
+// The champion box: a single compact press-yellow row — crown + name — sized
+// like the bracket's other boxes. The column header already says CHAMPION, so
+// there's no inner label, record, or verdict here.
 function ChampionColumn({
   championName,
   championId,
   teamOf,
-  bracket,
 }: {
   championName: string;
   championId: string;
   teamOf: (id: string) => BracketTeam | undefined;
-  bracket: BracketResult;
 }) {
-  // Derive the champion's playoff GAME record (not series): walk every series the
-  // champion played in and add their game wins + losses. scoreHi/scoreLo are the
-  // game-win counts for hi/lo, so the champion's wins are scoreHi when they're hi
-  // (scoreLo when lo) and their losses are the other side.
-  let won = 0;
-  let lost = 0;
-  for (const round of bracket.rounds) {
-    for (const s of round) {
-      if (s.hiId === championId) {
-        won += s.scoreHi;
-        lost += s.scoreLo;
-      } else if (s.loId === championId) {
-        won += s.scoreLo;
-        lost += s.scoreHi;
-      }
-    }
-  }
-  // "Undefeated" only when the champion dropped ZERO playoff games.
-  const recordLine = `${won}–${lost}`;
-  const verdict = lost === 0 ? "Undefeated" : "Ran the table";
   const isGhost = teamOf(championId)?.isGhost;
 
   return (
     // Full-height flex column with header + centered champion terminus
-    <div className="flex flex-col" style={{ width: 146, flexShrink: 0 }}>
+    <div className="flex flex-col" style={{ width: 200, flexShrink: 0 }}>
       {/* Column header — flame, matches FINAL */}
       <div className="mb-3">
         <span className="font-cond text-[14px] font-bold uppercase tracking-[0.16em] text-[var(--md-coral)]">
           Champion
         </span>
       </div>
-      {/* Champion terminus — gold card, ink offset shadow, vertically centered */}
+      {/* Champion terminus — a single compact gold row (crown + name), vertically
+          centered and fed by the flame arm from the Final. */}
       <div className="flex flex-1 flex-col items-stretch justify-center">
-        {/* Flame connecting arm from the Final card into the terminus */}
         <div className="relative flex flex-col">
           <div
             className="pointer-events-none absolute"
@@ -698,17 +677,17 @@ function ChampionColumn({
             }}
           />
           <div
-            className="flex flex-col items-start gap-3 px-4 pt-4 pb-5"
+            className="flex items-center gap-2.5 px-3 py-3"
             style={{
               marginLeft: 24,
               background: "var(--md-yellow)",
               boxShadow: "var(--md-shadow-sm)",
             }}
           >
-            {/* Crown / trophy mark */}
+            {/* Crown */}
             <svg
-              width="30"
-              height="30"
+              width="22"
+              height="22"
               viewBox="0 0 24 24"
               xmlns="http://www.w3.org/2000/svg"
               style={{ flexShrink: 0 }}
@@ -717,28 +696,10 @@ function ChampionColumn({
               <path d="M3 7L7 11L12 4L17 11L21 7L19.5 19H4.5L3 7Z" fill="var(--md-ink)" />
               <rect x="4.5" y="19.5" width="15" height="2.2" fill="var(--md-ink)" />
             </svg>
-            <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.18em] text-[var(--md-ink)]">
-              Champion
-            </span>
-            <div
-              className="font-cover uppercase leading-none text-[var(--md-ink)]"
-              style={{ fontSize: 40, letterSpacing: "0.005em", wordBreak: "break-word" }}
-            >
+            <span className="min-w-0 truncate font-cond text-[16px] font-bold uppercase tracking-[0.03em] text-[var(--md-ink)]">
               {isGhost ? "🤖 " : ""}
               {championName}
-            </div>
-            <div
-              className="shrink-0"
-              style={{ width: 114, height: 1.5, opacity: 0.35, background: "var(--md-ink)" }}
-            />
-            <div className="flex flex-col items-start gap-1">
-              <div className="font-mono text-[15px] font-bold tabular-nums text-[var(--md-ink)]">
-                {recordLine}
-              </div>
-              <div className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink)]">
-                {verdict}
-              </div>
-            </div>
+            </span>
           </div>
         </div>
       </div>
@@ -785,7 +746,7 @@ function HorizontalBracketTree({
     <div className="overflow-x-auto">
       <div
         className="flex gap-0 items-stretch"
-        style={{ minWidth: numRounds * 220 + 140, minHeight: minTreeHeight }}
+        style={{ minWidth: numRounds * 220 + 200, minHeight: minTreeHeight }}
       >
         {rounds.map((series, i) => (
           <TreeColumn
@@ -807,7 +768,6 @@ function HorizontalBracketTree({
           championName={bracket.championName}
           championId={bracket.championId}
           teamOf={teamOf}
-          bracket={bracket}
         />
       </div>
     </div>
