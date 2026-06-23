@@ -641,103 +641,119 @@ export function ResultsPanel({
               </span>
             </div>
 
-            {/* ---- CTAs ---- */}
+            {/* ---- CTAs ----
+                Two breakpoint-specific blocks live in PLAIN-DIV wrappers, not
+                on the buttons themselves: `.md-btn` is unlayered CSS so its
+                `display:inline-flex` beats Tailwind's `lg:hidden`/`hidden lg:flex`
+                display utilities — those only work on non-md-btn elements. */}
             {!entryOnly && (
-              <div className="flex flex-col gap-3 mb-1">
-                {/* Share — full-width flame on mobile, text link on desktop */}
-                <Button
-                  type="button"
-                  onClick={share}
-                  disabled={!shareBlob || !shareReady}
-                  size="lg"
-                  fullWidth
-                  className="lg:hidden transition-opacity disabled:opacity-40"
-                  style={{ background: "var(--md-coral)", color: "var(--md-white)", borderColor: "var(--md-ink)" }}
-                >
-                  <span style={{ fontSize: 14, marginRight: 6 }}>↑</span>
-                  {shareBlob && shareReady ? "Share Result" : "Preparing…"}
-                </Button>
-
-                {/* Enter Tournament (eligible) — block style on mobile */}
-                {onEnterTournament && isEligible && (
-                  <div
-                    className="lg:hidden border-2 border-[var(--md-ink)]"
-                    style={{ background: "var(--md-paper-2)" }}
+              <>
+                {/* Mobile (871-0): full-width flame share, tournament block, play again */}
+                <div className="flex flex-col gap-3 mb-1 lg:hidden">
+                  <button
+                    type="button"
+                    onClick={share}
+                    disabled={!shareBlob || !shareReady}
+                    className="md-btn md-btn--lg w-full transition-opacity disabled:opacity-40"
+                    style={{ background: "var(--md-coral)", color: "var(--md-white)", borderColor: "var(--md-ink)" }}
                   >
-                    <button
-                      className="flex w-full items-center justify-between px-5 py-4"
-                      onClick={onEnterTournament}
-                    >
-                      <div className="text-left">
-                        <div
-                          className="font-cond font-bold uppercase tracking-[0.1em]"
-                          style={{ fontSize: 14, color: "var(--md-ink)" }}
-                        >
-                          {entryCtaLabel ?? "Enter Tournament"}
-                        </div>
-                        <div
-                          className="font-cond font-semibold uppercase tracking-[0.12em] mt-0.5"
-                          style={{ fontSize: 10, color: "var(--md-teal)" }}
-                        >
-                          Eligible · {wins} wins ≥ 40
-                        </div>
-                      </div>
-                      <span
-                        className="font-mono font-bold text-[var(--md-coral)] shrink-0"
-                        style={{ fontSize: 20 }}
+                    <span style={{ fontSize: 14, marginRight: 6 }}>↑</span>
+                    {shareBlob && shareReady ? "Share Result" : "Preparing…"}
+                  </button>
+
+                  {onEnterTournament && isEligible && (
+                    <div className="border-2 border-[var(--md-ink)]" style={{ background: "var(--md-paper-2)" }}>
+                      <button
+                        className="flex w-full items-center justify-between px-5 py-4"
+                        onClick={onEnterTournament}
                       >
-                        →
-                      </span>
+                        <div className="text-left">
+                          <div className="font-cond font-bold uppercase tracking-[0.1em]" style={{ fontSize: 14, color: "var(--md-ink)" }}>
+                            {entryCtaLabel ?? "Enter Tournament"}
+                          </div>
+                          <div className="font-cond font-semibold uppercase tracking-[0.12em] mt-0.5" style={{ fontSize: 10, color: "var(--md-teal)" }}>
+                            Eligible · {wins} wins ≥ 40
+                          </div>
+                        </div>
+                        <span className="font-mono font-bold text-[var(--md-coral)] shrink-0" style={{ fontSize: 20 }}>
+                          →
+                        </span>
+                      </button>
+                    </div>
+                  )}
+
+                  {onEnterTournament && !isEligible && (
+                    <div className="border-2 border-[var(--md-paper-3)] px-4 py-3" style={{ background: "var(--md-paper-2)" }}>
+                      <div className="font-cond font-bold uppercase tracking-[0.1em]" style={{ fontSize: 12, color: "var(--md-ink-muted)" }}>
+                        Enter Tournament
+                      </div>
+                      <div className="mt-0.5 font-mono" style={{ fontSize: 11, color: "var(--md-coral)" }}>
+                        Needs {MIN_ELIGIBLE_WINS}+ wins to be eligible
+                      </div>
+                    </div>
+                  )}
+
+                  <button className="md-btn md-btn--lg md-btn--secondary w-full" onClick={onReset}>
+                    <span style={{ marginRight: 6 }}>↺</span>
+                    {resetLabel ?? "Play Again"}
+                  </button>
+                </div>
+
+                {/* Desktop (872-0): ONE flame CTA + outline Play Again side-by-side,
+                    Share Result as a text link below. */}
+                <div className="hidden lg:flex lg:flex-col lg:gap-4 lg:pt-2">
+                  {onEnterTournament && !isEligible && (
+                    <div className="self-start border-2 border-[var(--md-paper-3)] px-4 py-3" style={{ background: "var(--md-paper-2)" }}>
+                      <div className="font-cond font-bold uppercase tracking-[0.1em]" style={{ fontSize: 12, color: "var(--md-ink-muted)" }}>
+                        Enter Tournament
+                      </div>
+                      <div className="mt-0.5 font-mono" style={{ fontSize: 11, color: "var(--md-coral)" }}>
+                        Needs {MIN_ELIGIBLE_WINS}+ wins to be eligible
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-4">
+                    {onEnterTournament && isEligible && (
+                      <button
+                        className="md-btn md-btn--lg"
+                        style={{
+                          background: "var(--md-coral)",
+                          color: "var(--md-white)",
+                          border: "3px solid var(--md-ink)",
+                          boxShadow: "6px 6px 0 0 var(--md-ink)",
+                        }}
+                        onClick={onEnterTournament}
+                      >
+                        {entryCtaLabel ?? "Enter Tournament"}
+                        <span>→</span>
+                      </button>
+                    )}
+                    {/* Play Again — flat outline, no fill (matches 872-0) */}
+                    <button
+                      type="button"
+                      onClick={onReset}
+                      className="inline-flex items-center gap-2 border-2 border-[var(--md-ink)] px-7 py-[15px] font-cond font-semibold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
+                      style={{ fontSize: 15, cursor: "pointer" }}
+                    >
+                      <span>↺</span>
+                      {resetLabel ?? "Play Again"}
                     </button>
                   </div>
-                )}
 
-                {/* Enter Tournament — button style on desktop */}
-                {onEnterTournament && isEligible && (
-                  <Button
-                    size="lg"
-                    className="hidden lg:flex items-center gap-2"
-                    style={{
-                      background: "var(--md-coral)",
-                      color: "var(--md-white)",
-                      borderColor: "var(--md-ink)",
-                    }}
-                    onClick={onEnterTournament}
+                  {/* Share — text link with upload glyph */}
+                  <button
+                    type="button"
+                    onClick={share}
+                    disabled={!shareBlob || !shareReady}
+                    className="inline-flex items-center gap-2 self-start font-cond font-semibold uppercase tracking-[0.12em] underline underline-offset-4 transition-opacity disabled:opacity-40"
+                    style={{ fontSize: 15, color: "var(--md-ink)", cursor: "pointer" }}
                   >
-                    {entryCtaLabel ?? "Enter Tournament"}
-                    <span>→</span>
-                  </Button>
-                )}
-
-                {/* Play Again */}
-                <Button
-                  size="lg"
-                  variant="secondary"
-                  className="w-full lg:w-auto"
-                  onClick={onReset}
-                >
-                  <span style={{ marginRight: 6 }}>↺</span>
-                  {resetLabel ?? "Play Again"}
-                </Button>
-              </div>
-            )}
-
-            {/* Tournament eligibility gate (ineligible, not entryOnly) */}
-            {onEnterTournament && !isEligible && !entryOnly && (
-              <div
-                className="mb-3 border-2 border-[var(--md-paper-3)] px-4 py-3"
-                style={{ background: "var(--md-paper-2)" }}
-              >
-                <div
-                  className="font-cond font-bold uppercase tracking-[0.1em]"
-                  style={{ fontSize: 12, color: "var(--md-ink-muted)" }}
-                >
-                  Enter Tournament
+                    <span style={{ fontSize: 15 }}>↑</span>
+                    {shareBlob && shareReady ? "Share Result" : "Preparing…"}
+                  </button>
                 </div>
-                <div className="mt-0.5 font-mono" style={{ fontSize: 11, color: "var(--md-coral)" }}>
-                  Needs {MIN_ELIGIBLE_WINS}+ wins to be eligible
-                </div>
-              </div>
+              </>
             )}
 
             {/* entryOnly: just the entry CTA */}
@@ -755,25 +771,13 @@ export function ResultsPanel({
                 {entryCtaLabel ?? "Enter Tournament"}
               </Button>
             )}
-
-            {/* Share — text link on desktop (hidden on mobile, full-width btn above) */}
-            {!entryOnly && (
-              <button
-                type="button"
-                onClick={share}
-                disabled={!shareBlob || !shareReady}
-                className="hidden lg:flex items-center gap-2 self-start font-cond font-bold uppercase tracking-[0.1em] underline underline-offset-4 transition-opacity disabled:opacity-40"
-                style={{ fontSize: 12, color: "var(--md-ink)" }}
-              >
-                <span style={{ fontSize: 14 }}>↑</span>
-                {shareBlob && shareReady ? "Share Result" : "Preparing…"}
-              </button>
-            )}
           </div>
 
           {/* ---- Right column: THE FIVE ink card (fixed lane on desktop) ----
-              order-1 on mobile so the lineup sits right under the money card. */}
-          <div className="order-1 lg:order-2 lg:w-[420px] lg:shrink-0">
+              order-1 on mobile so the lineup sits right under the money card.
+              Width tuned to ~48% of the max-w-5xl result column so it balances
+              the left column and the subtitle fits on one line (matches 872-0). */}
+          <div className="order-1 lg:order-2 lg:w-[480px] lg:shrink-0">
             <TheFiveCard
               roster={roster}
               result={result}

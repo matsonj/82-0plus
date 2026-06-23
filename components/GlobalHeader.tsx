@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getSavedUser } from "@/lib/tournamentSession";
+import { getSavedUser, subscribeSession } from "@/lib/tournamentSession";
 import {
   privateModeLabel,
   formatPrivateEntryStatus,
@@ -61,7 +61,9 @@ export function GlobalHeader({
   onHowToPlay?: () => void;
 }) {
   const pathname = usePathname();
-  // Don't link to "My Teams" from the My Teams page itself.
+  // "My Teams" stays in the nav even on its own page (a stable masthead reads
+  // better than a link that vanishes when you land there) — just flagged as the
+  // current page for a11y.
   const onMyTeams = pathname === "/tournament";
   const [notif, setNotif] = useState<NotifResponse | null>(null);
   // The signed-in identity drives the masthead's Sign In vs. name chip. Read
@@ -120,6 +122,10 @@ export function GlobalHeader({
     };
   }, [poll]);
 
+  // Update the masthead the instant the session changes (sign-in / log-out in
+  // this tab, or another tab) — re-polling refreshes the name chip and alerts.
+  useEffect(() => subscribeSession(() => void poll()), [poll]);
+
   // Surface the changelog on mount for anyone who hasn't seen it and isn't past
   // the 7-day window. Reads localStorage, so it runs client-side only.
   useEffect(() => {
@@ -167,7 +173,7 @@ export function GlobalHeader({
   // Mobile menu rows (order mirrors the desktop nav). Sign In folds in here too —
   // the standalone chip/button is hidden below sm so the bar stays uncluttered.
   const menuItems: { label: string; href?: string; action?: () => void }[] = [
-    ...(!onMyTeams ? [{ label: "My Teams", href: "/tournament" }] : []),
+    { label: "My Teams", href: "/tournament" },
     onHowToPlay
       ? { label: "How to Play", action: onHowToPlay }
       : { label: "How to Play", href: "/?howto=1" },
@@ -212,11 +218,13 @@ export function GlobalHeader({
 
         <div className="flex items-center gap-3 sm:gap-6">
           <nav className="hidden items-center gap-6 sm:flex">
-            {!onMyTeams && (
-              <Link href="/tournament" className={navCls}>
-                My Teams
-              </Link>
-            )}
+            <Link
+              href="/tournament"
+              aria-current={onMyTeams ? "page" : undefined}
+              className={navCls}
+            >
+              My Teams
+            </Link>
             {onHowToPlay ? (
               <button type="button" onClick={onHowToPlay} className={navCls} style={{ cursor: "pointer" }}>
                 How to Play
