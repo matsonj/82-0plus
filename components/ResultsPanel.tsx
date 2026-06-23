@@ -143,7 +143,7 @@ function TheFiveCard({
 
   return (
     <div
-      className="overflow-hidden"
+      className="w-full overflow-hidden"
       style={{
         background: "var(--md-ink)",
         border: "3px solid var(--md-coral)",
@@ -616,10 +616,10 @@ export function ResultsPanel({
           MobileMoneyCard above handles it); net rating + team fit + CTAs
           still show from the left column.
         */}
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] lg:items-start lg:gap-10">
+        <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
 
           {/* ---- Left column ---- */}
-          <div className="flex flex-col gap-0">
+          <div className="flex flex-col gap-0 lg:min-w-0 lg:flex-1">
 
             {/* Kicker row: SEASON COMPLETE + mode badge — hidden on mobile
                 (the mobile money card header already shows this) */}
@@ -847,14 +847,16 @@ export function ResultsPanel({
             )}
           </div>
 
-          {/* ---- Right column: THE FIVE ink card ---- */}
-          <TheFiveCard
-            roster={roster}
-            result={result}
-            cardsOn={cardsOn}
-            mode={mode}
-            onCardOpen={setCardIndex}
-          />
+          {/* ---- Right column: THE FIVE ink card (fixed lane on desktop) ---- */}
+          <div className="lg:w-[420px] lg:shrink-0">
+            <TheFiveCard
+              roster={roster}
+              result={result}
+              cardsOn={cardsOn}
+              mode={mode}
+              onCardOpen={setCardIndex}
+            />
+          </div>
         </div>
 
         {/*

@@ -53,6 +53,8 @@ interface TeamSummaryRow {
   roster_display: unknown;
   season_w: number | null; // actual reg-season wins (daily only, via daily_results)
   season_l: number | null;
+  daily_rank: number | null; // 1-based leaderboard rank for that date (daily only)
+  daily_field: number | null; // total entries that date (daily only)
 }
 
 /** All memorialized teams for a user, newest first (lookup detail list). The
@@ -64,7 +66,17 @@ export async function getUserTeamsRO(
   const rows = await queryTournamentRO<TeamSummaryRow>(
     `SELECT t.team_id, t.team_name, t.mode, t.record_w, t.record_l, t.realized_margin,
             t.reached_round, t.champion_name, t.seed_net, t.daily_date, t.created_at,
-            t.roster_display, dr.wins AS season_w, dr.losses AS season_l
+            t.roster_display, dr.wins AS season_w, dr.losses AS season_l,
+            CASE WHEN t.mode = 'daily' AND dr.wins IS NOT NULL THEN
+              (SELECT COUNT(*) FROM ${RO_DB}.daily_results o
+                 WHERE o.daily_date = t.daily_date
+                   AND (o.wins > dr.wins
+                        OR (o.wins = dr.wins AND o.margin > dr.margin))) + 1
+            END AS daily_rank,
+            CASE WHEN t.mode = 'daily' AND dr.wins IS NOT NULL THEN
+              (SELECT COUNT(*) FROM ${RO_DB}.daily_results
+                 WHERE daily_date = t.daily_date)
+            END AS daily_field
        FROM ${RO_DB}.teams t
        LEFT JOIN ${RO_DB}.daily_results dr
          ON dr.user_id = t.user_id AND dr.daily_date = t.daily_date
@@ -90,6 +102,8 @@ export async function getUserTeamsRO(
       seasonW: r.season_w ?? null,
       seasonL: r.season_l ?? null,
       dailyDate: r.daily_date ?? null,
+      dailyRank: r.daily_rank != null ? Number(r.daily_rank) : null,
+      dailyFieldSize: r.daily_field != null ? Number(r.daily_field) : null,
       createdAt:
         r.created_at instanceof Date
           ? r.created_at.toISOString()

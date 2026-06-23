@@ -271,14 +271,29 @@ function TeamRow({
           </>
         ) : team.mode !== "daily" ? (
           <TierBadge seedNet={team.seedNet} size="capsule" />
-        ) : null
-        // Daily non-champ/non-runner-up: nothing in the tier column. The outcome
-        // (LOST R1, LOST CONF SEMIS, etc.) is already in THE RUN column, and
-        // daily has no tier bracket. To add a rank number ("RANK #24 /61") wire
-        // two new fields on TournamentTeamSummary — `dailyRank?: number | null`
-        // and `dailyFieldSize?: number | null` — populated by getUserTeamsRO in
-        // lib/tournamentReadQueries.ts via a per-date COUNT/RANK subquery.
-        }
+        ) : team.dailyRank != null ? (
+          // Daily has no tier bracket — show that day's leaderboard placement.
+          <>
+            <span
+              className="md-stamp inline-flex items-center px-2 py-0.5 font-cond text-[11px] font-bold uppercase tracking-[0.04em]"
+              style={{
+                background: "var(--md-coral)",
+                color: "var(--md-paper)",
+                border: "2px solid var(--md-ink)",
+                boxShadow: "3px 3px 0 var(--md-magenta), 5px 5px 0 var(--md-ink)",
+                transform: "rotate(-2deg)",
+                minWidth: 60,
+              }}
+            >
+              #{team.dailyRank}
+            </span>
+            {team.dailyFieldSize != null && (
+              <span className="font-mono text-[9px] text-[var(--md-ink-muted)]">
+                of {team.dailyFieldSize}
+              </span>
+            )}
+          </>
+        ) : null}
       </span>
 
       {loading && (
