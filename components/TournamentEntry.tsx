@@ -619,7 +619,10 @@ export function TournamentEntry({
                       setTeamName(
                         e.target.value
                           .toUpperCase()
-                          .replace(/['`]/g, "'")
+                          // Normalize curly quotes (’ ‘ U+2019/U+2018 — what mobile
+                          // keyboards insert) and backtick to a straight ' so they
+                          // survive the strip below (MJ’s CREW → MJ'S CREW, not MJS).
+                          .replace(/[‘’'`]/g, "'")
                           .replace(/[^A-Z ']/g, ""),
                       )
                     }
