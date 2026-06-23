@@ -501,21 +501,30 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
 
 type View = "form" | "list" | "team";
 
+// Which page chrome the parent should render around the lookup:
+//   "lookup" — logged-out lookup landing → page shows the "HOW FAR DID YOU GET?"
+//              masthead + "earn your way in" sidebar (two-column). Matches 8TJ-0.
+//   "list"   — logged-in My Teams list → no page hero, no sidebar, full width;
+//              the list owns its own "MY TEAMS" title block. Matches 8TU-0.
+//   "result" — a bracket result is open → no page hero/sidebar, full width;
+//              TournamentResults brings its own masthead.
+export type LookupChrome = "lookup" | "list" | "result";
+
 export function TournamentLookup({
   onBack,
   initialTab,
   initialDaily,
-  onResultActive,
+  onChrome,
 }: {
   onBack?: () => void;
   initialTab?: Tab;
   // Auto-open the team for this daily date (YYYY-MM-DD) once the list loads — used
   // when arriving from a home-calendar date click (/tournament?daily=…).
   initialDaily?: string;
-  // Called with true when a bracket result is being shown, false when the user
-  // navigates away. The parent page uses this to suppress lookup chrome and go
-  // full-width during the result view.
-  onResultActive?: (active: boolean) => void;
+  // Reports which page chrome to render (see LookupChrome). The parent page uses
+  // this to show the logged-out hero + sidebar only in the "lookup" state and go
+  // full-width for the logged-in list and bracket-result views.
+  onChrome?: (mode: LookupChrome) => void;
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>("form");
@@ -754,11 +763,19 @@ export function TournamentLookup({
     void loadPrivate(name, pin);
   }, [view, tab, privateRows, name, pin, nameCheck.ok, pinOk, loadPrivate]);
 
-  // Notify the parent page whenever the result view becomes active/inactive so it
-  // can suppress the lookup chrome and go full-width for the bracket desk.
+  // Report the page chrome to the parent. The logged-out hero + sidebar only
+  // belong in the "lookup" state; the logged-in list and bracket result are
+  // full-width with no hero. While restoring a saved session we report "list"
+  // so logged-in users never flash the "HOW FAR DID YOU GET?" hero on the way in.
   useEffect(() => {
-    onResultActive?.(view === "team");
-  }, [view, onResultActive]);
+    const mode: LookupChrome =
+      view === "team"
+        ? "result"
+        : view === "list" || bootingSession
+          ? "list"
+          : "lookup";
+    onChrome?.(mode);
+  }, [view, bootingSession, onChrome]);
 
   const openTeam = async (teamId: string) => {
     if (loadingTeamId) return;

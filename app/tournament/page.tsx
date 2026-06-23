@@ -2,7 +2,7 @@
 
 import { use, useState, useCallback } from "react";
 import Link from "next/link";
-import { TournamentLookup } from "@/components/TournamentLookup";
+import { TournamentLookup, type LookupChrome } from "@/components/TournamentLookup";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 
@@ -20,12 +20,15 @@ export default function TournamentPage({
   // `?daily=YYYY-MM-DD` (from a home-calendar click) auto-opens that day's bracket.
   const initialDaily = /^\d{4}-\d{2}-\d{2}$/.test(daily ?? "") ? daily : undefined;
 
-  // When TournamentLookup is showing a bracket result, suppress the lookup
-  // masthead + sidebar and give the result full content width.
-  const [resultActive, setResultActive] = useState(false);
-  const handleResultActive = useCallback((active: boolean) => {
-    setResultActive(active);
+  // The logged-out lookup landing ("lookup") is the only state that shows the
+  // "HOW FAR DID YOU GET?" masthead + "earn your way in" sidebar (two-column).
+  // The logged-in list ("list") and an open bracket result ("result") go
+  // full-width with no page hero/sidebar — they bring their own headers.
+  const [chrome, setChrome] = useState<LookupChrome>("lookup");
+  const handleChrome = useCallback((mode: LookupChrome) => {
+    setChrome(mode);
   }, []);
+  const showLookupChrome = chrome === "lookup";
 
   return (
     <PageShell
@@ -34,9 +37,10 @@ export default function TournamentPage({
       footerCentered
     >
       {/* Page masthead: folio bar + cover-line headline.
-          Hidden when a bracket result is active — TournamentResults has its own
-          masthead (kicker + tournament name + champion stamp). */}
-      {!resultActive && (
+          Only in the logged-out lookup state. Hidden for the logged-in list
+          (it owns its own "MY TEAMS" title) and bracket results (their own
+          masthead) — both of those go full-width. */}
+      {showLookupChrome && (
         <PageHeader
           className="mt-4 sm:mt-6"
           eyebrowVariant="line"
@@ -63,25 +67,26 @@ export default function TournamentPage({
       )}
 
       {/* Double rule under masthead — only in lookup state */}
-      {!resultActive && <div className="md-rule-double relative z-10 mt-6" />}
+      {showLookupChrome && <div className="md-rule-double relative z-10 mt-6" />}
 
       {/* Main content.
           TournamentLookup is always mounted (single instance preserves its
-          internal state). When a result is active, the sidebar is hidden and
-          the lookup fills the full width via CSS; no remount. */}
-      <div className={`relative z-10 mt-8 ${resultActive ? "" : "lg:grid lg:grid-cols-[1fr_320px] lg:gap-8"}`}>
-        {/* The lookup widget — fills the left column in lookup state, or full
-            width in result state. */}
+          internal state). Only the logged-out lookup state is two-column with
+          the sidebar; the logged-in list and bracket results fill the full
+          width via CSS; no remount. */}
+      <div className={`relative z-10 mt-8 ${showLookupChrome ? "lg:grid lg:grid-cols-[1fr_320px] lg:gap-8" : ""}`}>
+        {/* The lookup widget — fills the left column in the lookup state, or
+            full width in the list / result states. */}
         <TournamentLookup
           onBack={undefined}
           initialTab={initialTab}
           initialDaily={initialDaily}
-          onResultActive={handleResultActive}
+          onChrome={handleChrome}
         />
 
-        {/* Right sidebar — earn-your-way-in callout (lookup state, desktop only).
-            Hidden when a result is active. */}
-        {!resultActive && (
+        {/* Right sidebar — earn-your-way-in callout (logged-out lookup, desktop
+            only). Hidden once you're logged in or viewing a result. */}
+        {showLookupChrome && (
           <aside className="hidden flex-col gap-6 lg:flex">
             <div>
               <div className="mb-1 font-cond text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink-muted)]">
