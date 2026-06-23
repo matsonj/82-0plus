@@ -396,7 +396,9 @@ export function TournamentEntry({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    // The entry flow (sixth-man draft + captain/name form) is a narrow single
+    // column; the post-submit bracket result returns above (full section width).
+    <div className="mx-auto flex w-full max-w-lg flex-col gap-5">
       {showHowTo && (
         <TournamentHowToPlay onClose={() => setShowHowTo(false)} />
       )}

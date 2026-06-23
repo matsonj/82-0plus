@@ -1265,7 +1265,9 @@ export default function Home() {
 
       {/* ---------------- TOURNAMENT ENTRY ---------------- */}
       {phase === "tournament" && (
-        <section className="relative z-10 mx-auto mt-4 w-full max-w-lg">
+        // Full play-phase width (max-w-5xl from <main>): the post-submit bracket
+        // needs room. TournamentEntry keeps its own entry form narrow internally.
+        <section className="relative z-10 mt-4 w-full">
           <TournamentEntry
             initialLineup={lineup}
             mode={gameType === "daily" ? "daily" : mode}
