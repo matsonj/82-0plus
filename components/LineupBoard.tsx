@@ -4,6 +4,7 @@ import type React from "react";
 import type { PublicPlayer } from "@/lib/types";
 import { SLOT_LABEL, type Role, type SlotKind } from "@/lib/positions";
 import { canFill } from "@/lib/positions";
+import { splitPlayerName } from "@/lib/playerName";
 
 export interface LineupEntry {
   player: PublicPlayer;
@@ -141,6 +142,7 @@ function ListBoard({
     <div className="flex flex-col" style={{ background: "var(--md-ink)" }}>
       {kinds.map((kind, i) => {
         const entry = entries[i];
+        const name = entry ? splitPlayerName(entry.player.player_name) : null;
         const isTarget = targets.includes(i);
         const isSelected = selected === i;
         const clickable = isTarget || (entry !== null && selected === null) || isSelected;
@@ -220,9 +222,9 @@ function ListBoard({
                       letterSpacing: "-0.01em",
                     }}
                   >
-                    {/* Last name only for compactness, like the mockup */}
-                    {entry.player.player_name.split(" ").slice(-1)[0].toUpperCase()}
-                    {entry.player.player_name.split(" ").length > 1 && (
+                    {/* Surname (keeps Jr/III suffix) bold; first name as the tail */}
+                    {name?.last.toUpperCase()}
+                    {name && name.first && (
                       <span
                         className="ml-1"
                         style={{
@@ -232,40 +234,19 @@ function ListBoard({
                           letterSpacing: 0,
                         }}
                       >
-                        {entry.player.player_name.split(" ").slice(0, -1).join(" ")}
+                        {name.first}
                       </span>
                     )}
                   </span>
                 </>
-              ) : isTarget ? (
-                <>
-                  <span className="font-archivo text-[14px] font-bold leading-tight text-[var(--md-white)]"
-                    style={{ fontVariationSettings: '"wdth" 88' }}>
-                    {pendingPlayer
-                      ? `Open — eligible for ${pendingPlayer.player_name.split(" ").slice(-1)[0]}`
-                      : "Open"}
-                  </span>
-                  {pendingPlayer && (
-                    <span className="font-mono text-[10px] text-[var(--md-ink-muted)]">
-                      {pendingPlayer.positions.join("/").toLowerCase()} fits{" "}
-                      {kind === "FLEX" ? "flex" : SLOT_LABEL_LONG[kind].toLowerCase()}
-                    </span>
-                  )}
-                </>
-              ) : isIneligible ? (
-                <>
-                  <span className="font-archivo text-[14px] font-bold leading-tight text-[var(--md-ink-muted)]"
-                    style={{ fontVariationSettings: '"wdth" 88' }}>
-                    Open — needs a {kind === "FLEX" ? "flex" : SLOT_LABEL_LONG[kind].toLowerCase()}
-                  </span>
-                  {pendingPlayer && (
-                    <span className="font-mono text-[10px] text-[var(--md-ink-muted)]">
-                      {pendingPlayer.player_name.split(" ").slice(-1)[0].toLowerCase()} can&rsquo;t fill
-                    </span>
-                  )}
-                </>
               ) : (
-                <span className="font-cond text-[13px] uppercase tracking-[0.08em] text-[var(--md-ink-muted)]">
+                /* All open states are a single-line "Open" so the row never grows
+                   when a player is pending. An eligible (target) slot pops white +
+                   gets the coral border & "Assign →"; ineligible stays muted + N/A. */
+                <span
+                  className="font-cond text-[13px] uppercase tracking-[0.08em]"
+                  style={{ color: isTarget ? "var(--md-white)" : "var(--md-ink-muted)" }}
+                >
                   Open
                 </span>
               )}

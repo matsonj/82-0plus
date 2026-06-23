@@ -117,7 +117,12 @@ export function LineupDraftBoard({
       .filter(({ kind }) => canFill(player.positions, kind))
       .map(({ i }) => i);
     if (eligible.length === 0) return;
-    if (eligible.length === 1) placeAt(player, eligible[0]);
+    // Auto-place when exactly one slot fits — EXCEPT the final pick, which would
+    // instantly complete the roster (and kick off the sim) with no chance to
+    // confirm or swap him out. There, stash as pending so the user taps Assign
+    // (or "Cancel pick" to choose someone else).
+    const isFinalPick = placedCount === kinds.length - 1;
+    if (eligible.length === 1 && !isFinalPick) placeAt(player, eligible[0]);
     else setPending(player);
   };
 
@@ -186,9 +191,10 @@ export function LineupDraftBoard({
       });
   }
 
-  const counter =
-    counterLabel?.(placedCount, kinds.length) ??
-    `Round ${placedCount + 1} of ${kinds.length}`;
+  const counter = allPlaced
+    ? "Complete"
+    : (counterLabel?.(placedCount, kinds.length) ??
+      `Round ${placedCount + 1} of ${kinds.length}`);
 
   // ── Draft folio header + 5-segment progress bar ──────────────────────────
   // Segments: completed = flame-red solid; current = press-yellow outline;
@@ -264,7 +270,7 @@ export function LineupDraftBoard({
   const PlayerListSection = () =>
     !allPlaced && !pending && source ? (
       <div>
-        <div className="md-rule-double flex items-end justify-between pb-2">
+        <div className="md-rule-double flex items-end justify-between pb-2 pt-3">
           <span className="font-cover text-[26px] uppercase leading-none tracking-[-0.01em]">
             Draft a Player
           </span>
