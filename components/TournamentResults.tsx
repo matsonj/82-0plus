@@ -13,6 +13,7 @@ import { presentShare } from "@/lib/shareActions";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { SITE_URL } from "@/lib/site";
 import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
+import { TeamGradeBadge } from "@/components/TeamGradeBadge";
 import { Button } from "@/components/ui";
 import { ShareAssetDialog } from "@/components/ui/ShareAssetDialog";
 import {
@@ -139,6 +140,11 @@ function YourTeamCard({
   const isChampion = bracket.championId === you.id;
   const reg = regSeasonRecord(team.seedNet);
 
+  // TEAM GRADE = the QUALITY letter tier (S/AA/A/B/C/D) projected from seedNet.
+  // Shown for daily too (a grade ≠ matchmaking; daily stays Open elsewhere).
+  // This page can't source Team Fit, so the profile is grade-only.
+  const grade = tierForSeedNet(team.seedNet);
+
   return (
     <div
       className="border-2 border-[var(--md-ink)]"
@@ -197,6 +203,23 @@ function YourTeamCard({
         </div>
       </div>
 
+      {/* Team Profile — GRADE ONLY. The tournament results payload carries no
+          Team Fit, so this page never shows a fit line (deliberate). Just the
+          QUALITY letter grade + a one-line tier subline. */}
+      {grade && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-[var(--md-ink)] px-4 py-3">
+          <div className="flex flex-col gap-1">
+            <span className="font-cond text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--md-ink-muted)]">
+              daily82 Score
+            </span>
+            <span className="font-mono text-[12px] text-[var(--md-ink-muted)]">
+              {reg.w}–{reg.l} season → {grade.label} tier
+            </span>
+          </div>
+          <TeamGradeBadge tier={grade} />
+        </div>
+      )}
+
       {/* Roster — always shown for the viewer's own team (never a spoiler to
           themselves); collapsed by default for daily, open otherwise. */}
       {team.roster && (
@@ -249,71 +272,6 @@ function YourTeamCard({
           )}
         </>
       )}
-    </div>
-  );
-}
-
-// ---- Champion stamp card ------------------------------------------------
-// Top-right press-yellow card. A8H-0: trophy icon, "CHAMPION" kicker, big
-// Archivo name, "N-0 · UNDEFEATED" or "N-M · RAN THE TABLE" record line.
-function ChampionStamp({
-  name,
-  bracket,
-  championId,
-}: {
-  name: string;
-  bracket: BracketResult;
-  championId: string;
-}) {
-  // Count champion's wins and losses across all rounds.
-  let w = 0;
-  let l = 0;
-  bracket.rounds.forEach((round) => {
-    const s = round.find((x) => x.hiId === championId || x.loId === championId);
-    if (!s) return;
-    const isHi = s.hiId === championId;
-    w += isHi ? s.scoreHi : s.scoreLo;
-    l += isHi ? s.scoreLo : s.scoreHi;
-  });
-  const undefeated = l === 0;
-  const recordLine = undefeated ? `${w}-0 · Undefeated` : `${w}-${l} · Ran the table`;
-
-  return (
-    <div
-      className="flex items-start gap-3 p-4"
-      style={{
-        background: "var(--md-yellow)",
-        color: "var(--md-ink)",
-        border: "3px solid var(--md-ink)",
-        boxShadow: "var(--md-shadow-md)",
-        minWidth: 200,
-      }}
-    >
-      <span style={{ fontSize: 28, lineHeight: 1 }}>♛</span>
-      <div>
-        <div
-          className="font-cond font-bold uppercase tracking-[0.16em]"
-          style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
-        >
-          Champion
-        </div>
-        <div
-          className="font-archivo font-bold leading-tight mt-0.5"
-          style={{
-            fontSize: "clamp(14px, 2vw, 20px)",
-            fontWeight: 800,
-            fontVariationSettings: '"wdth" 100',
-          }}
-        >
-          {name}
-        </div>
-        <div
-          className="font-cond font-semibold uppercase tracking-[0.08em] mt-1"
-          style={{ fontSize: 11, color: "var(--md-ink-muted)" }}
-        >
-          {recordLine}
-        </div>
-      </div>
     </div>
   );
 }
@@ -479,53 +437,40 @@ export function TournamentResults({
 
       <div className="flex flex-col gap-8">
 
-        {/* ---- Masthead: kicker + headline + champion stamp ---- */}
+        {/* ---- Masthead: red eyebrow + Anton title + subline (GDU-0) ----
+            The champion no longer appears here — it lives once, as the gold
+            terminus at the end of the bracket's FINAL connector. */}
         <div>
-          {/* Kicker row */}
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              {/* Mode kicker capsule */}
-              <div className="mb-2">
-                <span
-                  className="font-cond font-bold uppercase tracking-[0.14em] px-2 py-1"
-                  style={{
-                    fontSize: 11,
-                    background: "var(--md-coral)",
-                    color: "var(--md-white)",
-                    border: "2px solid var(--md-ink)",
-                  }}
-                >
-                  {tournamentKicker(mode)}
-                </span>
-              </div>
-              {/* Tournament name — Anton cover headline */}
-              <h1
-                className="font-cover uppercase leading-none"
-                style={{
-                  fontSize: "clamp(28px, 7vw, 64px)",
-                  letterSpacing: "-0.02em",
-                  maxWidth: "20ch",
-                }}
-              >
-                {tournamentHeadline}
-              </h1>
-              {/* Subline: FINAL · N TEAMS · SINGLE ELIM */}
-              <div
-                className="mt-2 font-cond font-semibold uppercase tracking-[0.16em]"
-                style={{ fontSize: 11, color: "var(--md-ink-muted)" }}
-              >
-                {roundLabel} · {teamCount} Teams · Single Elim
-              </div>
-            </div>
-
-            {/* Champion stamp — top-right on desktop, below headline on mobile */}
-            <div className="shrink-0">
-              <ChampionStamp
-                name={bracket.championName}
-                bracket={bracket}
-                championId={bracket.championId}
-              />
-            </div>
+          {/* Eyebrow chip — flame-red, Oswald caps */}
+          <div className="mb-4">
+            <span
+              className="inline-flex items-center font-cond font-semibold uppercase tracking-[0.16em] px-3 py-[7px]"
+              style={{
+                fontSize: 14,
+                background: "var(--md-coral)",
+                color: "var(--md-white)",
+              }}
+            >
+              {tournamentKicker(mode)}
+            </span>
+          </div>
+          {/* Tournament name — Anton cover headline */}
+          <h1
+            className="font-cover uppercase leading-none"
+            style={{
+              fontSize: "clamp(36px, 7vw, 66px)",
+              letterSpacing: "0.005em",
+              maxWidth: "20ch",
+            }}
+          >
+            {tournamentHeadline}
+          </h1>
+          {/* Subline: ROUND N · 16 TEAMS · SINGLE ELIM */}
+          <div
+            className="mt-3 font-cond font-semibold uppercase tracking-[0.14em]"
+            style={{ fontSize: 16, color: "var(--md-ink-muted)" }}
+          >
+            {roundLabel} · {teamCount} Teams · Single Elim
           </div>
         </div>
 
@@ -534,15 +479,22 @@ export function TournamentResults({
             for daily mode (isDaily), but the record chip is always safe to show. */}
         {myTeam && (
           <div>
-            <div className="mb-3 flex items-center gap-3">
+            {/* Section head — marker eyebrow + Anton title + flame rule (GDU-0) */}
+            <div className="mb-4 flex flex-col gap-1.5">
               <span
-                className="font-cond font-bold uppercase tracking-[0.16em]"
-                style={{ fontSize: 12, color: "var(--md-ink)" }}
+                className="font-marker lowercase"
+                style={{ fontSize: 19, color: "var(--md-coral)" }}
+              >
+                scout the squad
+              </span>
+              <span
+                className="font-cover uppercase leading-none"
+                style={{ fontSize: 42, letterSpacing: "0.005em" }}
               >
                 Your Team
               </span>
-              <div className="flex-1 border-t border-[var(--md-paper-3)]" />
             </div>
+            <div className="mb-4" style={{ height: 4, background: "var(--md-coral)" }} />
             <YourTeamCard
               team={myTeam}
               you={you}
@@ -554,113 +506,132 @@ export function TournamentResults({
 
         {/* ---- The bracket — hero/centerpiece ---- */}
         <div>
-          {/* Section header */}
-          <div className="mb-4 flex items-center gap-3">
-            <span
-              className="font-cond font-bold uppercase tracking-[0.16em]"
-              style={{ fontSize: 12, color: "var(--md-ink)" }}
-            >
-              The Bracket
-            </span>
-            <div className="flex-1 border-t border-[var(--md-paper-3)]" />
-            {/* "You" legend */}
-            <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+          {/* Section head — marker eyebrow + Anton title + "YOUR PATH" legend */}
+          <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
+            <div className="flex flex-col gap-1.5">
               <span
-                className="inline-block h-3 w-3 border-2 border-[var(--md-ink)]"
-                style={{ background: "var(--md-cobalt)" }}
-              />
-              <span>★ you</span>
+                className="font-marker lowercase"
+                style={{ fontSize: 19, color: "var(--md-coral)" }}
+              >
+                how it shook out
+              </span>
+              <span
+                className="font-cover uppercase leading-none"
+                style={{ fontSize: 42, letterSpacing: "0.005em" }}
+              >
+                The Bracket
+              </span>
+            </div>
+            {/* Cobalt YOU-path legend */}
+            <div className="flex items-center gap-2 pb-1.5 font-cond text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+              <span className="inline-block h-3 w-3" style={{ background: "var(--md-cobalt)" }} />
+              <span>Your Path</span>
             </div>
           </div>
+          <div className="mb-5" style={{ height: 4, background: "var(--md-coral)" }} />
 
           {/* BracketView: the viewer's path is highlighted via youId */}
           <BracketView bracket={bracket} youId={you.id} sharedBoard={isDaily} />
         </div>
 
-        {/* ---- Footer bar: outcome one-liner + share button ---- */}
+        {/* ---- Result strip: outcome one-liner + share button ---- */}
         {/*
-          A8H-0: a single horizontal bar with the viewer's finish chip on the
-          left and "SHARE THE BRACKET" flame button on the right. On mobile this
-          stacks: outcome block then share button.
+          GDU-0: a hairline rule, then a row with the viewer's outcome on the
+          left ("NGMI finished QUARTERFINALS — eliminated by (2) AK") and a flame
+          "SHARE THE BRACKET" button on the right. On mobile this stacks.
         */}
-        <div
-          className="flex flex-col gap-4 border-t-2 border-[var(--md-ink)] pt-5 sm:flex-row sm:items-center sm:justify-between"
-        >
-          {/* Viewer outcome */}
-          {isChampion ? (
-            /* Champion gets the full press-yellow treatment */
-            <div
-              className="inline-flex items-center gap-3 px-4 py-3"
-              style={{
-                background: "var(--md-yellow)",
-                color: "var(--md-ink)",
-                border: "2px solid var(--md-ink)",
-                boxShadow: "var(--md-shadow-sm)",
-              }}
-            >
-              <span style={{ fontSize: 20 }}>♛</span>
-              <div>
-                <div
-                  className="font-archivo font-bold leading-tight"
-                  style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
-                >
-                  {you.name}
-                </div>
-                <div
-                  className="font-cond font-bold uppercase tracking-[0.1em] mt-0.5"
-                  style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
-                >
-                  Champion · {finish}
+        <div className="flex flex-col gap-5">
+          <div style={{ height: 1.5, background: "var(--md-paper-3)" }} />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            {/* Viewer outcome */}
+            {isChampion ? (
+              /* Champion gets the full press-yellow treatment */
+              <div
+                className="inline-flex items-center gap-3 px-4 py-3"
+                style={{
+                  background: "var(--md-yellow)",
+                  color: "var(--md-ink)",
+                  boxShadow: "var(--md-shadow-sm)",
+                }}
+              >
+                <span style={{ fontSize: 20 }}>♛</span>
+                <div>
+                  <div
+                    className="font-archivo font-bold leading-tight"
+                    style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
+                  >
+                    {you.name}
+                  </div>
+                  <div
+                    className="font-cond font-bold uppercase tracking-[0.1em] mt-0.5"
+                    style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
+                  >
+                    Champion · {finish}
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            /* Non-champion: ink chip + finish + detail */
-            <div className="flex items-center gap-3 flex-wrap">
-              <span
-                className="font-cond font-bold uppercase tracking-[0.1em] px-2 py-1.5 shrink-0"
-                style={{
-                  fontSize: 12,
-                  background: "var(--md-ink)",
-                  color: "var(--md-white)",
-                }}
-              >
-                {you.name}
-              </span>
-              <span
-                className="font-mono text-[13px]"
-                style={{ color: "var(--md-ink)" }}
-              >
-                finished{" "}
-                <strong className="font-bold">{finish}</strong>
-                {detail ? ` — ${detail}` : ""}
-              </span>
-            </div>
-          )}
+            ) : (
+              /* Non-champion: cobalt YOU chip + finish + detail */
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className="shrink-0 px-3 py-1.5 font-cond text-[13px] font-semibold uppercase tracking-[0.12em]"
+                  style={{ background: "var(--md-cobalt)", color: "var(--md-white)" }}
+                >
+                  {you.name}
+                </span>
+                <span className="font-mono text-[15px]" style={{ color: "var(--md-ink-muted)" }}>
+                  finished
+                </span>
+                <span
+                  className="font-cond text-[22px] font-semibold uppercase tracking-[0.04em]"
+                  style={{ color: "var(--md-ink)" }}
+                >
+                  {finish}
+                </span>
+                {detail && (
+                  <span className="font-mono text-[15px]" style={{ color: "var(--md-ink-muted)" }}>
+                    — {detail}
+                  </span>
+                )}
+              </div>
+            )}
 
-          {/* Share + Back buttons */}
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
-            {myTeam && (
-              <Button
-                size="lg"
-                className="flex items-center gap-2"
-                style={{
-                  background: "var(--md-coral)",
-                  color: "var(--md-white)",
-                  borderColor: "var(--md-ink)",
-                }}
-                onClick={share}
-                disabled={!shareReady}
-              >
-                <span style={{ fontSize: 14 }}>↑</span>
-                {shareReady ? "Share the Bracket" : "Preparing…"}
-              </Button>
-            )}
-            {onReset && (
-              <Button size="lg" variant="secondary" onClick={onReset}>
-                Back
-              </Button>
-            )}
+            {/* Share + Back buttons */}
+            <div className="flex shrink-0 flex-wrap items-center gap-3">
+              {myTeam && (
+                <Button
+                  size="lg"
+                  className="flex items-center gap-2"
+                  style={{
+                    background: "var(--md-coral)",
+                    color: "var(--md-white)",
+                    borderColor: "var(--md-ink)",
+                  }}
+                  onClick={share}
+                  disabled={!shareReady}
+                >
+                  <svg
+                    width="17"
+                    height="17"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                    style={{ flexShrink: 0 }}
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M18 8a3 3 0 1 0-2.8-4H15a3 3 0 0 0 .2 1.1L8.9 8.6a3 3 0 1 0 0 6.8l6.3 3.5A3 3 0 1 0 18 16a3 3 0 0 0-2.1.9L9.6 13.4a3 3 0 0 0 0-2.8l6.3-3.5A3 3 0 0 0 18 8Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  {shareReady ? "Share the Bracket" : "Preparing…"}
+                </Button>
+              )}
+              {onReset && (
+                <Button size="lg" variant="secondary" onClick={onReset}>
+                  Back
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
