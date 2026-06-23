@@ -14,8 +14,6 @@ import {
   validateName,
   validateTournamentName,
   validatePin,
-  NAME_MAX_LEN,
-  TOURNAMENT_NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
 import { TournamentResults } from "@/components/TournamentResults";
 import { TierBadge } from "@/components/TierBadge";
@@ -29,70 +27,27 @@ import {
   formatTournamentStatus,
   formatSignedMargin,
 } from "@/lib/tournamentLabels";
+import { Button, Capsule, EmptyState, LoadingState, Notice } from "@/components/ui";
+import {
+  AccountFields,
+  TournamentCredentialFields,
+  TournamentLookupTabs,
+  type TournamentLookupTab,
+} from "@/components/tournament/TournamentLookupControls";
 
 // The My-Teams filters. daily/hoopiq/classic filter the existing team list by
 // TournamentMode; "private" swaps to the private-tournament feed; "all" clears the
 // mode filter and shows every (non-private) team.
-type Tab = "all" | "daily" | "hoopiq" | "classic" | "private";
+type Tab = TournamentLookupTab;
 
-const TAB_LABEL: Record<Tab, string> = {
-  all: "All",
-  daily: "Daily",
-  hoopiq: "Ranked",
-  classic: "Classic",
-  private: "Private",
-};
-
-// Signed realized margin, teal if ≥0 else coral, using U+2212 for negatives.
-function MarginTag({ value }: { value: number }) {
-  const { text, positive } = formatSignedMargin(value);
-  return (
-    <span
-      className="font-display text-sm font-bold tabular-nums"
-      style={{ color: positive ? "var(--md-teal)" : "var(--md-coral)" }}
-    >
-      {text}
-    </span>
-  );
-}
-
-// Net rating with its "net" tag, teal/coral by sign.
-function NetStat({ value }: { value: number }) {
-  return (
-    <div className="mt-0.5 flex items-baseline gap-1">
-      <MarginTag value={value} />
-      <span className="font-display text-[10px] text-[var(--md-ink-muted)]">net</span>
-    </div>
-  );
-}
-
-// One reg-season / playoffs stat column: a small header, the big record, the net.
-function StatBlock({
-  label,
-  w,
-  l,
-  net,
-  tint,
-}: {
-  label: string;
-  w: number;
-  l: number;
-  net: number;
-  tint?: boolean;
-}) {
-  return (
-    <div
-      className={`flex-1 px-4 py-3 ${tint ? "border-l-2 border-[var(--md-ink)] bg-[var(--md-paper)]" : ""}`}
-    >
-      <div className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-        {label}
-      </div>
-      <div className="mt-1 font-display text-2xl font-bold tabular-nums leading-none">
-        {w}&ndash;{l}
-      </div>
-      <NetStat value={net} />
-    </div>
-  );
+// "2026-06-11" → "Jun 11" (plain calendar date, no TZ shift).
+function shortDay(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 // The actual 82-game record for daily teams (from daily_results); ranked/classic
@@ -105,19 +60,68 @@ function regSeasonRecord(team: TournamentTeamSummary): { w: number; l: number } 
   return { w, l: 82 - w };
 }
 
-// "2026-06-11" → "Jun 11" (plain calendar date, no TZ shift).
-function shortDay(date: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+// Shared "press stamp" chrome for the TIER lane. Matches TierBadge exactly (same
+// border, misregistration double-shadow, +2° tilt, size) so the outcome stamps
+// (champ / runner-up), the daily rank, and the season tier all read as ONE family
+// — and a stacked outcome + rank reads as a single tilted stamp stack.
+function RowStamp({
+  fill,
+  text,
+  title,
+  children,
+}: {
+  fill: string;
+  text: string;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className="md-stamp inline-flex items-center justify-center gap-1 px-2 py-0.5 font-cond text-[11px] font-bold uppercase tracking-[0.04em]"
+      style={{ background: fill, color: text, transform: "rotate(2deg)", minWidth: 60 }}
+      title={title}
+    >
+      {children}
+    </span>
+  );
 }
 
-// A single memorialized run. The WHOLE card is the click target — it opens the
-// bracket. Header (name + dated mode pill), a reg-season | playoffs split, and an
-// accent footer carrying the outcome + a "View bracket" cue (orange for champions).
+// The daily leaderboard placement (TIER lane), as a RowStamp + "of N" caption.
+function DailyRankStamp({
+  rank,
+  field,
+}: {
+  rank: number;
+  field: number | null | undefined;
+}) {
+  return (
+    <span className="flex flex-col items-end gap-0.5">
+      <RowStamp fill="var(--md-coral)" text="var(--md-paper)">
+        #{rank}
+      </RowStamp>
+      {field != null && (
+        <span className="font-mono text-[9px] text-[var(--md-ink-muted)]">
+          of {field}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ---- One team row in the logged-in list — desktop data table style ----
+// Fixed-width sub-lanes inside "THE RUN": REG lane → arrow → BRACKET lane → arrow
+// → OUTCOME lane. Each sub-lane has an explicit width + flexShrink:0 so values
+// line up vertically across all rows regardless of content length.
+// All record tokens are whitespace-nowrap to prevent mid-value line breaks.
+//
+// Lane widths (match mockup 8TU-0):
+//   REG sub-lane:     170px  (label + bold W-L + net)
+//   arrow:             24px
+//   BRACKET sub-lane: 110px  (label + bold W-L)
+//   arrow:             24px
+//   OUTCOME sub-lane: 130px  (plain text, left-aligned)
+//
+// TIER column: fixed 100px right-aligned, always last.
 function TeamRow({
   team,
   onOpen,
@@ -128,79 +132,287 @@ function TeamRow({
   loading: boolean;
 }) {
   const isChampion = team.reachedRound === 4;
+  const isRunnerUp = team.reachedRound === 3 && team.recordL > 0;
+  const didntEnter = team.reachedRound === 0 && team.recordW === 0 && team.recordL === 0;
   const reg = regSeasonRecord(team);
-  // The Daily pill carries the date it's for; Ranked/Classic keep a plain label.
-  const pill =
+  const { text: netText, positive: netPositive } = formatSignedMargin(team.seedNet);
+
+  // Mode label for the team subtitle.
+  const modeLabel =
     team.mode === "daily"
-      ? {
-          className: "md-capsule md-capsule--sky",
-          text: team.dailyDate ? `Daily · ${shortDay(team.dailyDate)}` : "Daily",
-        }
+      ? team.dailyDate
+        ? `Daily · ${shortDay(team.dailyDate)}`
+        : "Daily"
       : team.mode === "hoopiq"
-        ? { className: "md-capsule md-capsule--ink", text: "Ranked" }
-        : { className: "md-capsule", text: "Classic" };
+        ? "Ranked"
+        : "Classic";
+
+  // Outcome text — unified plain text across all rows; champion is bold.
+  // No chips here — chips live in the TIER column only.
+  const outcomeText: string = isChampion
+    ? "CHAMPION"
+    : isRunnerUp
+      ? "LOST FINAL"
+      : didntEnter
+        ? "DIDN'T ENTER"
+        : `OUT · ${reachedRoundLabel(team.reachedRound).toUpperCase()}`;
+
+  const outcomeColor: string = isChampion
+    ? "var(--md-ink)"
+    : isRunnerUp
+      ? "var(--md-ink)"
+      : "var(--md-ink-muted)";
+
   return (
     <button
       type="button"
       onClick={onOpen}
       disabled={loading}
-      className="md-card md-card--lift flex w-full flex-col overflow-hidden p-0 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px] disabled:opacity-60"
+      className="group flex w-full items-center border-b border-[var(--md-paper-3)] px-4 py-3 text-left transition-colors hover:bg-[var(--md-paper-2)] disabled:opacity-60"
+      style={isChampion ? { background: "var(--md-paper-2)" } : undefined}
+    >
+      {/* Crown for champion — fixed 20px slot so team name aligns */}
+      <span className="mr-3 w-5 shrink-0 text-center">
+        {isChampion && (
+          <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>
+        )}
+      </span>
+
+      {/* Team name + mode subtitle */}
+      <span className="flex min-w-0 flex-[2] flex-col">
+        <span
+          className="font-archivo truncate leading-tight"
+          style={{ fontSize: 15, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
+        >
+          {team.teamName}
+        </span>
+        <span className="font-byline text-[11px] text-[var(--md-ink-muted)]">
+          {modeLabel}
+        </span>
+      </span>
+
+      {/* THE RUN — fixed-width sub-lanes, all whitespace-nowrap */}
+      <span className="hidden items-center font-mono text-[12px] tabular-nums sm:flex">
+
+        {/* Sub-lane: REG record + net rating */}
+        <span
+          className="flex items-baseline gap-1"
+          style={{ width: 170, flexShrink: 0, whiteSpace: "nowrap" }}
+        >
+          <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+            {team.mode === "daily" ? "DAILY" : "REG"}
+          </span>
+          <span className="font-bold">{reg.w}–{reg.l}</span>
+          <span
+            className="text-[11px]"
+            style={{ color: netPositive ? "var(--md-teal)" : "var(--md-coral-deep)" }}
+          >
+            ({netText})
+          </span>
+        </span>
+
+        {/* Arrow + BRACKET lane — hidden when team didn't enter */}
+        {!didntEnter ? (
+          <>
+            <span
+              className="text-center text-[var(--md-ink-muted)]"
+              style={{ width: 24, flexShrink: 0 }}
+            >
+              →
+            </span>
+            <span
+              className="flex items-baseline gap-1"
+              style={{ width: 110, flexShrink: 0, whiteSpace: "nowrap" }}
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                BRACKET
+              </span>
+              <span className="font-bold">{team.recordW}–{team.recordL}</span>
+            </span>
+            <span
+              className="text-center text-[var(--md-ink-muted)]"
+              style={{ width: 24, flexShrink: 0 }}
+            >
+              →
+            </span>
+          </>
+        ) : (
+          /* Ghost spacer keeps outcome lane in the same x position */
+          <span style={{ width: 24 + 110 + 24, flexShrink: 0 }} />
+        )}
+
+        {/* Sub-lane: outcome — plain text, consistent across all rows */}
+        <span
+          className="font-cond text-[12px] font-bold uppercase tracking-[0.06em]"
+          style={{ width: 130, flexShrink: 0, whiteSpace: "nowrap", color: outcomeColor }}
+        >
+          {isChampion && <span className="mr-1">♛</span>}
+          {outcomeText}
+        </span>
+      </span>
+
+      {/* TIER column — fixed 100px. One consistent stamp family, right-aligned:
+          an optional outcome stamp (champ / runner-up) stacked over the qualifier
+          — the daily leaderboard rank for daily teams, or the season tier badge
+          for Classic/Ranked. Champ omits the tier (the crown says it all). */}
+      <span
+        className="flex shrink-0 flex-col items-end gap-2"
+        style={{ width: 100 }}
+      >
+        {isChampion && (
+          <RowStamp fill="var(--md-yellow)" text="var(--md-ink)" title="Champion">
+            ♛ CHAMP
+          </RowStamp>
+        )}
+        {isRunnerUp && (
+          <RowStamp fill="var(--md-white)" text="var(--md-ink)" title="Runner-up">
+            RUNNER-UP
+          </RowStamp>
+        )}
+        {team.mode === "daily"
+          ? team.dailyRank != null && (
+              <DailyRankStamp rank={team.dailyRank} field={team.dailyFieldSize} />
+            )
+          : !isChampion && <TierBadge seedNet={team.seedNet} size="capsule" />}
+      </span>
+
+      {loading && (
+        <span className="ml-2 font-mono text-[11px] text-[var(--md-ink-muted)]">…</span>
+      )}
+    </button>
+  );
+}
+
+// ---- Mobile team card — shown below md breakpoint ----
+function TeamCard({
+  team,
+  onOpen,
+  loading,
+}: {
+  team: TournamentTeamSummary;
+  onOpen: () => void;
+  loading: boolean;
+}) {
+  const isChampion = team.reachedRound === 4;
+  const isRunnerUp = team.reachedRound === 3 && team.recordL > 0;
+  const didntEnter = team.reachedRound === 0 && team.recordW === 0 && team.recordL === 0;
+  const reg = regSeasonRecord(team);
+  const { text: netText, positive: netPositive } = formatSignedMargin(team.seedNet);
+
+  const modeLabel =
+    team.mode === "daily"
+      ? team.dailyDate
+        ? `Daily · ${shortDay(team.dailyDate)}`
+        : "Daily"
+      : team.mode === "hoopiq"
+        ? "Ranked"
+        : "Classic";
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={loading}
+      className="md-card w-full text-left p-0 overflow-hidden transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px] disabled:opacity-60"
+      style={
+        isChampion
+          ? { border: "2px solid var(--md-yellow)", boxShadow: "5px 5px 0 0 var(--md-yellow)" }
+          : undefined
+      }
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 px-4 pt-4">
-        <div className="min-w-0">
-          <div className="font-display text-lg font-bold leading-tight break-words">
-            {team.teamName}
+      <div className="flex items-start justify-between gap-3 p-4 pb-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {isChampion && <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>}
+            <span
+              className="font-archivo truncate leading-tight"
+              style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
+            >
+              {team.teamName}
+            </span>
           </div>
-          <div className="font-display text-xs text-[var(--md-ink-muted)]">
-            Full season run
+          <div className="mt-0.5 font-byline text-[11px] text-[var(--md-ink-muted)]">
+            {modeLabel}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {team.mode !== "daily" && (
-            <TierBadge seedNet={team.seedNet} size="capsule" />
+        {/* Outcome + qualifier stamps — same family as the desktop TIER lane. */}
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {isChampion && (
+            <RowStamp fill="var(--md-yellow)" text="var(--md-ink)" title="Champion">
+              ♛ CHAMP
+            </RowStamp>
           )}
-          <span className={pill.className}>{pill.text}</span>
+          {isRunnerUp && (
+            <RowStamp fill="var(--md-white)" text="var(--md-ink)" title="Runner-up">
+              RUNNER-UP
+            </RowStamp>
+          )}
+          {team.mode === "daily"
+            ? team.dailyRank != null && (
+                <DailyRankStamp rank={team.dailyRank} field={team.dailyFieldSize} />
+              )
+            : !isChampion && <TierBadge seedNet={team.seedNet} size="capsule" />}
         </div>
       </div>
 
-      {/* Regular season | Playoffs */}
-      <div className="mt-3 flex border-y-2 border-[var(--md-ink)]">
-        <StatBlock label="Reg season" w={reg.w} l={reg.l} net={team.seedNet} />
-        <StatBlock
-          label="Playoffs"
-          w={team.recordW}
-          l={team.recordL}
-          net={team.realizedMargin}
-          tint
-        />
+      {/* Reg + Bracket records */}
+      <div className="flex gap-0 border-t-2 border-y-2 border-[var(--md-ink)]">
+        <div className="flex-1 px-4 py-2.5">
+          <div className="font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">Regular</div>
+          <div className="mt-0.5 font-mono text-[18px] font-bold tabular-nums leading-none">
+            {reg.w}–{reg.l}
+          </div>
+          <div
+            className="mt-0.5 font-mono text-[11px] tabular-nums"
+            style={{ color: netPositive ? "var(--md-teal)" : "var(--md-coral-deep)" }}
+          >
+            {netText}
+          </div>
+        </div>
+        {!didntEnter && (
+          <div className="flex-1 border-l-2 border-[var(--md-ink)] px-4 py-2.5">
+            <div className="font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">Bracket</div>
+            <div className="mt-0.5 font-mono text-[18px] font-bold tabular-nums leading-none">
+              {team.recordW}–{team.recordL}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Footer: outcome + click cue. Orange for champions, yellow otherwise. */}
+      {/* Outcome footer */}
       <div
         className="flex items-center justify-between gap-3 px-4 py-2.5"
-        style={{ background: isChampion ? "var(--md-orange)" : "var(--md-yellow)" }}
+        style={
+          isChampion
+            ? { background: "var(--md-yellow)", color: "var(--md-ink)" }
+            : { background: "var(--md-paper-2)" }
+        }
       >
-        <span className="min-w-0 truncate font-display text-sm font-bold">
-          {isChampion
-            ? "🏆 Champion"
-            : `${reachedRoundLabel(team.reachedRound)} · Won by ${team.championName}`}
+        <span className="font-cond text-[12px] font-bold uppercase tracking-[0.06em]">
+          {isChampion ? (
+            "Champion · ran the table"
+          ) : didntEnter ? (
+            "Didn't enter"
+          ) : (
+            <>
+              {reachedRoundLabel(team.reachedRound)}
+              {team.championName ? ` · Won by ${team.championName}` : ""}
+            </>
+          )}
         </span>
-        <span className="shrink-0 font-display text-xs font-bold">
-          {loading ? "Loading…" : "View bracket →"}
+        <span className="shrink-0 font-mono text-[11px] text-[var(--md-ink-muted)]">
+          {loading ? "Loading…" : "View →"}
         </span>
       </div>
     </button>
   );
 }
 
-// One private-tournament row in the Private tab. Unfinished → opens the lobby;
-// completed → opens the final results. Both live at /p/<id>. A red dot marks a
-// row that needs attention (unviewed final / unfinished draft).
+// One private-tournament row in the Private tab.
 function PrivateRow({ row }: { row: MyPrivateRow }) {
   const completed = row.status === "completed";
   const isChampion = completed && row.finalStatus === "Champion";
-  // Big record: your final record once completed, else your provisional standing.
   const recW = completed ? row.finalRecordW : row.provisionalRecordW;
   const recL = completed ? row.finalRecordL : row.provisionalRecordL;
   const hasRec = recW != null && recL != null;
@@ -208,6 +420,7 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
     completed && row.finalizedAt
       ? new Date(row.finalizedAt).toLocaleDateString()
       : "Open";
+
   return (
     <Link
       href={`/p/${row.tournamentId}`}
@@ -222,18 +435,20 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
               style={{ background: "var(--md-coral)" }}
             />
           )}
-          <span className="font-display text-lg font-bold leading-tight break-words">
+          <span
+            className="font-archivo min-w-0 truncate leading-tight"
+            style={{ fontSize: 15, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
+          >
             {row.name}
           </span>
         </span>
-        <span className="font-display text-xs text-[var(--md-ink-muted)] whitespace-nowrap">
+        <span className="font-byline text-[11px] text-[var(--md-ink-muted)] whitespace-nowrap">
           {dateText}
         </span>
       </div>
 
       <div className="flex items-center gap-2">
-        <span
-          className="md-capsule"
+        <Capsule
           style={
             row.mode === "hoopiq"
               ? { background: "var(--md-ink)", color: "var(--md-white)" }
@@ -241,15 +456,15 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
           }
         >
           {row.modeLabel}
-        </span>
-        <span className="md-capsule">{row.size} teams</span>
+        </Capsule>
+        <Capsule>{row.size} teams</Capsule>
         {isChampion && (
-          <span className="md-capsule md-capsule--teal">🏆 Champion</span>
+          <Capsule tone="press">♛ Champion</Capsule>
         )}
       </div>
 
       <div className="flex items-baseline justify-between gap-3">
-        <span className="font-display text-3xl font-bold tabular-nums">
+        <span className="font-mono text-[28px] font-bold tabular-nums">
           {hasRec ? (
             <>
               {recW}&ndash;{recL}
@@ -258,24 +473,24 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
             "—"
           )}
         </span>
-        <span className="font-display text-[11px] uppercase tracking-wide text-[var(--md-blue)]">
+        <span className="font-mono text-[11px] uppercase tracking-wide text-[var(--md-blue)]">
           {completed ? "View results →" : "Open lobby →"}
         </span>
       </div>
 
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="font-display text-sm font-bold">
+        <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.06em]">
           {completed
             ? formatTournamentStatus(row.finalStatus)
             : formatPrivateEntryStatus(row.entryStatus)}
         </span>
         {completed &&
           (isChampion ? (
-            <span className="font-display text-sm text-[var(--md-teal)]">
-              🏆 You won it all
+            <span className="font-mono text-[12px] text-[var(--md-teal)]">
+              ♛ You won it all
             </span>
           ) : row.championName ? (
-            <span className="font-display text-sm text-[var(--md-ink-muted)]">
+            <span className="font-mono text-[12px] text-[var(--md-ink-muted)]">
               Won by {row.championName}
             </span>
           ) : null)}
@@ -286,16 +501,30 @@ function PrivateRow({ row }: { row: MyPrivateRow }) {
 
 type View = "form" | "list" | "team";
 
+// Which page chrome the parent should render around the lookup:
+//   "lookup" — logged-out lookup landing → page shows the "HOW FAR DID YOU GET?"
+//              masthead + "earn your way in" sidebar (two-column). Matches 8TJ-0.
+//   "list"   — logged-in My Teams list → no page hero, no sidebar, full width;
+//              the list owns its own "MY TEAMS" title block. Matches 8TU-0.
+//   "result" — a bracket result is open → no page hero/sidebar, full width;
+//              TournamentResults brings its own masthead.
+export type LookupChrome = "lookup" | "list" | "result";
+
 export function TournamentLookup({
   onBack,
   initialTab,
   initialDaily,
+  onChrome,
 }: {
   onBack?: () => void;
   initialTab?: Tab;
   // Auto-open the team for this daily date (YYYY-MM-DD) once the list loads — used
   // when arriving from a home-calendar date click (/tournament?daily=…).
   initialDaily?: string;
+  // Reports which page chrome to render (see LookupChrome). The parent page uses
+  // this to show the logged-out hero + sidebar only in the "lookup" state and go
+  // full-width for the logged-in list and bracket-result views.
+  onChrome?: (mode: LookupChrome) => void;
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>("form");
@@ -307,18 +536,13 @@ export function TournamentLookup({
   const [privateLoading, setPrivateLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
 
-  // "Join by tournament name + PIN" form state (the private landing). Distinct
-  // from the account login below it: this collects the TOURNAMENT's identity
-  // (joinName/joinPin) plus the player's ACCOUNT identity (the `name`/`pin`
-  // login state, prefilled from the saved session) needed to reserve a slot.
+  // "Join by tournament name + PIN" form state (the private landing).
   const [joinName, setJoinName] = useState("");
   const [joinPin, setJoinPin] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
 
-  // True until we've checked for a saved session on mount. While true (and a
-  // saved user exists) we show a loader, not the login form, so a logged-in
-  // player never sees the login page.
+  // True until we've checked for a saved session on mount.
   const [bootingSession, setBootingSession] = useState(true);
 
   // Form state.
@@ -330,7 +554,6 @@ export function TournamentLookup({
   // List + detail state.
   const [lookup, setLookup] = useState<TournamentLookupResponse | null>(null);
   const [run, setRun] = useState<TournamentRunResponse | null>(null);
-  // The summary of the team currently opened (for the share-card mode label).
   const [openSummary, setOpenSummary] = useState<TournamentTeamSummary | null>(null);
   const [loadingTeamId, setLoadingTeamId] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -352,14 +575,6 @@ export function TournamentLookup({
     setView("form");
   };
 
-  // Run a lookup for explicit credentials. `silent` (used by auto-login from a
-  // saved session) suppresses the error message. NOTE: a non-2xx here is NOT an
-  // auth failure — the legacy lookup returns no-match for a valid account that
-  // simply has no Daily/Ranked/Classic teams (e.g. a private-only account). So
-  // the silent path must NEVER clear the saved user; doing so would log out a
-  // valid private-only account (and kill the GlobalHeader notification dot,
-  // which polls with the saved account). Only an explicit "Log out" or a real
-  // private-auth 401 clears the session.
   const runLookup = useCallback(
     async (uname: string, upin: string, silent = false) => {
       setSubmitting(true);
@@ -371,14 +586,12 @@ export function TournamentLookup({
           body: JSON.stringify({ name: uname, pin: upin }),
         });
         if (!res.ok) {
-          // Any non-2xx (incl. no-match) → a single generic message. Keep the
-          // saved session intact on the silent (auto-login) path.
           if (!silent) setError("No team found for that name and PIN.");
           return;
         }
         const data = (await res.json()) as TournamentLookupResponse;
-        saveUser({ username: uname, pin: upin }); // stay logged in
-        setCachedTeams(uname, upin, data); // SWR seed for remounts
+        saveUser({ username: uname, pin: upin });
+        setCachedTeams(uname, upin, data);
         setLookup(data);
         setPage(0);
         setView("list");
@@ -397,13 +610,6 @@ export function TournamentLookup({
     void runLookup(name, pin);
   };
 
-  // Fetch the user's full private-tournament list (newest-first, incl. viewed-
-  // completed) via /my. Re-authenticates with name+PIN. When `boot` is set (the
-  // saved-session auto-login landing on the Private tab), a successful auth also
-  // switches to the Private list view so a private-only account lands directly
-  // on its private feed instead of the logged-out private landing. A 401 there
-  // is a genuine auth failure (stale/bad saved creds) and clears the session;
-  // any other failure leaves the saved user intact and just shows an empty list.
   const loadPrivate = useCallback(
     async (uname: string, upin: string, boot = false) => {
       setPrivateLoading(true);
@@ -414,14 +620,12 @@ export function TournamentLookup({
           body: JSON.stringify({ name: uname, pin: upin }),
         });
         if (!res.ok) {
-          // A 401 is a real auth failure: clear the stale saved session so the
-          // boot path falls back to the login/landing instead of looping.
           if (res.status === 401) clearUser();
           setPrivateRows([]);
           return;
         }
         const data = (await res.json()) as { tournaments: MyPrivateRow[] };
-        saveUser({ username: uname, pin: upin }); // stay logged in
+        saveUser({ username: uname, pin: upin });
         setPrivateRows(data.tournaments ?? []);
         if (boot) {
           setTab("private");
@@ -437,15 +641,7 @@ export function TournamentLookup({
     [],
   );
 
-  // Auto-login from a saved session: jump straight to the teams list (showing a
-  // loader, never the login form, while it resolves).
-  //
-  // When the active tab is `private` (e.g. arriving at /tournament?tab=private),
-  // authenticate via the private feed (/api/private-tournament/my) instead of
-  // the legacy team lookup. A private-only account has no Daily/Ranked/Classic
-  // teams, so the legacy lookup would return no-match — which must not be
-  // treated as a logout. Routing the private boot through loadPrivate lands the
-  // account on its private list and keeps the saved user (and header dot) alive.
+  // Auto-login from a saved session.
   useEffect(() => {
     const saved = getSavedUser();
     if (!saved) {
@@ -455,16 +651,6 @@ export function TournamentLookup({
     setName(saved.username);
     setPin(saved.pin);
 
-    // Stale-while-revalidate for the (immutable) team lookup: if an earlier
-    // in-session visit cached this account's teams, paint them immediately (skip
-    // the booting loader) and revalidate quietly in the background. This kills the
-    // team-list flash on Home <-> /tournament navigation. The private tab is NOT
-    // seeded — its provisional standings are volatile, so it always re-fetches
-    // fresh (see lib/tournamentTeamsCache). A cold load blocks on the first fetch.
-    // Skip the SWR seed for a `?daily=` deep link: the auto-open effect decides
-    // "no matching team → /d fallback" off this list, and a stale cache could miss
-    // a tournament the player just entered. Blocking on the fresh lookup makes that
-    // decision correct.
     const cachedLookup =
       initialTab === "private" || initialDaily
         ? null
@@ -474,7 +660,7 @@ export function TournamentLookup({
       setPage(0);
       setView("list");
       setBootingSession(false);
-      void runLookup(saved.username, saved.pin, true); // silent revalidate
+      void runLookup(saved.username, saved.pin, true);
       return;
     }
 
@@ -493,14 +679,6 @@ export function TournamentLookup({
     resetToForm();
   };
 
-  // Private-tab account login ("Already joined one?"). Authenticates DIRECTLY
-  // against /api/private-tournament/my (NOT /api/tournament/lookup), so an
-  // account with only private entries — and zero Daily/Ranked/Classic teams —
-  // still reaches its private list. On success: remember the account, populate
-  // the private rows, and switch to the list view (Private tab). A 401 means
-  // bad name/PIN; any other failure is a generic retry message. An authenticated
-  // account with no private tournaments is NOT an error — it lands on the list
-  // with an empty `privateRows`, showing the friendly empty state.
   const submitPrivateLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
@@ -521,7 +699,7 @@ export function TournamentLookup({
         return;
       }
       const data = (await res.json()) as { tournaments: MyPrivateRow[] };
-      saveUser({ username: name, pin }); // stay logged in
+      saveUser({ username: name, pin });
       setPrivateRows(data.tournaments ?? []);
       setTab("private");
       setPage(0);
@@ -533,12 +711,6 @@ export function TournamentLookup({
     }
   };
 
-  // Join a private tournament by its NAME + PIN. Two-step: (1) verify the
-  // tournament's name+PIN via /lookup to resolve a tournamentId (a generic 404
-  // covers both "no such name" and "wrong PIN"); (2) reserve a slot for the
-  // signed-in account via /register (idempotent — returns the existing entry if
-  // already in). On success, remember the account and navigate to the lobby at
-  // /p/<id>, where the draft flow continues.
   const submitJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     const tNameCheck = validateTournamentName(joinName);
@@ -557,7 +729,6 @@ export function TournamentLookup({
         body: JSON.stringify({ name: joinName, pin: joinPin }),
       });
       if (!lookupRes.ok) {
-        // Single generic message — never leak whether the name exists.
         setJoinError("No tournament with that name + PIN.");
         return;
       }
@@ -576,7 +747,6 @@ export function TournamentLookup({
         return;
       }
 
-      // Reserved (or already in) — remember the account and head to the lobby.
       saveUser({ username: name, pin });
       router.push(`/p/${tournamentId}`);
     } catch {
@@ -592,6 +762,20 @@ export function TournamentLookup({
     if (!nameCheck.ok || !pinOk) return;
     void loadPrivate(name, pin);
   }, [view, tab, privateRows, name, pin, nameCheck.ok, pinOk, loadPrivate]);
+
+  // Report the page chrome to the parent. The logged-out hero + sidebar only
+  // belong in the "lookup" state; the logged-in list and bracket result are
+  // full-width with no hero. While restoring a saved session we report "list"
+  // so logged-in users never flash the "HOW FAR DID YOU GET?" hero on the way in.
+  useEffect(() => {
+    const mode: LookupChrome =
+      view === "team"
+        ? "result"
+        : view === "list" || bootingSession
+          ? "list"
+          : "lookup";
+    onChrome?.(mode);
+  }, [view, bootingSession, onChrome]);
 
   const openTeam = async (teamId: string) => {
     if (loadingTeamId) return;
@@ -618,11 +802,7 @@ export function TournamentLookup({
     }
   };
 
-  // Deep-link from a home-calendar date: once the teams list has loaded, open that
-  // day's tournament automatically (one-shot, guarded by the ref). Finishing a daily
-  // only writes daily_results — the tournament team exists only if the player also
-  // entered the bracket. So if there's no matching team, fall back to that day's
-  // stored daily result page rather than stranding them on the unfiltered list.
+  // Deep-link from a home-calendar date.
   useEffect(() => {
     if (autoOpenedDaily.current || !initialDaily || !lookup) return;
     autoOpenedDaily.current = true;
@@ -632,11 +812,10 @@ export function TournamentLookup({
     } else {
       window.location.replace(`/d/${initialDaily}`);
     }
-    // One-shot, fenced by the ref; openTeam re-running on identity would no-op.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lookup, initialDaily]);
 
-  // ---- Team detail view: a single run; reset returns to the list. ----
+  // ---- Team detail view ----
   if (view === "team" && run) {
     return (
       <TournamentResults
@@ -651,14 +830,8 @@ export function TournamentLookup({
     );
   }
 
-  // ---- Teams list view. ----
-  // Rendered when a generic lookup succeeded (`lookup` set) OR when a Private-tab
-  // account login succeeded for an account with no Daily/Ranked/Classic teams
-  // (`lookup` null but `privateRows` populated). The Private tab reads from
-  // `privateRows`, so it never needs `lookup`; the other tabs read from
-  // `lookup.teams`.
+  // ---- Teams list view ----
   if (view === "list" && (lookup || privateRows !== null)) {
-    // Filter the existing team list by the active mode tab (daily/hoopiq/classic).
     const filtered =
       tab === "private"
         ? []
@@ -671,63 +844,50 @@ export function TournamentLookup({
       safePage * TEAMS_PER_PAGE,
       safePage * TEAMS_PER_PAGE + TEAMS_PER_PAGE,
     );
+    const totalTeams = lookup?.teams.length ?? 0;
+
     return (
-      <div className="mx-auto flex w-full max-w-md flex-col gap-4">
+      <div className="flex w-full flex-col gap-4">
+        {/* Identity header */}
         <div className="flex items-end justify-between gap-3">
-          <div className="font-display text-2xl font-bold">
-            {lookup?.name ?? name}
+          <div>
+            <h2
+              className="font-cover uppercase leading-none"
+              style={{ fontSize: "clamp(36px, 8vw, 72px)", letterSpacing: "-0.02em" }}
+            >
+              MY TEAMS
+            </h2>
+            <p className="mt-1 font-byline text-[12px] text-[var(--md-ink-muted)]">
+              {lookup?.name ?? name} · {totalTeams} season{totalTeams !== 1 ? "s" : ""} logged
+            </p>
           </div>
           <button
             type="button"
-            className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+            className="shrink-0 font-mono text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
             onClick={logOut}
           >
             Log out
           </button>
         </div>
 
-        {/* Filter tabs. */}
-        <div className="flex flex-wrap gap-1.5">
-          {(["daily", "hoopiq", "classic", "private"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => {
-                setTab(t);
-                setPage(0);
-              }}
-              className="border-2 border-[var(--md-ink)] px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide"
-              style={{
-                background: tab === t ? "var(--md-ink)" : "var(--md-white)",
-                color: tab === t ? "var(--md-white)" : "var(--md-ink)",
-                cursor: "pointer",
-              }}
-            >
-              {TAB_LABEL[t]}
-            </button>
-          ))}
-        </div>
+        {/* Tab bar */}
+        <TournamentLookupTabs tab={tab} onSelect={(t) => { setTab(t); setPage(0); }} />
 
-        {/* Clear the mode filter to show every (non-private) team. Shown on the
-            Private tab too, so it reads as just another selected filter with a
-            consistent way back to the unfiltered "all" list. */}
-        {tab !== "all" && (
+        {/* Clear filter */}
+        {tab !== "all" && tab !== "private" && (
           <button
             type="button"
-            onClick={() => {
-              setTab("all");
-              setPage(0);
-            }}
-            className="self-start font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+            onClick={() => { setTab("all"); setPage(0); }}
+            className="self-start font-mono text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
           >
             Clear filter · show all
           </button>
         )}
 
         {listError && (
-          <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
+          <Notice tone="error" className="p-3 text-[13px]">
             {listError}
-          </div>
+          </Notice>
         )}
 
         {/* ---- Private tab ---- */}
@@ -736,118 +896,142 @@ export function TournamentLookup({
             {showCreate ? (
               <PrivateTournamentCreate onCancel={() => setShowCreate(false)} />
             ) : (
-              <button
+              <Button
                 type="button"
-                className="md-btn md-btn--teal"
+                variant="teal"
                 onClick={() => setShowCreate(true)}
               >
                 + Create private tournament
-              </button>
+              </Button>
             )}
 
             {!showCreate &&
               (privateLoading ? (
-                <div className="py-6 text-center font-display text-sm text-[var(--md-ink-muted)]">
+                <LoadingState
+                  spacingClassName="py-6"
+                  textClassName="font-mono text-[13px] normal-case tracking-normal"
+                >
                   Loading your private tournaments…
-                </div>
+                </LoadingState>
               ) : privateRows && privateRows.length > 0 ? (
                 privateRows.map((r) => (
                   <PrivateRow key={r.tournamentId} row={r} />
                 ))
               ) : (
-                <div className="md-card flex flex-col gap-1 p-5 text-center">
-                  <div className="font-display text-lg font-bold">
-                    No active private tournaments
-                  </div>
-                  <p className="text-[13px] text-[var(--md-ink-muted)]">
-                    Create one above, or open a friend&rsquo;s invite link.
-                  </p>
-                </div>
+                <EmptyState title="No active private tournaments">
+                  Create one above, or open a friend&rsquo;s invite link.
+                </EmptyState>
               ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="md-card flex flex-col gap-1 p-5 text-center">
-            <div className="font-display text-lg font-bold">No teams yet</div>
-            <p className="text-[13px] text-[var(--md-ink-muted)]">
-              {tab === "daily"
-                ? "Play a Daily Challenge to see it here."
-                : "Play a Classic or Ranked season and hit Enter Tournament."}
-            </p>
-          </div>
+          <EmptyState title="No teams yet">
+            {tab === "daily"
+              ? "Play a Daily Challenge to see it here."
+              : "Play a Classic or Ranked season and hit Enter Tournament."}
+          </EmptyState>
         ) : (
-          <div className="flex flex-col gap-3">
-            {shown.map((team) => (
-              <TeamRow
-                key={team.teamId}
-                team={team}
-                onOpen={() => openTeam(team.teamId)}
-                loading={loadingTeamId === team.teamId}
-              />
-            ))}
-          </div>
+          <>
+            {/* Desktop: table with column headers. Gated at md (not sm) — the
+                fixed-width sub-lanes need ~740px and overflow 640–767px screens,
+                which fall back to the mobile cards. */}
+            <div className="hidden md:block">
+              {/* Column header row */}
+              <div
+                className="flex items-center border-b-2 border-[var(--md-ink)] px-4 py-2"
+                style={{ background: "var(--md-ink)" }}
+              >
+                <span className="mr-3 w-5 shrink-0" />
+                <span className="flex-[2] font-cond text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--md-paper)]">
+                  Team
+                </span>
+                {/* "The Run" header spans the same fixed total width as the
+                    sub-lanes in each TeamRow (170+24+110+24+130 = 458px). */}
+                <span
+                  className="hidden font-cond text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--md-paper)] sm:block"
+                  style={{ width: 458, flexShrink: 0 }}
+                >
+                  The Run
+                </span>
+                {/* TIER header: fixed 100px matching the data rows */}
+                <span
+                  className="font-cond text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--md-paper)]"
+                  style={{ width: 100, flexShrink: 0, textAlign: "right" }}
+                >
+                  Tier
+                </span>
+              </div>
+              <div
+                className="border-x-2 border-b-2 border-[var(--md-ink)]"
+                style={{ background: "var(--md-white)" }}
+              >
+                {shown.map((team) => (
+                  <TeamRow
+                    key={team.teamId}
+                    team={team}
+                    onOpen={() => openTeam(team.teamId)}
+                    loading={loadingTeamId === team.teamId}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Mobile + small-tablet (< md): cards */}
+            <div className="flex flex-col gap-3 md:hidden">
+              {shown.map((team) => (
+                <TeamCard
+                  key={team.teamId}
+                  team={team}
+                  onOpen={() => openTeam(team.teamId)}
+                  loading={loadingTeamId === team.teamId}
+                />
+              ))}
+            </div>
+          </>
         )}
 
         {tab !== "private" && pageCount > 1 && (
           <div className="flex items-center justify-between gap-2">
-            <button
+            <Button
               type="button"
-              className="md-btn md-btn--sm md-btn--secondary"
+              size="sm"
+              variant="secondary"
               disabled={safePage === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
             >
               ← Newer
-            </button>
-            <span className="font-display text-xs uppercase tracking-wide text-[var(--md-ink-muted)]">
+            </Button>
+            <span className="font-mono text-[11px] uppercase tracking-wide text-[var(--md-ink-muted)]">
               Page {safePage + 1} of {pageCount}
             </span>
-            <button
+            <Button
               type="button"
-              className="md-btn md-btn--sm md-btn--secondary"
+              size="sm"
+              variant="secondary"
               disabled={safePage >= pageCount - 1}
               onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
             >
               Older →
-            </button>
+            </Button>
           </div>
         )}
       </div>
     );
   }
 
-  // While restoring a saved session, show a loader — never the login form.
+  // While restoring a saved session, show a loader.
   if (bootingSession) {
     return (
-      <div className="mx-auto w-full max-w-md py-16 text-center font-display text-sm text-[var(--md-ink-muted)]">
+      <div className="mx-auto w-full py-16 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
         Loading your teams…
       </div>
     );
   }
 
-  // ---- Private landing (logged-out). ----
-  // Reaching the Private tab without a saved session: hosting needs no My Teams
-  // login (PrivateTournamentCreate collects its own creds), so surface Create +
-  // a compact "see my tournaments" login instead of the generic team-lookup form.
+  // ---- Private landing (logged-out) ----
   if (tab === "private") {
     return (
-      <div className="mx-auto flex w-full max-w-md flex-col gap-4">
-        {/* Tab switcher so they can still jump to the team-lookup tabs. */}
-        <div className="flex flex-wrap gap-1.5">
-          {(["daily", "hoopiq", "classic", "private"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className="border-2 border-[var(--md-ink)] px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide"
-              style={{
-                background: tab === t ? "var(--md-ink)" : "var(--md-white)",
-                color: tab === t ? "var(--md-white)" : "var(--md-ink)",
-                cursor: "pointer",
-              }}
-            >
-              {TAB_LABEL[t]}
-            </button>
-          ))}
-        </div>
+      <div className="flex w-full flex-col gap-4">
+        <TournamentLookupTabs tab={tab} onSelect={setTab} />
 
         {showCreate ? (
           <PrivateTournamentCreate onCancel={() => setShowCreate(false)} />
@@ -855,7 +1039,10 @@ export function TournamentLookup({
           <>
             <div className="md-card md-card--lift flex flex-col gap-3 p-5">
               <div>
-                <div className="font-display text-xl font-bold">
+                <div
+                  className="font-archivo leading-tight"
+                  style={{ fontSize: 20, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
+                >
                   Private tournament
                 </div>
                 <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
@@ -863,24 +1050,18 @@ export function TournamentLookup({
                   link someone shared with you.
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
-                className="md-btn md-btn--teal"
+                variant="teal"
                 onClick={() => setShowCreate(true)}
               >
                 + Create private tournament
-              </button>
+              </Button>
             </div>
 
-            {/* Join by tournament name + PIN. Verifies the tournament's own
-                name+PIN, then reserves a slot for the signed-in account and
-                drops the player into the lobby/draft. */}
-            <form
-              onSubmit={submitJoin}
-              className="md-card flex flex-col gap-3 p-5"
-            >
+            <form onSubmit={submitJoin} className="md-card flex flex-col gap-3 p-5">
               <div>
-                <div className="font-display text-sm font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                <div className="font-cond text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
                   Join a private tournament
                 </div>
                 <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
@@ -889,83 +1070,34 @@ export function TournamentLookup({
                 </p>
               </div>
 
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Tournament name
-                </span>
-                <input
-                  className="md-input md-input--name"
-                  value={joinName}
-                  maxLength={TOURNAMENT_NAME_MAX_LEN}
-                  autoCapitalize="characters"
-                  onChange={(e) =>
-                    setJoinName(
-                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                    )
-                  }
-                  placeholder="FRIDAY NIGHT HOOPS CUP"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Tournament PIN
-                </span>
-                <input
-                  className="md-input"
-                  value={joinPin}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  onChange={(e) => setJoinPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4–6 digits"
-                />
-              </label>
+              <TournamentCredentialFields
+                name={joinName}
+                pin={joinPin}
+                onName={setJoinName}
+                onPin={setJoinPin}
+              />
 
               <div className="border-t-2 border-dashed border-[var(--md-ink)] pt-3">
-                <span className="font-display text-[11px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+                <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
                   Your account (to enter as)
                 </span>
               </div>
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Your name
-                </span>
-                <input
-                  className="md-input md-input--name"
-                  value={name}
-                  maxLength={NAME_MAX_LEN}
-                  autoCapitalize="characters"
-                  onChange={(e) =>
-                    setName(
-                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                    )
-                  }
-                  placeholder="PHILJACKSON"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Your PIN
-                </span>
-                <input
-                  className="md-input"
-                  value={pin}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4–6 digits"
-                />
-              </label>
+              <AccountFields
+                name={name}
+                pin={pin}
+                onName={setName}
+                onPin={setPin}
+                pinLabel="Your PIN"
+              />
 
               {joinError && (
-                <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
+                <Notice tone="error" className="text-[13px]">
                   {joinError}
-                </div>
+                </Notice>
               )}
-              <button
+              <Button
                 type="submit"
-                className="md-btn md-btn--teal"
+                variant="teal"
                 disabled={
                   !validateTournamentName(joinName).ok ||
                   !validatePin(joinPin) ||
@@ -975,147 +1107,104 @@ export function TournamentLookup({
                 }
               >
                 {joining ? "Joining…" : "Join & start building"}
-              </button>
+              </Button>
             </form>
 
             <form
               onSubmit={submitPrivateLogin}
               className="md-card flex flex-col gap-3 p-5"
             >
-              <div className="font-display text-sm font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+              <div className="font-cond text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
                 Already joined one?
               </div>
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  Your name
-                </span>
-                <input
-                  className="md-input md-input--name"
-                  value={name}
-                  maxLength={NAME_MAX_LEN}
-                  autoCapitalize="characters"
-                  onChange={(e) =>
-                    setName(
-                      e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                    )
-                  }
-                  placeholder="PHILJACKSON"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                  PIN
-                </span>
-                <input
-                  className="md-input"
-                  value={pin}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4–6 digits"
-                />
-              </label>
+              <AccountFields
+                name={name}
+                pin={pin}
+                onName={setName}
+                onPin={setPin}
+              />
               {error && (
-                <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
+                <Notice tone="error" className="text-[13px]">
                   {error}
-                </div>
+                </Notice>
               )}
-              <button
+              <Button
                 type="submit"
-                className="md-btn md-btn--secondary"
+                variant="secondary"
                 disabled={!canSubmit}
               >
                 {submitting ? "Checking…" : "Show my private tournaments"}
-              </button>
+              </Button>
             </form>
           </>
         )}
 
         {onBack && (
-          <button
-            type="button"
-            className="md-btn md-btn--secondary"
-            onClick={onBack}
-          >
+          <Button type="button" variant="secondary" onClick={onBack}>
             Back
-          </button>
+          </Button>
         )}
       </div>
     );
   }
 
-  // ---- Form view (default). ----
+  // ---- Form view (default / logged-out lookup) ----
   return (
-    <form
-      onSubmit={submit}
-      className="md-card md-card--lift mx-auto flex w-full max-w-md flex-col gap-4 p-5"
-    >
-      <div>
-        <div className="font-display text-xl font-bold">Check your teams</div>
-        <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
-          Enter the account name and PIN you used to enter the tournament.
-        </p>
-      </div>
+    <div className="flex w-full flex-col gap-6">
+      {/* Tab bar above the form */}
+      <TournamentLookupTabs tab={tab} onSelect={setTab} />
 
-      <label className="flex flex-col gap-1">
-        <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          Your name
-        </span>
-        <input
-          className="md-input md-input--name"
-          value={name}
-          maxLength={NAME_MAX_LEN}
-          autoCapitalize="characters"
-          onChange={(e) =>
-            setName(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""))
-          }
-          placeholder="PHILJACKSON"
-        />
-        <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
-          Your account name
-        </span>
-      </label>
-
-      <label className="flex flex-col gap-1">
-        <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          PIN
-        </span>
-        <input
-          className="md-input"
-          value={pin}
-          type="password"
-          inputMode="numeric"
-          maxLength={6}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-          placeholder="4–6 digits"
-        />
-      </label>
-
-      {error && (
-        <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
-          {error}
+      {/* The "FIND YOUR TEAMS" lookup card — ink-spread cover card */}
+      <form
+        onSubmit={submit}
+        className="md-card md-card--cover w-full max-w-lg flex flex-col gap-4 p-5"
+        style={{ background: "var(--md-ink)", color: "var(--md-white)" }}
+      >
+        {/* Kicker */}
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[15px]" style={{ color: "var(--md-yellow)" }}>⌕</span>
+          <span className="font-cond text-[13px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--md-white)" }}>
+            Find Your Teams
+          </span>
         </div>
-      )}
 
-      <div className="flex flex-wrap gap-2">
-        <button
+        <AccountFields
+          name={name}
+          pin={pin}
+          onName={setName}
+          onPin={setPin}
+          dark
+          nameLabel="Your Name"
+        />
+
+        {error && (
+          <Notice tone="error" className="bg-transparent text-[13px]">
+            {error}
+          </Notice>
+        )}
+
+        <Button
           type="submit"
-          className="md-btn md-btn--teal"
+          size="lg"
+          fullWidth
+          className="justify-between"
+          style={{ background: "var(--md-coral)", color: "var(--md-white)", borderColor: "var(--md-ink)" }}
           disabled={!canSubmit}
         >
-          {submitting ? "Checking…" : "Find my teams"}
-        </button>
-        {onBack && (
-          <button
-            type="button"
-            className="md-btn md-btn--secondary"
-            onClick={onBack}
-          >
-            Back
-          </button>
-        )}
-      </div>
-    </form>
+          <span>{submitting ? "CHECKING…" : "LOOK UP MY TEAMS"}</span>
+          <span>→</span>
+        </Button>
+
+        <p className="font-mono text-[11px] italic" style={{ color: "var(--md-paper-3)" }}>
+          🔒 Your name + PIN is your account — same one as the Daily.
+        </p>
+      </form>
+
+      {onBack && (
+        <Button type="button" variant="secondary" className="self-start" onClick={onBack}>
+          Back
+        </Button>
+      )}
+    </div>
   );
 }

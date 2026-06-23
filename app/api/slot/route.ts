@@ -89,11 +89,13 @@ export async function GET(req: NextRequest) {
       team: string;
       decade: number;
       receipt: string;
+      reelTeams: string[];
       players?: PublicPlayer[];
     } = {
       team,
       decade,
       receipt: signRoll(team, decade),
+      reelTeams: pool.map((item) => item.team),
     };
     if (includePlayers) {
       body.players = await getPlayers(team, decade, mode, queryOptions);

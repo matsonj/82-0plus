@@ -289,6 +289,11 @@ export interface TournamentTeamSummary {
   seasonW?: number | null;
   seasonL?: number | null;
   dailyDate?: string | null; // YYYY-MM-DD for mode='daily'; null otherwise
+  // Daily leaderboard placement for that date (daily teams only). rank is 1-based
+  // (ties share a rank), fieldSize = total entries that day. Same ranking as
+  // getDailyRank (wins desc, margin tiebreak). Null for non-daily / unranked.
+  dailyRank?: number | null;
+  dailyFieldSize?: number | null;
   createdAt: string; // ISO timestamp
   roster?: BracketPlayer[]; // the five starters (quick peek)
   sixthMan?: BracketPlayer;

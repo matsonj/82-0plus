@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getSavedUser } from "@/lib/tournamentSession";
+import { getSavedUser, subscribeSession } from "@/lib/tournamentSession";
 import {
   privateModeLabel,
   formatPrivateEntryStatus,
@@ -37,24 +37,42 @@ const POLL_MS = 60_000;
 // marks it seen) OR until it expires, whichever comes first. Bump `id` for the
 // next changelog; the old localStorage key is then naturally ignored.
 const CHANGELOG = {
-  id: "2026-06-12-team-tuning",
-  label: "Changelog · 6/12/2026",
-  text: "Tuned team building — nerfed posts, buffed wings & guards.",
-  // 7 days after publish, at Pacific midnight (≈ 2026-06-19 07:00 UTC). After
+  id: "2026-06-22-team-codes",
+  label: "Changelog · 6/22/2026",
+  text: "Fixed historical team codes — relocated franchises now show their era-correct team (e.g. Vancouver Grizzlies as VAN, Minneapolis Lakers as MNL, the original Charlotte Hornets as CHH).",
+  // 7 days after publish, at Pacific midnight (≈ 2026-06-29 07:00 UTC). After
   // this it never shows again, even for someone who never opened the panel.
-  expires: Date.parse("2026-06-19T07:00:00Z"),
+  expires: Date.parse("2026-06-29T07:00:00Z"),
 } as const;
 const CHANGELOG_KEY = `changelog-seen:${CHANGELOG.id}`;
 
 // The shared site header. Logo + an optional contextual right slot + a
 // private-tournament indicator. `right` is for genuinely useful per-page context
 // (e.g. the live Classic/Ranked badge while drafting) — not decorative pills.
-export function GlobalHeader({ right }: { right?: React.ReactNode }) {
+export function GlobalHeader({
+  right,
+  onSignIn,
+  onHowToPlay,
+}: {
+  right?: React.ReactNode;
+  // Home wires these to its local modals; other pages omit them and the
+  // masthead falls back to a plain Home link (see below).
+  onSignIn?: () => void;
+  onHowToPlay?: () => void;
+}) {
   const pathname = usePathname();
-  // Don't link to "My Teams" from the My Teams page itself.
+  // "My Teams" stays in the nav even on its own page (a stable masthead reads
+  // better than a link that vanishes when you land there) — just flagged as the
+  // current page for a11y.
   const onMyTeams = pathname === "/tournament";
   const [notif, setNotif] = useState<NotifResponse | null>(null);
+  // The signed-in identity drives the masthead's Sign In vs. name chip. Read
+  // client-side only (localStorage) so the first render stays hydration-safe.
+  const [user, setUser] = useState<{ username: string; pin: string } | null>(null);
   const [open, setOpen] = useState(false);
+  // Mobile nav: the desktop link row is hidden below sm, so a hamburger exposes
+  // My Teams / How to Play / Player Cards on small screens.
+  const [menuOpen, setMenuOpen] = useState(false);
   // Changelog: `unread` pops the bell + survives reloads (localStorage); `viewing`
   // keeps the note rendered for the session in which it was first opened, so it
   // doesn't vanish the instant the panel opens.
@@ -65,6 +83,7 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
 
   const poll = useCallback(async () => {
     const user = getSavedUser();
+    setUser(user);
     if (!user) {
       setNotif(null);
       return;
@@ -102,6 +121,10 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
       clearInterval(id);
     };
   }, [poll]);
+
+  // Update the masthead the instant the session changes (sign-in / log-out in
+  // this tab, or another tab) — re-polling refreshes the name chip and alerts.
+  useEffect(() => subscribeSession(() => void poll()), [poll]);
 
   // Surface the changelog on mount for anyone who hasn't seen it and isn't past
   // the 7-day window. Reads localStorage, so it runs client-side only.
@@ -141,52 +164,106 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
   // The bell pops for private activity OR an unseen changelog.
   const pop = any || changelogUnread;
 
+  // Shared masthead nav-link treatment (Oswald caps on ink).
+  const navCls =
+    "font-cond text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--md-paper)] transition-colors hover:text-[var(--md-coral)]";
+  // Mobile menu row — full-width tap target, hairline-divided.
+  const mobileLinkCls =
+    "block border-b border-[#3a322a] py-3 text-left font-cond text-[15px] font-semibold uppercase tracking-[0.12em] text-[var(--md-paper)] transition-colors hover:text-[var(--md-coral)]";
+  // Mobile menu rows (order mirrors the desktop nav). Sign In folds in here too —
+  // the standalone chip/button is hidden below sm so the bar stays uncluttered.
+  const menuItems: { label: string; href?: string; action?: () => void }[] = [
+    { label: "My Teams", href: "/tournament" },
+    onHowToPlay
+      ? { label: "How to Play", action: onHowToPlay }
+      : { label: "How to Play", href: "/?howto=1" },
+    { label: "Player Cards", href: "/cards" },
+    ...(!user
+      ? [onSignIn ? { label: "Sign In", action: onSignIn } : { label: "Sign In", href: "/" }]
+      : []),
+  ];
+
   return (
-    <header className="relative z-20 flex items-center justify-between py-4 sm:py-5">
-      <Link href="/" className="flex items-center gap-2">
-        <span className="text-2xl" aria-hidden>
-          🦆
-        </span>
-        <span className="font-display text-lg font-bold tracking-tight">
-          82-0<span className="text-[var(--md-orange)]">+</span>
-        </span>
-      </Link>
-
-      <div className="flex items-center gap-3">
-        {right}
-        {!onMyTeams && (
-          <Link
-            href="/tournament"
-            className="font-display text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+    // Full-bleed ink masthead: breaks out of the page container to the viewport
+    // edges, then re-centers its content to align with the page below.
+    <header
+      className="relative z-30 mb-6 bg-[var(--md-ink)] text-[var(--md-paper)] sm:mb-8"
+      style={{ width: "100vw", marginLeft: "calc(50% - 50vw)" }}
+    >
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+        {/* Wordmark lockup: DAILY (ink) + 82 (flame), cream box, flame offset. */}
+        <Link href="/" aria-label="daily82 home" className="flex shrink-0">
+          <span
+            className="flex border-[2.5px] border-[var(--md-paper)]"
+            style={{ boxShadow: "5px 5px 0 0 var(--md-coral)" }}
           >
-            My Teams
-          </Link>
-        )}
-
-        {/* The indicator always renders. State is carried by the glyph's color,
-            not a separate dot: a calm muted asterisk when there's nothing to
-            attend to, a bold coral asterisk that pops when there is. A quiet
-            bordered icon button — not a filled pill — so the header stays calm. */}
-        <div className="relative">
-          <button
-            type="button"
-            aria-label={pop ? "Alerts (new activity)" : "Alerts"}
-            onClick={() => (open ? closePanel() : openPanel())}
-            className="relative flex h-8 w-8 items-center justify-center border-2 border-[var(--md-ink)] bg-[var(--md-white)] transition-transform hover:-translate-y-0.5"
-            style={{ cursor: "pointer" }}
-          >
-            <span
-              aria-hidden
-              className="font-display leading-none transition-colors"
-              style={{
-                fontSize: 18,
-                fontWeight: pop ? 700 : 400,
-                color: pop ? "var(--md-coral)" : "var(--md-ink-muted)",
-              }}
-            >
-              ✶
+            <span className="flex items-center bg-[var(--md-ink)] py-[5px] pl-[14px] pr-[11px]">
+              <span
+                className="font-archivo leading-none text-[var(--md-paper)]"
+                style={{ fontSize: 26, fontWeight: 900, fontVariationSettings: '"wdth" 125', letterSpacing: "-0.01em" }}
+              >
+                DAILY
+              </span>
             </span>
-          </button>
+            <span className="flex items-center bg-[var(--md-coral)] py-[5px] pl-[11px] pr-[12px]">
+              <span
+                className="font-archivo leading-none text-[var(--md-paper)]"
+                style={{ fontSize: 26, fontWeight: 900, fontVariationSettings: '"wdth" 125', letterSpacing: "-0.02em" }}
+              >
+                82
+              </span>
+            </span>
+          </span>
+        </Link>
+
+        <div className="flex items-center gap-3 sm:gap-6">
+          <nav className="hidden items-center gap-6 sm:flex">
+            <Link
+              href="/tournament"
+              aria-current={onMyTeams ? "page" : undefined}
+              className={navCls}
+            >
+              My Teams
+            </Link>
+            {onHowToPlay ? (
+              <button type="button" onClick={onHowToPlay} className={navCls} style={{ cursor: "pointer" }}>
+                How to Play
+              </button>
+            ) : (
+              <Link href="/?howto=1" className={navCls}>
+                How to Play
+              </Link>
+            )}
+            <Link href="/cards" className={navCls}>
+              Player Cards
+            </Link>
+          </nav>
+
+          {right}
+
+          <span className="hidden h-6 w-px bg-[#3a322a] sm:block" />
+
+          {/* Alerts: a press-yellow star at rest, flame when there's activity. */}
+          <div className="relative">
+            <button
+              type="button"
+              aria-label={pop ? "Alerts (new activity)" : "Alerts"}
+              onClick={() => (open ? closePanel() : openPanel())}
+              className="relative flex h-10 w-10 items-center justify-center border-2 border-[#3a322a] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5"
+              style={{ cursor: "pointer" }}
+            >
+              <span
+                aria-hidden
+                className="font-display leading-none transition-colors"
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: pop ? "var(--md-coral)" : "var(--md-yellow)",
+                }}
+              >
+                ✶
+              </span>
+            </button>
 
           {open && (
             <div
@@ -246,8 +323,86 @@ export function GlobalHeader({ right }: { right?: React.ReactNode }) {
               </div>
             </div>
           )}
+          </div>
+
+          {user ? (
+            <Link
+              href="/tournament"
+              title="Your teams"
+              className="hidden max-w-[140px] truncate border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-3 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)] sm:inline-block"
+            >
+              {user.username}
+            </Link>
+          ) : onSignIn ? (
+            <button
+              type="button"
+              onClick={onSignIn}
+              style={{ cursor: "pointer" }}
+              className="hidden border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-4 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)] sm:inline-block"
+            >
+              Sign In
+            </button>
+          ) : (
+            <Link
+              href="/"
+              className="hidden border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-4 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)] sm:inline-block"
+            >
+              Sign In
+            </Link>
+          )}
+
+          {/* Mobile menu toggle — exposes the link row that's hidden below sm. */}
+          <button
+            type="button"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center border-2 border-[#3a322a] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5 sm:hidden"
+            style={{ cursor: "pointer" }}
+          >
+            {menuOpen ? (
+              <span aria-hidden className="font-cond text-[18px] font-bold leading-none text-[var(--md-paper)]">
+                ✕
+              </span>
+            ) : (
+              <span aria-hidden className="flex flex-col gap-[3px]">
+                <span className="block h-[2px] w-[18px] bg-[var(--md-paper)]" />
+                <span className="block h-[2px] w-[18px] bg-[var(--md-paper)]" />
+                <span className="block h-[2px] w-[18px] bg-[var(--md-paper)]" />
+              </span>
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Mobile nav sheet — full-bleed ink panel under the masthead, flame top rule. */}
+      {menuOpen && (
+        <nav className="absolute left-0 right-0 top-full z-40 border-t-2 border-[var(--md-coral)] bg-[var(--md-ink)] sm:hidden">
+          <div className="mx-auto flex max-w-6xl flex-col px-4 py-1">
+            {menuItems.map((it, i) => {
+              const cls = `${mobileLinkCls} w-full ${i === menuItems.length - 1 ? "border-b-0" : ""}`;
+              return it.href ? (
+                <Link key={it.label} href={it.href} onClick={() => setMenuOpen(false)} className={cls}>
+                  {it.label}
+                </Link>
+              ) : (
+                <button
+                  key={it.label}
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    it.action?.();
+                  }}
+                  className={cls}
+                  style={{ cursor: "pointer" }}
+                >
+                  {it.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </header>
   );
 }

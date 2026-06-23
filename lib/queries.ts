@@ -372,8 +372,8 @@ export interface PlayerSeasonRow {
  * and the nine box categories per game, season by season. Powers the Classic-mode
  * player card. Served from the `app_cache.player_season_stats` rollup (refreshed
  * daily from the era-aware view), falling back to the live view if unbuilt.
- * Seasons are merged across teams (a traded-mid-year player gets one combined
- * row), oldest first.
+ * One row per (season, team): a player traded mid-season gets a row per team
+ * stint (each ≥5 games), oldest season first and the larger stint first.
  */
 export async function getPlayerSeasonHistory(
   entityId: string,
@@ -387,7 +387,7 @@ export async function getPlayerSeasonHistory(
               fg_pct, ft_pct, tov, fg3m, all_def
          FROM ${ACDB}.player_season_stats
         WHERE entity_id = $1
-        ORDER BY season`,
+        ORDER BY season, gp DESC, team`,
       [entityId],
     );
     if (cached.length > 0) return cached;
@@ -401,7 +401,7 @@ export async function getPlayerSeasonHistory(
   }
   return query<PlayerSeasonRow>(
     `SELECT s.season_year AS season,
-            mode(b.team_abbreviation) AS team,
+            b.team_abbreviation AS team,
             round(median(g.game_quality), 3) AS gq,
             round(avg(b.fg_attempted) + 0.44 * avg(b.ft_attempted) + avg(b.turnovers), 1) AS usg,
             count(*) AS gp,
@@ -426,9 +426,9 @@ export async function getPlayerSeasonHistory(
       WHERE g.entity_id = $1
         AND g.game_quality >= 0
         AND s.season_type = 'Regular Season'
-      GROUP BY 1
+      GROUP BY 1, b.team_abbreviation
      HAVING count(*) >= 5
-      ORDER BY 1`,
+      ORDER BY season, gp DESC, team`,
     [entityId],
     options,
   );

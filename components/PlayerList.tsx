@@ -3,16 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GameMode, PublicPlayer } from "@/lib/types";
 import type { Role } from "@/lib/positions";
-import { PlayerCardCarousel, CardGlyph, type CardPlayer } from "@/components/PlayerCard";
-import { prefetchPlayerSeasons } from "@/lib/playerSeasons";
+import { CardGlyph, type CardPlayer, usePlayerCardDeck } from "@/components/PlayerCard";
+import { Button, Capsule, SegmentedControl } from "@/components/ui";
 
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+// Position chips read at a glance — a distinct riso ink per role (cream text).
+// Flame is reserved for W/L, so positions use violet / court-green / magenta.
 const ROLE_BG: Record<Role, string> = {
-  G: "var(--md-sky)",
-  W: "var(--md-teal-bright)",
-  B: "var(--md-orange)",
+  G: "var(--md-sky)", // violet
+  W: "var(--md-teal)", // court green
+  B: "var(--md-magenta)", // riso magenta
 };
 
 type Status = "loading" | "ok" | "error";
@@ -27,29 +29,6 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "blk", label: "BPG" },
 ];
 const POS_FILTERS: ("all" | Role)[] = ["all", "G", "W", "B"];
-
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="border-2 border-[var(--md-ink)] px-2 py-1 font-display text-[11px] font-bold uppercase tracking-wide"
-      style={{
-        background: active ? "var(--md-ink)" : "var(--md-white)",
-        color: active ? "var(--md-white)" : "var(--md-ink)",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
 
 export function PlayerList({
   team,
@@ -82,7 +61,6 @@ export function PlayerList({
   const [reloadKey, setReloadKey] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("mpg");
   const [posFilter, setPosFilter] = useState<"all" | Role>("all");
-  const [cardIndex, setCardIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -156,6 +134,21 @@ export function PlayerList({
       })),
     [rows, team],
   );
+  const {
+    carousel: playerCardCarousel,
+    openCard,
+    prefetchCard,
+  } = usePlayerCardDeck({
+    players: cardPlayers,
+    enabled: browse || mode === "classic",
+    canDraft: browse ? undefined : (i) => !!rows[i] && draftable(rows[i]),
+    onDraft: browse
+      ? undefined
+      : (i) => {
+          const row = rows[i];
+          if (row && draftable(row)) onPick(row);
+        },
+  });
 
   return (
     <div className="flex flex-col gap-2">
@@ -163,7 +156,8 @@ export function PlayerList({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={`Filter ${team} roster…`}
-        className="w-full border-2 border-[var(--md-ink)] bg-[var(--md-white)] px-3 py-2 font-display text-sm outline-none focus:bg-[var(--md-paper)]"
+        className="md-input"
+        style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}
       />
 
       {/* Ranked/Daily hide stats, so the roster's order isn't self-evident the
@@ -176,15 +170,15 @@ export function PlayerList({
 
       {mode === "classic" && status === "ok" && (
         <div className="flex flex-wrap items-center gap-1">
-          {POS_FILTERS.map((p) => (
-            <Chip
-              key={p}
-              active={posFilter === p}
-              onClick={() => setPosFilter(p)}
-            >
-              {p === "all" ? "All" : p}
-            </Chip>
-          ))}
+          <SegmentedControl
+            options={POS_FILTERS.map((p) => ({
+              value: p,
+              label: p === "all" ? "All" : p,
+            }))}
+            value={posFilter}
+            onChange={setPosFilter}
+            className="gap-1"
+          />
           <span
             className="mx-1 h-4 w-px self-center bg-[var(--md-ink)] opacity-30"
             aria-hidden
@@ -192,15 +186,15 @@ export function PlayerList({
           <span className="mr-0.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
             Sort
           </span>
-          {SORTS.map((s) => (
-            <Chip
-              key={s.key}
-              active={sortKey === s.key}
-              onClick={() => setSortKey(s.key)}
-            >
-              {s.label}
-            </Chip>
-          ))}
+          <SegmentedControl
+            options={SORTS.map((sort) => ({
+              value: sort.key,
+              label: sort.label,
+            }))}
+            value={sortKey}
+            onChange={setSortKey}
+            className="gap-1"
+          />
         </div>
       )}
 
@@ -218,12 +212,12 @@ export function PlayerList({
             <div className="font-display text-sm text-[var(--md-coral)]">
               Couldn&rsquo;t load this roster.
             </div>
-            <button
-              className="md-btn md-btn--sm"
+            <Button
+              size="sm"
               onClick={() => setReloadKey((k) => k + 1)}
             >
               ↻ Try again
-            </button>
+            </Button>
           </div>
         )}
         {noneEligible && (
@@ -232,9 +226,9 @@ export function PlayerList({
               No one here fits your open slots.
             </div>
             {allowRespin ? (
-              <button className="md-btn md-btn--sm" onClick={onNoneEligible}>
+              <Button size="sm" onClick={onNoneEligible}>
                 ↻ Respin team (free)
-              </button>
+              </Button>
             ) : (
               // Daily mode is a fixed, seeded challenge — no random respin. Move
               // an already-drafted player to free up a slot {team} can fill.
@@ -266,7 +260,7 @@ export function PlayerList({
               className="flex items-stretch border-b border-[var(--md-paper-3)]"
             >
             <button
-              onClick={() => (browse ? setCardIndex(i) : onPick(p))}
+              onClick={() => (browse ? openCard(i) : onPick(p))}
               disabled={!eligible}
               title={
                 browse
@@ -290,14 +284,17 @@ export function PlayerList({
                     {p.positions.map((r) => (
                       <span
                         key={r}
-                        className="border border-[var(--md-ink)] px-1 font-display text-[10px] font-bold"
+                        className="border border-[var(--md-ink)] px-1 font-display text-[10px] font-bold text-[var(--md-paper)]"
                         style={{ background: ROLE_BG[r] }}
                       >
                         {r}
                       </span>
                     ))}
                   </span>
-                  <span className="min-w-0 truncate font-display text-sm font-bold">
+                  <span
+                    className="min-w-0 truncate font-archivo text-[15px] font-bold"
+                    style={{ fontVariationSettings: '"wdth" 90' }}
+                  >
                     {p.player_name}
                   </span>
                   {p.allDef === 1 ? (
@@ -323,7 +320,7 @@ export function PlayerList({
               <div className="shrink-0 text-right">
                 {mode === "classic" && p.mpg !== null ? (
                   <>
-                    <div className="font-display text-sm font-bold text-[var(--md-orange-deep)]">
+                    <div className="font-display text-sm font-bold text-[var(--md-coral)]">
                       {sortKey === "mpg" ? p.mpg : (p[sortKey] ?? 0)}
                     </div>
                     <div className="font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
@@ -331,7 +328,7 @@ export function PlayerList({
                     </div>
                   </>
                 ) : (
-                  <div className="md-capsule md-capsule--sky">Pick</div>
+                  <Capsule>Pick</Capsule>
                 )}
               </div>
             </button>
@@ -341,9 +338,9 @@ export function PlayerList({
             {mode === "classic" && !browse && (
               <button
                 type="button"
-                onClick={() => setCardIndex(i)}
-                onMouseEnter={() => prefetchPlayerSeasons(p.entity_id)}
-                onFocus={() => prefetchPlayerSeasons(p.entity_id)}
+                onClick={() => openCard(i)}
+                onMouseEnter={() => prefetchCard(i)}
+                onFocus={() => prefetchCard(i)}
                 title="Career card"
                 aria-label={`${p.player_name} career card`}
                 className="flex shrink-0 items-center border-l border-[var(--md-paper-3)] px-2.5 text-[var(--md-ink-muted)] hover:bg-[var(--md-yellow)] hover:text-[var(--md-ink)]"
@@ -356,26 +353,7 @@ export function PlayerList({
           })}
       </div>
 
-      {cardIndex !== null && cardPlayers[cardIndex] && (
-        <PlayerCardCarousel
-          players={cardPlayers}
-          index={cardIndex}
-          onClose={() => setCardIndex(null)}
-          // Browse is read-only: no Draft button on the card.
-          canDraft={browse ? undefined : (i) => !!rows[i] && draftable(rows[i])}
-          onDraft={
-            browse
-              ? undefined
-              : (i) => {
-                  const row = rows[i];
-                  if (row && draftable(row)) {
-                    onPick(row);
-                    setCardIndex(null);
-                  }
-                }
-          }
-        />
-      )}
+      {playerCardCarousel}
     </div>
   );
 }

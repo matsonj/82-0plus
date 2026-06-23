@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { PlayerSeasonRow } from "@/lib/queries";
 import type { Role } from "@/lib/positions";
 import { loadPlayerSeasons, prefetchPlayerSeasons } from "@/lib/playerSeasons";
+import { Button } from "@/components/ui";
 
 type Status = "loading" | "ok" | "error";
 
@@ -20,6 +21,64 @@ export interface CardPlayer {
   allDef?: number;
 }
 
+export function usePlayerCardDeck({
+  players,
+  enabled = true,
+  prefetchAll = false,
+  canDraft,
+  onDraft,
+}: {
+  players: CardPlayer[];
+  enabled?: boolean;
+  prefetchAll?: boolean;
+  canDraft?: (index: number) => boolean;
+  onDraft?: (index: number) => void;
+}) {
+  const [index, setIndex] = useState<number | null>(null);
+
+  const closeCard = useCallback(() => setIndex(null), []);
+  const openCard = useCallback(
+    (nextIndex: number) => {
+      if (!enabled || !players[nextIndex]) return;
+      setIndex(nextIndex);
+    },
+    [enabled, players],
+  );
+  const prefetchCard = useCallback(
+    (nextIndex: number) => {
+      if (!enabled || !players[nextIndex]) return;
+      prefetchPlayerSeasons(players[nextIndex].entityId);
+    },
+    [enabled, players],
+  );
+
+  useEffect(() => {
+    if (!enabled || !prefetchAll) return;
+    for (const player of players) prefetchPlayerSeasons(player.entityId);
+  }, [enabled, prefetchAll, players]);
+
+  const carousel =
+    enabled && index !== null && players[index] ? (
+      <PlayerCardCarousel
+        players={players}
+        index={index}
+        onClose={closeCard}
+        canDraft={canDraft}
+        onDraft={
+          onDraft
+            ? (draftIndex) => {
+                onDraft(draftIndex);
+                closeCard();
+              }
+            : undefined
+        }
+      />
+    ) : null;
+
+  return { activeCardIndex: index, carousel, closeCard, openCard, prefetchCard };
+}
+
+// Position → capsule background on the SLAM system (no role colors bleed into data).
 const ROLE_BG: Record<Role, string> = {
   G: "var(--md-sky)",
   W: "var(--md-teal-bright)",
@@ -44,68 +103,223 @@ export function CardGlyph({ size = 16 }: { size?: number }) {
   );
 }
 
-// ── median-GQ-by-season chart (hand-rolled SVG). Fixed 0–100, guides at 25/50/75.
+// ── GQ line chart — SLAM reskin.
+// Cream/white panel, 1.5px ink border, dashed guides at 25/50/75.
+// Drafted/best season = large flame dot (labeled); on-team = ink dot (no label);
+// off-team = hollow grey dot (no label). Only the drafted dot gets a GQ number.
 function GqChart({
   seasons,
   draftedSeason,
+  draftedTeam,
+  cardTeam,
   compact = false,
 }: {
   seasons: PlayerSeasonRow[];
   draftedSeason: number;
+  // The team of the drafted/best stint (the card-team stint of that season, or
+  // the largest stint if the season was a trade with no card-team portion). The
+  // flame "this card" dot lands on exactly this (season, team) row.
+  draftedTeam: string;
+  // The card's franchise — used to determine on-team vs off-team per season.
+  cardTeam: string;
   compact?: boolean;
 }) {
-  const W = 320;
-  const H = compact ? 96 : 132;
-  const padL = 26;
-  const padR = 10;
-  const padT = 10;
-  const padB = compact ? 6 : 22;
+  const W = 340;
+  const H = compact ? 100 : 180;
+  const padL = 30;
+  const padR = 14;
+  const padT = 16;
+  const padB = compact ? 8 : 36;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
   const x = (i: number) =>
     padL + (seasons.length <= 1 ? innerW / 2 : (innerW * i) / (seasons.length - 1));
   const y = (gq: number) => padT + innerH * (1 - gq);
-  const path = seasons
+
+  // Simple connecting path (single line through all seasons)
+  const pathD = seasons
     .map((s, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(s.gq).toFixed(1)}`)
     .join(" ");
-  const firstYr = seasons[0].season;
-  const lastYr = seasons[seasons.length - 1].season;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Median Game Quality by season">
-      <rect x={padL} y={padT} width={innerW} height={innerH} fill="var(--md-white)" stroke="var(--md-ink)" strokeWidth={1.5} />
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full"
+      role="img"
+      aria-label="Median Game Quality by season"
+      style={{ display: "block" }}
+    >
+      {/* Chart field */}
+      <rect
+        x={padL}
+        y={padT}
+        width={innerW}
+        height={innerH}
+        fill="var(--md-white)"
+        stroke="var(--md-ink)"
+        strokeWidth={1.5}
+      />
+      {/* Guide lines at 25, 50, 75 — no "LEAGUE AVG" label (obvious from context) */}
       {[25, 50, 75].map((v) => (
         <g key={v}>
-          <line x1={padL} x2={W - padR} y1={y(v / 100)} y2={y(v / 100)} stroke="var(--md-ink-muted)" strokeWidth={1} strokeDasharray="3 3" />
+          <line
+            x1={padL}
+            x2={W - padR}
+            y1={y(v / 100)}
+            y2={y(v / 100)}
+            stroke="var(--md-ink-muted)"
+            strokeWidth={v === 50 ? 1.2 : 0.8}
+            strokeDasharray={v === 50 ? "4 3" : "3 3"}
+          />
           {!compact && (
-            <text x={2} y={y(v / 100) + 3} fontSize={9} fill="var(--md-ink-muted)">{v}</text>
+            <text
+              x={padL - 4}
+              y={y(v / 100) + 3.5}
+              fontSize={9}
+              textAnchor="end"
+              fill="var(--md-ink-muted)"
+              fontFamily="var(--font-mono)"
+            >
+              {v}
+            </text>
           )}
         </g>
       ))}
       {!compact && (
         <>
-          <text x={2} y={padT + 8} fontSize={9} fill="var(--md-ink-muted)">100</text>
-          <text x={2} y={H - padB} fontSize={9} fill="var(--md-ink-muted)">0</text>
+          <text
+            x={padL - 4}
+            y={padT + 8}
+            fontSize={9}
+            textAnchor="end"
+            fill="var(--md-ink-muted)"
+            fontFamily="var(--font-mono)"
+          >
+            100
+          </text>
+          <text
+            x={padL - 4}
+            y={H - padB + 4}
+            fontSize={9}
+            textAnchor="end"
+            fill="var(--md-ink-muted)"
+            fontFamily="var(--font-mono)"
+          >
+            0
+          </text>
         </>
       )}
-      <path d={path} fill="none" stroke="var(--md-teal)" strokeWidth={2.5} />
+      {/* Connecting line — ink, 2px */}
+      <path d={pathD} fill="none" stroke="var(--md-ink)" strokeWidth={2} />
+      {/* Season dots — on-team = filled ink, off-team = hollow grey, drafted = flame */}
       {seasons.map((s, i) => {
-        const isDrafted = s.season === draftedSeason;
+        // Only the drafted STINT (season + its resolved team) is the flame dot;
+        // the other stint of a traded drafted season reads as another team.
+        const isDrafted = s.season === draftedSeason && s.team === draftedTeam;
+        // A stint is on-team when it was played for this card's franchise.
+        const isAway = s.team !== cardTeam;
+
+        const cx = x(i);
+        const cy = y(s.gq);
+        const r = isDrafted ? 6 : 4;
+
         return (
-          <g key={s.season}>
-            <circle cx={x(i)} cy={y(s.gq)} r={isDrafted ? 4 : 2.5} fill={isDrafted ? "var(--md-orange)" : "var(--md-teal)"} stroke="var(--md-ink)" strokeWidth={1} />
-            <circle cx={x(i)} cy={y(s.gq)} r={9} fill="transparent">
-              <title>&rsquo;{String(s.season).slice(2)} · GQ {gq100(s.gq)}</title>
+          <g key={`${s.season}-${s.team}`}>
+            {/* Drafted/best season is ALWAYS the flame "this card" dot — even when
+                the season aggregates to another team (a mid-season trade, where the
+                modal team isn't this card's franchise). This card IS that season, so
+                it must read as "this card", never a hollow "another team" circle. */}
+            {isDrafted ? (
+              <circle cx={cx} cy={cy} r={r} fill="var(--md-coral)" stroke="var(--md-ink)" strokeWidth={1} />
+            ) : isAway ? (
+              /* Off-team: hollow grey circle */
+              <circle
+                cx={cx}
+                cy={cy}
+                r={r}
+                fill="var(--md-white)"
+                stroke="var(--md-ink-muted)"
+                strokeWidth={1.5}
+              />
+            ) : (
+              /* On-team: solid ink dot */
+              <circle cx={cx} cy={cy} r={r} fill="var(--md-ink)" stroke="var(--md-ink)" strokeWidth={1} />
+            )}
+            {/* GQ value label — only on the drafted/best-season dot.
+                White backing rect so the connecting line doesn't bleed through.
+                Flips below the dot when GQ > 90 to avoid clipping the chart top. */}
+            {!compact && isDrafted && (() => {
+              const val = gq100(s.gq);
+              const above = val <= 90;
+              // Text baseline: above the dot (default) or below (>90 flip).
+              const textY = above ? cy - r - 3 : cy + r + 10;
+              // Rect behind the text: ~14px wide × 10px tall, centered on cx.
+              const bw = 18; const bh = 11;
+              const rectY = above ? cy - r - 14 : cy + r + 1;
+              return (
+                <g>
+                  <rect
+                    x={cx - bw / 2}
+                    y={rectY}
+                    width={bw}
+                    height={bh}
+                    fill="var(--md-white)"
+                    rx={1}
+                  />
+                  <text
+                    x={cx}
+                    y={textY}
+                    fontSize={9}
+                    textAnchor="middle"
+                    fill="var(--md-coral)"
+                    fontFamily="var(--font-mono)"
+                    fontWeight={700}
+                  >
+                    {val}
+                  </text>
+                </g>
+              );
+            })()}
+            {/* Invisible hit target for tooltip */}
+            <circle cx={cx} cy={cy} r={10} fill="transparent">
+              <title>&rsquo;{String(s.season).slice(2)} {s.team} · GQ {gq100(s.gq)}</title>
             </circle>
           </g>
         );
       })}
-      {!compact && (
-        <>
-          <text x={padL} y={H - 6} fontSize={9} fill="var(--md-ink-muted)">&rsquo;{String(firstYr).slice(2)}</text>
-          <text x={W - padR} y={H - 6} fontSize={9} textAnchor="end" fill="var(--md-ink-muted)">&rsquo;{String(lastYr).slice(2)}</text>
-        </>
-      )}
+      {/* X-axis season labels */}
+      {!compact && (() => {
+        // Show first, last, and up to ~4 intermediate labels, evenly spaced.
+        const maxLabels = Math.min(seasons.length, 6);
+        const step = Math.max(1, Math.floor((seasons.length - 1) / (maxLabels - 1)));
+        const labelIdxs = new Set<number>();
+        for (let i = 0; i < seasons.length; i += step) labelIdxs.add(i);
+        labelIdxs.add(seasons.length - 1);
+        // A split (traded) season occupies two adjacent indices; label the year
+        // only once so the two stint dots don't get duplicate overlapping labels.
+        const shownSeasons = new Set<number>();
+        return [...labelIdxs].sort((a, b) => a - b).map((i) => {
+          const s = seasons[i];
+          if (shownSeasons.has(s.season)) return null;
+          shownSeasons.add(s.season);
+          const isDrafted = s.season === draftedSeason;
+          return (
+            <text
+              key={i}
+              x={x(i)}
+              y={H - padB + 14}
+              fontSize={9}
+              textAnchor="middle"
+              fill={isDrafted ? "var(--md-ink)" : "var(--md-ink-muted)"}
+              fontFamily="var(--font-mono)"
+              fontWeight={isDrafted ? 700 : 400}
+            >
+              &rsquo;{String(s.season).slice(2)}
+              {isDrafted ? "★" : ""}
+            </text>
+          );
+        });
+      })()}
     </svg>
   );
 }
@@ -122,6 +336,10 @@ const COLS: { key: keyof PlayerSeasonRow; label: string }[] = [
   { key: "fg3m", label: "3PM" },
   { key: "usg", label: "USG" },
 ];
+
+// Column widths — fixed so values form vertical lanes regardless of content.
+// Order matches COLS. YR is handled separately (sticky, wider).
+const COL_W = [46, 40, 40, 36, 36, 44, 44, 36, 36, 44]; // px, right-aligned
 
 // 🥇/🥈 for a 1st/2nd-team All-Defense season — mirrors the medal shown on the
 // Classic roster rows (ResultsPanel). Renders nothing when the player wasn't
@@ -141,7 +359,11 @@ function PositionPills({ positions }: { positions?: Role[] }) {
   return (
     <span className="flex shrink-0 gap-0.5">
       {positions.map((r) => (
-        <span key={r} className="border border-[var(--md-ink)] px-1 font-display text-[10px] font-bold" style={{ background: ROLE_BG[r] }}>
+        <span
+          key={r}
+          className="border border-[var(--md-ink)] px-1 font-cond text-[10px] font-bold uppercase"
+          style={{ background: ROLE_BG[r] }}
+        >
           {r}
         </span>
       ))}
@@ -165,8 +387,9 @@ function usePlayerSeasons(entityId: string) {
   return { seasons: seasons ?? [], status };
 }
 
-// ── A full player card. The center card is interactive (close / draft); the side
-// cards reuse this same full-size render behind the center (blurred by the parent).
+// ── A full player card — the SLAM editorial "Career Card" treatment.
+// The center card is interactive (close / draft); the side cards reuse
+// this same full-size render behind the center (blurred by the parent).
 function FullCard({
   player,
   onClose,
@@ -179,88 +402,292 @@ function FullCard({
   draftable?: boolean;
 }) {
   const { seasons, status } = usePlayerSeasons(player.entityId);
+
+  // The drafted/best season can be a mid-season trade (multiple stints). The
+  // "this card" stint is the one on the card's franchise; if that season has no
+  // card-team stint (a data quirk), fall back to its largest stint so the chart
+  // and the gold table row still land on a sensible row.
+  const draftedTeam = (() => {
+    const rows = seasons.filter((s) => s.season === player.season);
+    if (rows.length === 0) return player.team;
+    return (
+      rows.find((s) => s.team === player.team) ??
+      rows.reduce((a, b) => (b.gp > a.gp ? b : a))
+    ).team;
+  })();
+
   return (
-    <div className="md-card md-card--lift flex max-h-[86vh] w-full flex-col overflow-hidden p-0">
-      <div className="flex items-start justify-between gap-3 border-b-2 border-[var(--md-ink)] p-4" style={{ background: "var(--md-yellow)" }}>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="truncate font-display text-xl font-bold leading-tight">{player.playerName}</span>
-            <AllDefMedal allDef={player.allDef} />
-            <PositionPills positions={player.positions} />
-          </div>
-          <div className="mt-0.5 font-display text-xs uppercase tracking-wide text-[var(--md-ink)]">
-            <span className="text-[var(--md-orange-deep)]">{player.team}</span> · best year &rsquo;{String(player.season).slice(2)} · career card
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
+    <div className="md-card flex max-h-[86vh] w-full flex-col overflow-hidden p-0" style={{ boxShadow: "var(--md-shadow-md)" }}>
+      {/* ── CAREER CARD header bar — flame accent strip ── */}
+      <div
+        className="flex items-center justify-between border-b-2 border-[var(--md-ink)] px-4 py-2"
+        style={{ background: "var(--md-coral)" }}
+      >
+        <span className="font-cond text-[12px] font-bold uppercase tracking-[0.18em] text-[var(--md-white)]">
+          Career Card
+        </span>
+        <div className="flex items-center gap-2">
+          {/* entity_id is the player's permanent NBA ID — stable across rebuilds */}
+          {player.entityId && (
+            <span className="font-mono text-[11px] text-[var(--md-paper)] opacity-80">
+              No.&nbsp;{player.entityId}
+            </span>
+          )}
           {onDraft && (
-            <button
+            <Button
               type="button"
-              className="md-btn md-btn--sm md-btn--teal"
+              size="sm"
+              style={{ background: "var(--md-white)", color: "var(--md-coral)", borderColor: "var(--md-ink)" }}
               onClick={onDraft}
               disabled={!draftable}
-              style={draftable ? undefined : { opacity: 0.5, cursor: "not-allowed" }}
               title={draftable ? "Draft this player" : "No open slot fits his position"}
             >
               Draft
-            </button>
+            </Button>
           )}
           {onClose && (
-            <button type="button" aria-label="Close" onClick={onClose} className="font-display text-lg leading-none text-[var(--md-ink)] hover:text-[var(--md-coral)]">✕</button>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={onClose}
+              className="font-cond text-[14px] font-bold leading-none text-[var(--md-white)] hover:text-[var(--md-yellow)]"
+            >
+              ✕
+            </button>
           )}
         </div>
       </div>
 
-      <div className="md-scroll flex-1 overflow-auto p-4">
+      {/* ── Ink panel: ghost team code + position/franchise pill ──
+          Tightened: py-2 (was pt-4 pb-3) to remove the dead band above the name. */}
+      <div
+        className="relative flex items-end justify-between overflow-hidden px-4 py-2"
+        style={{ background: "var(--md-ink)" }}
+      >
+        {/* Ghost team code — large, very low opacity */}
+        <span
+          className="pointer-events-none absolute right-2 top-0 select-none font-cover uppercase leading-none"
+          style={{
+            fontSize: "clamp(52px, 14vw, 90px)",
+            letterSpacing: "-0.02em",
+            color: "var(--md-ink-2)",
+            opacity: 0.8,
+            lineHeight: 1,
+            userSelect: "none",
+          }}
+          aria-hidden
+        >
+          {player.team}
+        </span>
+        {/* Position + franchise label */}
+        <div className="relative z-10 flex items-center gap-2">
+          <PositionPills positions={player.positions} />
+          <span
+            className="font-cond text-[11px] font-bold uppercase tracking-[0.14em]"
+            style={{ color: "var(--md-yellow)" }}
+          >
+            {player.team}
+          </span>
+          <AllDefMedal allDef={player.allDef} className="text-sm" />
+        </div>
+      </div>
+
+      {/* ── Player name + subtitle — newsprint panel ── */}
+      <div
+        className="border-b-2 border-[var(--md-ink)] px-4 pb-3 pt-3"
+        style={{ background: "var(--md-white)" }}
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <h2
+            className="font-archivo min-w-0 truncate uppercase leading-none"
+            style={{
+              fontVariationSettings: '"wdth" 88',
+              fontWeight: 800,
+              fontSize: "clamp(22px, 5vw, 36px)",
+              letterSpacing: "-0.01em",
+              lineHeight: 1,
+            }}
+          >
+            {player.playerName}
+          </h2>
+        </div>
+        <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.04em] text-[var(--md-ink-muted)]">
+          {player.team} · best year &rsquo;{String(player.season).slice(2)} · career card
+        </div>
+      </div>
+      {/* ── Summary stat strip REMOVED (items 3) — yellow row highlight in table is enough ── */}
+
+      <div className="md-scroll flex-1 overflow-auto" style={{ background: "var(--md-white)" }}>
         {status === "loading" && (
-          <div className="py-10 text-center font-display text-sm text-[var(--md-ink-muted)]">Loading career…</div>
+          <div className="py-10 text-center font-mono text-sm text-[var(--md-ink-muted)]">Loading career…</div>
         )}
         {status === "error" && (
-          <div className="py-10 text-center font-display text-sm text-[var(--md-coral)]">Couldn&rsquo;t load this player&rsquo;s history.</div>
+          <div className="py-10 text-center font-mono text-sm" style={{ color: "var(--md-coral)" }}>
+            Couldn&rsquo;t load this player&rsquo;s history.
+          </div>
         )}
         {status === "ok" && seasons.length === 0 && (
-          <div className="py-10 text-center font-display text-sm text-[var(--md-ink-muted)]">No season history on record.</div>
+          <div className="py-10 text-center font-mono text-sm text-[var(--md-ink-muted)]">
+            No season history on record.
+          </div>
         )}
         {status === "ok" && seasons.length > 0 && (
-          <>
-            <div className="mb-1 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">Median Game Quality by season</div>
-            <GqChart seasons={seasons} draftedSeason={player.season} />
-            <div className="mb-1 mt-4 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">Per game · by season</div>
+          <div className="px-4 pb-4 pt-3">
+            {/* GQ chart section */}
+            <div className="mb-2 flex items-center gap-2">
+              <span
+                className="font-archivo uppercase"
+                style={{ fontVariationSettings: '"wdth" 88', fontWeight: 800, fontSize: 13, letterSpacing: "0.01em" }}
+              >
+                Median Game Quality by season
+              </span>
+              <span
+                className="h-px flex-1 bg-[var(--md-paper-3)]"
+                aria-hidden
+              />
+            </div>
+            {/* Chart legend — shortened "This Card" label */}
+            <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+              <LegendItem color="var(--md-coral)" filled label="This Card" />
+              <LegendItem color="var(--md-ink)" filled label="On team" />
+              <LegendItem color="var(--md-ink-muted)" filled={false} label="Another team" />
+            </div>
+            <div className="border border-[var(--md-paper-3)]" style={{ background: "var(--md-white)" }}>
+              <GqChart seasons={seasons} draftedSeason={player.season} draftedTeam={draftedTeam} cardTeam={player.team} />
+            </div>
+
+            {/* Per-game table */}
+            <div className="mb-2 mt-4 flex items-center justify-between">
+              <span
+                className="font-archivo uppercase"
+                style={{ fontVariationSettings: '"wdth" 88', fontWeight: 800, fontSize: 13, letterSpacing: "0.01em" }}
+              >
+                Per game · by season
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">
+                Swipe →
+              </span>
+            </div>
             <div className="md-scroll overflow-x-auto border-2 border-[var(--md-ink)]">
-              <table className="w-full border-collapse font-display text-[11px] tabular-nums">
+              <table
+                className="w-full border-collapse"
+                style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontVariantNumeric: "tabular-nums" }}
+              >
                 <thead>
-                  <tr style={{ background: "var(--md-paper-2)" }}>
-                    <th className="sticky left-0 z-10 px-1.5 py-1 text-left" style={{ background: "var(--md-white)" }}>YR</th>
-                    {COLS.map((c) => (
-                      <th key={c.key} className="px-1.5 py-1 text-right">{c.label}</th>
+                  <tr style={{ background: "var(--md-ink)" }}>
+                    {/* YR sticky column header */}
+                    <th
+                      className="sticky left-0 z-10 px-2 py-1.5 text-left"
+                      style={{
+                        background: "var(--md-ink)",
+                        color: "var(--md-white)",
+                        width: 54,
+                        flexShrink: 0,
+                        fontSize: 10,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        fontWeight: 700,
+                      }}
+                    >
+                      YR
+                    </th>
+                    {/* All column headers white — USG no longer yellow */}
+                    {COLS.map((c, ci) => (
+                      <th
+                        key={c.key}
+                        style={{
+                          background: "var(--md-ink)",
+                          color: "var(--md-white)",
+                          width: COL_W[ci],
+                          minWidth: COL_W[ci],
+                          flexShrink: 0,
+                          textAlign: "right",
+                          padding: "6px 6px",
+                          fontSize: 10,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {c.label}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {seasons.map((s) => {
-                    const away = s.team !== player.team;
-                    // Off-team seasons get a light grey wash + muted text so the
-                    // drafted franchise's "relevant" seasons read at a glance. The
-                    // sticky YR header must share the row's bg to stay opaque on scroll.
-                    const rowBg = away ? "var(--md-paper-2)" : undefined;
+                    // On-team: this stint was played for the card's franchise.
+                    const isAway = s.team !== player.team;
+                    // Gold highlight only on the drafted stint (season + its team),
+                    // so a traded best-season highlights one row, not both.
+                    const isBest = s.season === player.season && s.team === draftedTeam;
+                    const rowBg = isBest
+                      ? "var(--md-yellow)"
+                      : isAway
+                        ? "var(--md-paper-2)"
+                        : "var(--md-white)";
                     return (
                       <tr
-                        key={s.season}
-                        className={`border-t border-[var(--md-paper-3)] ${away ? "text-[var(--md-ink-muted)]" : ""}`}
-                        style={rowBg ? { background: rowBg } : undefined}
+                        key={`${s.season}-${s.team}`}
+                        className="border-t border-[var(--md-paper-3)]"
+                        style={
+                          isBest
+                            ? {
+                                background: rowBg,
+                                // Flame left bar on the best row
+                                boxShadow: "inset 3px 0 0 var(--md-coral)",
+                              }
+                            : { background: rowBg }
+                        }
                       >
+                        {/* Sticky YR cell */}
                         <th
                           scope="row"
-                          className="sticky left-0 z-10 px-1.5 py-1 text-left font-bold"
-                          style={{ background: rowBg ?? "var(--md-white)" }}
+                          className="sticky left-0 z-10 px-2 py-1 text-left font-bold"
+                          style={{
+                            background: rowBg,
+                            width: 54,
+                            flexShrink: 0,
+                            // Best row sits on a press-yellow fill — type on yellow is
+                            // always ink (never the flame red used elsewhere).
+                            color: isBest
+                              ? "var(--md-ink)"
+                              : isAway
+                                ? "var(--md-ink-muted)"
+                                : "var(--md-ink)",
+                          }}
                         >
                           <span className="flex items-center gap-1">
                             &rsquo;{String(s.season).slice(2)}
+                            <span
+                              className="font-mono text-[9px]"
+                              style={{ color: "var(--md-ink-muted)" }}
+                            >
+                              {s.team}
+                            </span>
                             <AllDefMedal allDef={s.all_def} className="text-[10px]" />
                           </span>
                         </th>
-                        {COLS.map((c) => (
-                          <td key={c.key} className="px-1.5 py-1 text-right">{f1(s[c.key] as number)}</td>
+                        {/* All data cells — ink color (no red anywhere in data rows) */}
+                        {COLS.map((c, ci) => (
+                          <td
+                            key={c.key}
+                            style={{
+                              textAlign: "right",
+                              padding: "4px 6px",
+                              width: COL_W[ci],
+                              minWidth: COL_W[ci],
+                              flexShrink: 0,
+                              color: isBest
+                                ? "var(--md-ink)"
+                                : isAway
+                                  ? "var(--md-ink-muted)"
+                                  : "var(--md-ink)",
+                              fontWeight: isBest ? 700 : 400,
+                            }}
+                          >
+                            {f1(s[c.key] as number)}
+                          </td>
                         ))}
                       </tr>
                     );
@@ -268,17 +695,46 @@ function FullCard({
                 </tbody>
               </table>
             </div>
-            <p className="mt-2 font-display text-[10px] leading-snug text-[var(--md-ink-muted)]">
+            <p className="mt-2 font-mono text-[10px] leading-snug text-[var(--md-ink-muted)]">
               Game Quality is era-aware: each game is scored only on the box categories the NBA tracked that season. 50 ≈ league average. Greyed seasons were played for another team.
             </p>
-          </>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-// A circular arrow control (on-brand: ink border, white fill, hard shadow).
+// Small legend item for the GQ chart.
+function LegendItem({
+  color,
+  filled,
+  label,
+}: {
+  color: string;
+  filled: boolean;
+  label: string;
+}) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <svg width={10} height={10} viewBox="0 0 10 10" aria-hidden>
+        <circle
+          cx={5}
+          cy={5}
+          r={4}
+          fill={filled ? color : "var(--md-white)"}
+          stroke={color}
+          strokeWidth={1.5}
+        />
+      </svg>
+      <span className="font-mono text-[9px] uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">
+        {label}
+      </span>
+    </span>
+  );
+}
+
+// A circular arrow control (SLAM: ink border, white fill, hard shadow).
 function Arrow({ dir, onClick }: { dir: "left" | "right"; onClick: () => void }) {
   return (
     <button
@@ -288,8 +744,8 @@ function Arrow({ dir, onClick }: { dir: "left" | "right"; onClick: () => void })
         e.stopPropagation();
         onClick();
       }}
-      className={`absolute top-1/2 z-40 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[var(--md-ink)] bg-[var(--md-white)] font-display text-2xl font-bold leading-none text-[var(--md-ink)] transition-transform hover:-translate-y-1/2 hover:scale-110 ${dir === "left" ? "left-2 sm:left-4" : "right-2 sm:right-4"}`}
-      style={{ boxShadow: "var(--md-shadow-sm)" }}
+      className={`absolute top-1/2 z-40 flex h-11 w-11 -translate-y-1/2 items-center justify-center border-2 border-[var(--md-ink)] bg-[var(--md-white)] font-cover text-2xl font-bold leading-none text-[var(--md-ink)] transition-transform hover:scale-105 hover:-translate-y-1/2 ${dir === "left" ? "left-2 sm:left-4" : "right-2 sm:right-4"}`}
+      style={{ boxShadow: "var(--md-shadow-sm)", borderRadius: 0 }}
     >
       {dir === "left" ? "‹" : "›"}
     </button>
@@ -358,7 +814,7 @@ export function PlayerCardCarousel({
   return createPortal(
     <div
       className="fixed inset-0 z-50 overflow-hidden"
-      style={{ background: "rgba(56,56,56,0.6)" }}
+      style={{ background: "rgba(21,17,14,0.75)" }}
       onClick={onClose}
     >
       {windowed.map(({ player, idx, slot }) => {
@@ -407,5 +863,28 @@ export function PlayerCardCarousel({
       {hasNext && <Arrow dir="right" onClick={() => move(1)} />}
     </div>,
     document.body,
+  );
+}
+
+// ── A standalone PlayerCard (non-carousel) export used by PlayerList
+// and ResultsPanel in browse and result contexts.
+export function PlayerCard({
+  player,
+  onClose,
+  onDraft,
+  draftable = true,
+}: {
+  player: CardPlayer;
+  onClose?: () => void;
+  onDraft?: () => void;
+  draftable?: boolean;
+}) {
+  return (
+    <FullCard
+      player={player}
+      onClose={onClose}
+      onDraft={onDraft}
+      draftable={draftable}
+    />
   );
 }

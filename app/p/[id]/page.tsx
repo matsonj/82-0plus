@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { GlobalHeader } from "@/components/GlobalHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { PrivateTournamentLobby } from "@/components/private/PrivateTournamentLobby";
 import { PrivateTournamentResult } from "@/components/private/PrivateTournamentResult";
@@ -92,30 +92,39 @@ export default function PrivateTournamentPage({
   }, [load]);
 
   return (
-    <main className="relative mx-auto flex min-h-full max-w-3xl flex-col overflow-x-hidden px-4 pb-12 sm:pb-16">
-      <div className="md-sunbeam" />
-      <GlobalHeader />
-
-      <section className="relative z-10 mt-4">
+    <PageShell
+      width="wide"
+      paddingClassName="px-4 pb-12 sm:px-6 sm:pb-16"
+      footer={false}
+    >
+      <section className="relative z-10">
         {status === "loading" && (
-          <div className="py-20 text-center font-display text-sm text-[var(--md-ink-muted)]">
+          <div className="py-20 text-center font-cond text-sm uppercase tracking-widest text-[var(--md-ink-muted)]">
             Loading the tournament…
           </div>
         )}
 
         {status === "retry" && (
-          <div className="md-card md-card--lift mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
-            <p className="font-display text-base font-bold">Wrapping up…</p>
-            <p className="text-[13px] text-[var(--md-ink-muted)]">{errorMsg}</p>
-            <button className="md-btn md-btn--sm md-btn--teal" onClick={() => void load()}>
+          <div
+            className="mx-auto flex max-w-md flex-col items-center gap-3 border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-5 text-center"
+            style={{ boxShadow: "var(--md-shadow-md)" }}
+          >
+            <p className="font-cond text-base font-semibold uppercase tracking-wide">
+              Wrapping up…
+            </p>
+            <p className="font-display text-[13px] text-[var(--md-ink-muted)]">{errorMsg}</p>
+            <button className="md-btn md-btn--sm" onClick={() => void load()}>
               ↻ Retry
             </button>
           </div>
         )}
 
         {status === "error" && (
-          <div className="md-card md-card--lift mx-auto max-w-md p-5 text-center">
-            <p className="font-display text-base font-bold">
+          <div
+            className="mx-auto max-w-md border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-5 text-center"
+            style={{ boxShadow: "var(--md-shadow-md)" }}
+          >
+            <p className="font-cond text-base font-semibold uppercase tracking-wide">
               {errorMsg ?? "Tournament not found."}
             </p>
             <Link
@@ -138,6 +147,6 @@ export default function PrivateTournamentPage({
           <PrivateTournamentResult data={data as PrivateCompletedResponse} />
         )}
       </section>
-    </main>
+    </PageShell>
   );
 }

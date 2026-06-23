@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { GameMode, PublicPlayer } from "@/lib/types";
 import { canFill, type SlotKind } from "@/lib/positions";
 import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
+import { RosterCard } from "@/components/RosterCard";
+import { Button } from "@/components/ui";
 
 // The SHARED draft engine for the five starters. Both the main game (which ROLLS
 // random team/era sources, with skips) and a private tournament (which REVEALS a
@@ -28,6 +30,7 @@ export function LineupDraftBoard({
   source,
   sourcePlayers = null,
   sourcePlayersMode = null,
+  sourcePools,
   rolling = false,
   mode,
   allowRespin = false,
@@ -49,6 +52,7 @@ export function LineupDraftBoard({
   source: { team: string | null; decade: number; receipt?: string } | null;
   sourcePlayers?: PublicPlayer[] | null;
   sourcePlayersMode?: GameMode | null;
+  sourcePools?: { teams?: string[]; decades?: number[] };
   rolling?: boolean;
   mode: GameMode;
   allowRespin?: boolean;
@@ -84,6 +88,16 @@ export function LineupDraftBoard({
     setSelected(null);
   }, [sourceKey]);
 
+  // The player list waits for the slot reel to FULLY land before appearing, so
+  // the roster doesn't pop in while the reel is still spinning/settling. A roll
+  // (rolling=true) hides it; SlotMachine's onSettled reveals it once the reel
+  // has come to rest. (Cancelling a pick doesn't roll, so the list stays put.)
+  const [reelSettled, setReelSettled] = useState(true);
+  useEffect(() => {
+    if (rolling) setReelSettled(false);
+  }, [rolling]);
+  const handleReelSettled = useCallback(() => setReelSettled(true), []);
+
   const placedCount = lineup.filter(Boolean).length;
   const allPlaced = placedCount === kinds.length;
   const usedIds = lineup
@@ -115,8 +129,11 @@ export function LineupDraftBoard({
       .filter(({ kind }) => canFill(player.positions, kind))
       .map(({ i }) => i);
     if (eligible.length === 0) return;
-    if (eligible.length === 1) placeAt(player, eligible[0]);
-    else setPending(player);
+    // Always confirm: stash as pending so the eligible slot(s) glow and the user
+    // taps one (or "Assign") to place — and can "Cancel pick" to choose someone
+    // else. We never auto-place, even when only a single slot (e.g. a lone FLEX)
+    // fits, so a pick is never committed without a chance to back out.
+    setPending(player);
   };
 
   // Tap a slot: place the pending pick, or move/swap already-placed players. There
@@ -184,85 +201,378 @@ export function LineupDraftBoard({
       });
   }
 
-  const counter =
-    counterLabel?.(placedCount, kinds.length) ??
-    `Round ${placedCount + 1} of ${kinds.length}`;
+  const counter = allPlaced
+    ? "Complete"
+    : (counterLabel?.(placedCount, kinds.length) ??
+      `Round ${placedCount + 1} of ${kinds.length}`);
 
-  return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <div className="mb-2 font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-          {headerLabel} · {placedCount}/{kinds.length}
+  // ── Draft folio header + 5-segment progress bar ──────────────────────────
+  // Segments: completed = flame-red solid; current = press-yellow outline;
+  // remaining = dashed/empty. The current slot is `placedCount` (0-indexed).
+  const ProgressBar = ({ className = "" }: { className?: string }) => (
+    <div className={`flex flex-col gap-2 ${className}`}>
+      <div className="flex items-end justify-between">
+        <span
+          className="font-cover uppercase leading-none"
+          style={{
+            fontSize: "clamp(20px, 3.2vw, 28px)",
+            letterSpacing: "-0.01em",
+            color: "var(--md-ink)",
+          }}
+        >
+          Draft · {counter}
+        </span>
+        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--md-ink-muted)]">
+          {placedCount} locked
+        </span>
+      </div>
+      <div className="flex gap-1">
+        {kinds.map((_, i) => {
+          const done = i < placedCount;
+          const current = i === placedCount && !allPlaced;
+          return (
+            <div
+              key={i}
+              className="flex-1"
+              style={{
+                height: 10,
+                background: done ? "var(--md-coral)" : "transparent",
+                border: current
+                  ? "2px solid var(--md-yellow)"
+                  : done
+                    ? "none"
+                    : "2px dashed var(--md-paper-3)",
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // ── Shared roll card ──────────────────────────────────────────────────────
+  const RollCard = () =>
+    !allPlaced && !pending && source ? (
+      <div className="md-card--cover p-4 sm:p-6">
+        <div
+          className="flex items-end justify-between pb-3"
+          style={{ borderBottom: "1px solid var(--md-paper)", boxShadow: "0 4px 0 -1px var(--md-paper)" }}
+        >
+          <span className="font-cond text-[13px] font-semibold uppercase tracking-[0.18em] text-[var(--md-paper)]">
+            Your Roll · Team + Era
+          </span>
+          <span className="font-mono text-[12px] font-bold uppercase tracking-[0.06em] text-[var(--md-yellow)]">
+            {counter}
+          </span>
         </div>
-        <LineupBoard
-          kinds={kinds}
-          entries={lineup}
-          targets={targets}
-          selected={selected}
-          onSlotClick={onSlotClick}
-        />
-        <div className="mt-2 text-center font-display text-[11px] text-[var(--md-ink-muted)]">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+          {/* Pass the team straight through — the parent already nulls it only
+              while the TEAM is rolling (full roll / team skip) and keeps it set
+              through a decade skip, so a decade skip won't spin the team reel.
+              (Don't gate on `rolling`, which is true for decade skips too.) */}
+          <SlotMachine
+            team={source.team}
+            decade={source.decade}
+            teamPool={sourcePools?.teams}
+            decadePool={sourcePools?.decades}
+            size="lg"
+            onSettled={handleReelSettled}
+          />
+          {controls && (
+            <div className="flex flex-col items-end gap-2">
+              {controls({ pending: pending !== null, rolling })}
+            </div>
+          )}
+        </div>
+      </div>
+    ) : null;
+
+  // ── Shared player list section ────────────────────────────────────────────
+  const PlayerListSection = () =>
+    !allPlaced && !pending && source ? (
+      <div>
+        <div className="md-rule-double flex items-end justify-between pb-2 pt-3">
+          <span className="font-cover text-[26px] uppercase leading-none tracking-[-0.01em]">
+            Draft a Player
+          </span>
+          {source.team !== null && (
+            <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">
+              {source.team} · {source.decade}s
+            </span>
+          )}
+        </div>
+        <div className="mt-3 w-full">
+          {reelSettled && !rolling && source.team !== null ? (
+            <PlayerList
+              team={source.team}
+              decade={source.decade}
+              mode={mode}
+              players={sourcePlayers}
+              playersMode={
+                sourcePlayers !== null && sourcePlayers !== undefined
+                  ? sourcePlayersMode
+                  : null
+              }
+              allowRespin={allowRespin}
+              draftable={draftable}
+              onPick={pick}
+              onNoneEligible={onNoneEligible ?? (() => {})}
+            />
+          ) : (
+            <div className="py-8 text-center font-byline text-sm text-[var(--md-ink-muted)]">
+              Spinning the reel…
+            </div>
+          )}
+        </div>
+      </div>
+    ) : null;
+
+  // The roster title — "Your Roster" by default, else the caller's label.
+  const rosterTitle = headerLabel === "Your lineup" ? "Your Roster" : headerLabel;
+
+  // ── Right column: roster list + draft count + sim button ─────────────────
+  // Two layouts share the slot-fill logic but render very differently:
+  //   • grid (mobile) → a plain 5-column board under a double-rule header
+  //   • list (desktop) → the shared RosterCard shell (flame frame + #0E0B09 band),
+  //     matching artboard 87X-0 and locked to THE FIVE result card.
+  const RosterColumn = ({ listLayout }: { listLayout: "grid" | "list" }) => {
+    if (listLayout === "list") {
+      return (
+        <RosterCard
+          title={rosterTitle}
+          rightLabel={`${placedCount} of ${kinds.length} set`}
+          columnHeader={
+            <>
+              <span
+                className="font-cond font-semibold uppercase shrink-0"
+                style={{ fontSize: 12, letterSpacing: "0.16em", color: "#9a8f79", width: 54 }}
+              >
+                Slot
+              </span>
+              <span
+                className="flex-1 font-cond font-semibold uppercase"
+                style={{ fontSize: 12, letterSpacing: "0.16em", color: "#9a8f79" }}
+              >
+                Player
+              </span>
+              <span
+                className="font-cond font-semibold uppercase text-right"
+                style={{ fontSize: 12, letterSpacing: "0.16em", color: "#9a8f79" }}
+              >
+                Status
+              </span>
+            </>
+          }
+          footer={
+            // Instruction line — gold ☆ + contextual cue, matching 87X-0.
+            <div className="flex items-start gap-2.5 pt-3.5">
+              <span style={{ color: "var(--md-yellow)", fontSize: 16, lineHeight: 1, marginTop: 1 }}>☆</span>
+              <span className="font-sans text-[14px] leading-5 text-[var(--md-paper-3)]">
+                {pending
+                  ? "Click a glowing slot to place him."
+                  : selected !== null
+                    ? "Click a glowing slot to move him (or click him again to cancel)."
+                    : allPlaced
+                      ? "Click a player, then a slot, to rearrange."
+                      : "Draft a player, then slot him at Guard, Wing, Big, or Flex. Eligible open slots light up."}
+              </span>
+            </div>
+          }
+        >
+          {/* The board rows (slot-fill / pending / assign logic unchanged) */}
+          <div className="pt-2.5">
+            <LineupBoard
+              kinds={kinds}
+              entries={lineup}
+              targets={targets}
+              selected={selected}
+              onSlotClick={onSlotClick}
+              layout="list"
+              pendingPlayer={pending}
+            />
+          </div>
+        </RosterCard>
+      );
+    }
+
+    // Grid (mobile) layout — unchanged.
+    return (
+      <div className="flex flex-col">
+        {/* Header */}
+        <div className="md-rule-double flex items-end justify-between pb-2">
+          <span className="font-cond text-[14px] font-bold uppercase tracking-[0.16em]">
+            {rosterTitle}
+          </span>
+          <span
+            className="font-mono text-[12px] font-bold tabular-nums"
+            style={{ color: "var(--md-ink-muted)" }}
+          >
+            {placedCount}/{kinds.length} set
+          </span>
+        </div>
+
+        {/* Board */}
+        <div className="mt-3">
+          <LineupBoard
+            kinds={kinds}
+            entries={lineup}
+            targets={targets}
+            selected={selected}
+            onSlotClick={onSlotClick}
+            layout="grid"
+            pendingPlayer={pending}
+          />
+        </div>
+
+        {/* Hint text (grid only — list has inline cues) */}
+        <div className="mt-2 text-center font-byline text-[12px] text-[var(--md-ink-muted)]">
           {pending
             ? "Tap a glowing slot to place him."
             : selected !== null
               ? "Tap a glowing slot to move him (or tap him again to cancel)."
               : allPlaced
                 ? "Tap a player, then a slot, to rearrange."
-                : "Tip: tap a drafted player then a slot to move him."}
+                : "Draft a player below, then slot him. Eligible open slots light up."}
         </div>
       </div>
+    );
+  };
 
-      {pending && (
-        <div className="md-card md-card--lift flex flex-col items-center gap-3 p-4">
-          <div className="font-display text-sm">
-            Where does <span className="font-bold">{pending.player_name}</span> play?
-          </div>
-          <div className="font-display text-[11px] text-[var(--md-ink-muted)]">
-            Tap a glowing slot above.
-          </div>
-          {allowCancelPending && (
-            <button
-              className="md-btn md-btn--sm md-btn--secondary"
-              onClick={() => setPending(null)}
+  // ── Pending card (shared between layouts) ────────────────────────────────
+  const PendingCard = () =>
+    pending ? (
+      <div className="md-card md-card--lift flex flex-col items-center gap-3 p-4">
+        <div className="text-sm">
+          Where does{" "}
+          <span className="font-archivo font-bold" style={{ fontVariationSettings: '"wdth" 90' }}>
+            {pending.player_name}
+          </span>{" "}
+          play?
+        </div>
+        <div className="font-byline text-[12px] text-[var(--md-ink-muted)]">
+          Tap a glowing slot above.
+        </div>
+        {allowCancelPending && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setPending(null)}
+          >
+            Cancel pick
+          </Button>
+        )}
+      </div>
+    ) : null;
+
+  // ── Desktop right column: drafted count + simulate ghost ─────────────────
+  // Sits on the cream page BELOW the roster card (matches 87X-0). The dashed
+  // "SIMULATE SEASON" ghost is a disabled placeholder shown WHILE drafting — once
+  // the five are placed it hides so the parent's live "Simulate Season" button
+  // (rendered after this board) is the only sim affordance, never a duplicate.
+  const SimGhost = () => (
+    <div className="mt-4 flex flex-col gap-3.5">
+      <div className="flex items-baseline justify-between px-1">
+        <span
+          className="font-mono uppercase"
+          style={{ fontSize: 14, letterSpacing: "0.08em", color: "var(--md-ink-muted)" }}
+        >
+          Drafted
+        </span>
+        <span className="flex items-baseline gap-1.5">
+          <span
+            className="font-mono font-bold tabular-nums leading-none"
+            style={{ fontSize: 24, color: "var(--md-ink)" }}
+          >
+            {placedCount}
+          </span>
+          <span
+            className="font-mono font-bold tabular-nums leading-none"
+            style={{ fontSize: 18, color: "var(--md-ink-muted)" }}
+          >
+            / {kinds.length}
+          </span>
+        </span>
+      </div>
+
+      {!allPlaced && (
+        <>
+          <div
+            className="flex items-center justify-center gap-3 px-6 py-5"
+            style={{ border: "3px dashed var(--md-paper-3)" }}
+          >
+            <span
+              className="font-cond font-bold uppercase"
+              style={{ fontSize: 20, letterSpacing: "0.08em", color: "var(--md-ink-muted)" }}
             >
-              Cancel pick
-            </button>
-          )}
-        </div>
-      )}
-
-      {!allPlaced && !pending && source && (
-        <div className="md-card md-card--lift flex flex-col items-center gap-3 p-3 sm:gap-4 sm:p-5">
-          <div className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            {counter}
+              Simulate Season
+            </span>
+            <span className="font-mono font-bold" style={{ fontSize: 20, color: "var(--md-ink-muted)" }}>
+              →
+            </span>
           </div>
-          <SlotMachine team={rolling ? null : source.team} decade={source.decade} size="lg" />
-          {controls?.({ pending: pending !== null, rolling })}
-          <div className="w-full">
-            {!rolling && source.team !== null ? (
-              <PlayerList
-                team={source.team}
-                decade={source.decade}
-                mode={mode}
-                players={sourcePlayers}
-                playersMode={
-                  sourcePlayers !== null && sourcePlayers !== undefined
-                    ? sourcePlayersMode
-                    : null
-                }
-                allowRespin={allowRespin}
-                draftable={draftable}
-                onPick={pick}
-                onNoneEligible={onNoneEligible ?? (() => {})}
-              />
-            ) : (
-              <div className="py-8 text-center font-display text-sm text-[var(--md-ink-muted)]">
-                Spinning the reel…
-              </div>
-            )}
+          <div className="text-center font-byline" style={{ fontSize: 13, color: "var(--md-ink-muted)" }}>
+            Fill all five slots to run the season.
           </div>
-        </div>
+        </>
       )}
     </div>
+  );
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <>
+      {/* ── MOBILE layout (hidden at lg) ── */}
+      <div className="flex flex-col gap-5 lg:hidden">
+        {/* Progress bar */}
+        {ProgressBar({})}
+
+        {/* Roll card */}
+        {RollCard()}
+
+        {/* Roster grid */}
+        {RosterColumn({ listLayout: "grid" })}
+
+        {/* Pending placement card */}
+        {PendingCard()}
+
+        {/* Player list */}
+        {PlayerListSection()}
+      </div>
+
+      {/* ── DESKTOP layout (hidden below lg) ── */}
+      <div className="hidden lg:flex lg:flex-row lg:items-start lg:gap-8">
+
+        {/* LEFT column: folio + roll + player list */}
+        <div className="flex min-w-0 flex-1 flex-col gap-5" style={{ flex: "1.6 1 0" }}>
+          {/* Progress bar */}
+          {ProgressBar({})}
+
+          {/* Roll card */}
+          {RollCard()}
+
+          {/* Pending placement card */}
+          {PendingCard()}
+
+          {/* Player list */}
+          {PlayerListSection()}
+
+          {/* When all placed + no source: show rearrange hint in left col */}
+          {allPlaced && (
+            <div className="font-byline text-[13px] text-[var(--md-ink-muted)]">
+              Tap a player, then a slot, to rearrange.
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT column: roster list + drafted count */}
+        <div
+          className="flex shrink-0 flex-col"
+          style={{ flex: "1 1 0", minWidth: 320, maxWidth: 480 }}
+        >
+          {RosterColumn({ listLayout: "list" })}
+          <SimGhost />
+        </div>
+      </div>
+    </>
   );
 }

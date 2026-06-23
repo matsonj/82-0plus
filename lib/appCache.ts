@@ -79,7 +79,7 @@ const BUILD_GAME_QUALITY = `CREATE OR REPLACE TABLE ${ACDB}.game_quality AS
 const BUILD_PLAYER_SEASON_STATS = `CREATE OR REPLACE TABLE ${ACDB}.player_season_stats AS
   SELECT g.entity_id,
          s.season_year AS season,
-         mode(b.team_abbreviation) AS team,
+         b.team_abbreviation AS team,
          round(median(g.game_quality), 3) AS gq,
          round(avg(b.fg_attempted) + 0.44 * avg(b.ft_attempted) + avg(b.turnovers), 1) AS usg,
          count(*) AS gp,
@@ -101,9 +101,9 @@ const BUILD_PLAYER_SEASON_STATS = `CREATE OR REPLACE TABLE ${ACDB}.player_season
       ON ad.entity_id = g.entity_id AND ad.season_year = s.season_year
    WHERE g.game_quality >= 0
      AND s.season_type = 'Regular Season'
-   GROUP BY g.entity_id, s.season_year
+   GROUP BY g.entity_id, s.season_year, b.team_abbreviation
   HAVING count(*) >= 5
-   ORDER BY g.entity_id, season`;
+   ORDER BY g.entity_id, season, gp DESC, team`;
 
 // 3. player_index — mirrors lib/queries.computePlayerIndexLive, but sources GQ
 //    from the materialized table (fast) and adds a `debut` column (career first
@@ -211,6 +211,16 @@ const BUILD_TEAM_DECADE_WEIGHTS = `CREATE OR REPLACE TABLE ${ACDB}.team_decade_w
    WHERE b.period = 'FullGame' AND s.season_type = 'Regular Season'
    GROUP BY 1, 2`;
 
+// Cache SHAPE version — bump whenever the COLUMNS/grouping of any cached table
+// change (not the source data). It's folded into the fingerprint below, so a
+// deploy that changes a table's shape forces a rebuild on the next freshness
+// check even though the underlying NBA source is unchanged. Without this, a
+// pre-existing cache built on the old shape keeps serving stale-shaped rows until
+// the 24h max-age — e.g. player_season_stats merged-by-season rows would mask the
+// new per-(season,team) split rows the PlayerCard now expects.
+//   v2: player_season_stats split per (season, team) for mid-season trades.
+const CACHE_SCHEMA_VERSION = "2";
+
 // Cheap source fingerprint across EVERY table the cache derives from, so a
 // backfill/correction to any of them triggers a rebuild — not just new games in
 // `schedule`. (`game_quality` is a view of box_scores+schedule, so it needs no
@@ -225,7 +235,8 @@ const SOURCE_FINGERPRINT_SQL = `SELECT
 
 async function sourceFingerprint(): Promise<string> {
   const rows = await queryRW<{ fp: string }>(SOURCE_FINGERPRINT_SQL);
-  return rows[0]?.fp ?? "";
+  // Prefix the schema version so a shape change invalidates the stored fp.
+  return `v${CACHE_SCHEMA_VERSION}|${rows[0]?.fp ?? ""}`;
 }
 
 /**

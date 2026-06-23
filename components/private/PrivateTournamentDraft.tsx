@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   GameMode,
   PublicPlayer,
@@ -13,6 +12,7 @@ import { type LineupEntry } from "@/components/LineupBoard";
 import { LineupDraftBoard } from "@/components/LineupDraftBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { TournamentEntry } from "@/components/TournamentEntry";
+import { Button, ButtonLink, Capsule } from "@/components/ui";
 import { SITE_URL } from "@/lib/site";
 import type { PrivateBoard } from "@/lib/privateBoard";
 import type { PrivateMode } from "@/lib/privateTournament";
@@ -199,6 +199,13 @@ export function PrivateTournamentDraft({
   // The board's five starter slots are a reveal order; the next reveal is the slot
   // at index placedCount (lockOnPick commits picks strictly in order).
   const reveal = placedCount < KINDS.length ? board.slots[placedCount] : null;
+  const revealPools = useMemo(
+    () => ({
+      teams: board.slots.map((slot) => slot.team),
+      decades: board.slots.map((slot) => slot.decade),
+    }),
+    [board.slots],
+  );
 
   // ---- Interstitial: persist the five server-side + get the full season. ----
   const goToInterstitial = useCallback(async () => {
@@ -250,13 +257,13 @@ export function PrivateTournamentDraft({
   if (step === "done") {
     return (
       <div className="md-card md-card--lift mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
-        <div className="md-capsule md-capsule--teal">Team submitted</div>
+        <Capsule tone="teal">Team submitted</Capsule>
         <p className="font-display text-sm text-[var(--md-ink-muted)]">
           Your six are locked in. Watch this tournament for the final bracket.
         </p>
-        <Link href={`/p/${tournamentId}`} className="md-btn md-btn--lg md-btn--teal">
+        <ButtonLink href={`/p/${tournamentId}`} size="lg" variant="teal">
           Back to the tournament
-        </Link>
+        </ButtonLink>
       </div>
     );
   }
@@ -314,6 +321,7 @@ export function PrivateTournamentDraft({
         source={reveal ? { team: reveal.team, decade: reveal.decade, receipt: "" } : null}
         sourcePlayers={reveal ? rosters?.[draftSourceKey(reveal)] ?? null : null}
         sourcePlayersMode={reveal ? gameMode : null}
+        sourcePools={revealPools}
         mode={gameMode}
         allowCancelPending={false}
         allowRespin={false}
@@ -330,13 +338,14 @@ export function PrivateTournamentDraft({
               {partialError}
             </div>
           )}
-          <button
-            className="md-btn md-btn--lg md-btn--teal"
+          <Button
+            size="lg"
+            variant="teal"
             disabled={savingPartial}
             onClick={goToInterstitial}
           >
             {savingPartial ? "Saving…" : "See your record"}
-          </button>
+          </Button>
         </div>
       )}
     </div>
