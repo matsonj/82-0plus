@@ -265,7 +265,7 @@ export function LineupDraftBoard({
             {counter}
           </span>
         </div>
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
           {/* Pass the team straight through — the parent already nulls it only
               while the TEAM is rolling (full roll / team skip) and keeps it set
               through a decade skip, so a decade skip won't spin the team reel.

@@ -243,7 +243,7 @@ export function SlotMachine({
   // coral (the red), so the red is what stays centered.
   const eraCls =
     size === "lg"
-      ? "h-16 px-4 text-3xl sm:h-24 sm:px-6 sm:text-5xl"
+      ? "h-16 px-4 text-3xl sm:h-24 sm:px-4 sm:text-5xl"
       : size === "sm"
         ? "h-11 px-3 text-base"
         : "h-16 px-4 text-2xl";

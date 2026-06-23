@@ -1193,7 +1193,10 @@ export default function Home() {
             }
             controls={({ rolling: r }) =>
               gameType === "free" ? (
-                <div className="flex flex-col items-end gap-2">
+                // Stack the two re-roll buttons to the right of the reel, both
+                // the same width (items-stretch → both take the wider button's
+                // width).
+                <div className="flex flex-col items-stretch gap-2">
                   <button
                     className="md-btn md-btn--sm md-btn--ink"
                     onClick={teamSkip}
