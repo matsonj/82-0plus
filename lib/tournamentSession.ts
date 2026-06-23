@@ -7,6 +7,12 @@
 
 const KEY = "md820-tournament-user";
 
+// Same-tab login/logout doesn't fire the `storage` event (that's cross-tab
+// only), so the masthead can't otherwise tell when the session changed without
+// a reload. saveUser/clearUser broadcast this event; subscribeSession lets the
+// header (or anyone) re-read getSavedUser() the instant it does.
+const SESSION_EVENT = "md820-session-change";
+
 export interface SavedUser {
   username: string;
   pin: string;
@@ -35,6 +41,7 @@ export function saveUser(user: SavedUser): void {
   } catch {
     /* ignore */
   }
+  notifySessionChange();
 }
 
 export function clearUser(): void {
@@ -44,4 +51,29 @@ export function clearUser(): void {
   } catch {
     /* ignore */
   }
+  notifySessionChange();
+}
+
+function notifySessionChange(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(SESSION_EVENT));
+}
+
+/**
+ * Run `onChange` whenever the saved session changes — both same-tab
+ * login/logout (via SESSION_EVENT) and cross-tab changes (via `storage`).
+ * Returns an unsubscribe fn. No-op / returns a no-op on the server.
+ */
+export function subscribeSession(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const onStorage = (e: StorageEvent) => {
+    // key === null fires on storage.clear(); treat that as a session change too.
+    if (e.key === KEY || e.key === null) onChange();
+  };
+  window.addEventListener(SESSION_EVENT, onChange);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener(SESSION_EVENT, onChange);
+    window.removeEventListener("storage", onStorage);
+  };
 }
