@@ -1193,26 +1193,21 @@ export default function Home() {
             }
             controls={({ rolling: r }) =>
               gameType === "free" ? (
-                <div className="flex flex-col items-end gap-1.5">
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <button
-                      className="md-btn md-btn--sm md-btn--ink"
-                      onClick={teamSkip}
-                      disabled={teamSkips <= 0 || r}
-                    >
-                      ↻ New team ({teamSkips})
-                    </button>
-                    <button
-                      className="md-btn md-btn--sm md-btn--ink"
-                      onClick={decadeSkip}
-                      disabled={decadeSkips <= 0 || r || decades.length < 2}
-                    >
-                      ↻ New decade ({decadeSkips})
-                    </button>
-                  </div>
-                  <span className="font-byline text-[11px] text-[var(--md-paper-3)]">
-                    Free play · re-roll either
-                  </span>
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    className="md-btn md-btn--sm md-btn--ink"
+                    onClick={teamSkip}
+                    disabled={teamSkips <= 0 || r}
+                  >
+                    ↻ New team ({teamSkips})
+                  </button>
+                  <button
+                    className="md-btn md-btn--sm md-btn--ink"
+                    onClick={decadeSkip}
+                    disabled={decadeSkips <= 0 || r || decades.length < 2}
+                  >
+                    ↻ New decade ({decadeSkips})
+                  </button>
                 </div>
               ) : null
             }

@@ -471,6 +471,13 @@ body {
   pointer-events: none;
   animation: md-reel-flash 1.26s ease-out both;
 }
+/* The era box has side padding (the team chip doesn't), so the year sits a
+   touch tight in its ring. Push the era ring a few px outward into that
+   padding. (The team chip stays at inset:0 — a negative inset there would just
+   clip against its overflow.) */
+.md-reel:has(.md-reel__land) .md-reel__face--era::after {
+  inset: 0 -13px;
+}
 @keyframes md-reel-flash {
   0%   { box-shadow: inset 0 0 0 0 var(--md-yellow); }
   10%  { box-shadow: inset 0 0 0 3px var(--md-yellow); } /* pop */
