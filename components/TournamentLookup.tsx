@@ -94,38 +94,45 @@ function TabBar({
   );
 }
 
-// The daily leaderboard placement, shown in the TIER lane for daily entries.
-// `secondary` = it sits beneath a CHAMP / RUNNER-UP stamp (a daily team that also
-// went deep in that day's bracket), so it renders flatter + smaller to nest under
-// the outcome stamp instead of fighting its offset shadow.
+// Shared "press stamp" chrome for the TIER lane. Matches TierBadge exactly (same
+// border, misregistration double-shadow, +2° tilt, size) so the outcome stamps
+// (champ / runner-up), the daily rank, and the season tier all read as ONE family
+// — and a stacked outcome + rank reads as a single tilted stamp stack.
+function RowStamp({
+  fill,
+  text,
+  title,
+  children,
+}: {
+  fill: string;
+  text: string;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className="md-stamp inline-flex items-center justify-center gap-1 px-2 py-0.5 font-cond text-[11px] font-bold uppercase tracking-[0.04em]"
+      style={{ background: fill, color: text, transform: "rotate(2deg)", minWidth: 60 }}
+      title={title}
+    >
+      {children}
+    </span>
+  );
+}
+
+// The daily leaderboard placement (TIER lane), as a RowStamp + "of N" caption.
 function DailyRankStamp({
   rank,
   field,
-  secondary = false,
 }: {
   rank: number;
   field: number | null | undefined;
-  secondary?: boolean;
 }) {
   return (
     <span className="flex flex-col items-end gap-0.5">
-      <span
-        className="inline-flex items-center font-cond font-bold uppercase tracking-[0.04em]"
-        style={{
-          background: "var(--md-coral)",
-          color: "var(--md-paper)",
-          border: "2px solid var(--md-ink)",
-          fontSize: secondary ? 10 : 11,
-          padding: secondary ? "1px 7px" : "2px 8px",
-          minWidth: secondary ? 0 : 60,
-          boxShadow: secondary
-            ? "2px 2px 0 var(--md-ink)"
-            : "3px 3px 0 var(--md-magenta), 5px 5px 0 var(--md-ink)",
-          transform: secondary ? "none" : "rotate(-2deg)",
-        }}
-      >
+      <RowStamp fill="var(--md-coral)" text="var(--md-paper)">
         #{rank}
-      </span>
+      </RowStamp>
       {field != null && (
         <span className="font-mono text-[9px] text-[var(--md-ink-muted)]">
           of {field}
@@ -281,52 +288,29 @@ function TeamRow({
         </span>
       </span>
 
-      {/* TIER column — fixed 100px, right-aligned stamps. A daily team that also
-          won/runner-upped its bracket shows BOTH the outcome stamp AND its daily
-          rank (the rank nests beneath as a compact "secondary" chip). */}
+      {/* TIER column — fixed 100px. One consistent stamp family, right-aligned:
+          an optional outcome stamp (champ / runner-up) stacked over the qualifier
+          — the daily leaderboard rank for daily teams, or the season tier badge
+          for Classic/Ranked. Champ omits the tier (the crown says it all). */}
       <span
-        className="flex shrink-0 flex-col items-end gap-1.5"
+        className="flex shrink-0 flex-col items-end gap-2"
         style={{ width: 100 }}
       >
-        {isChampion ? (
-          <>
-            <span
-              className="md-stamp inline-flex items-center gap-1 px-2 py-0.5 font-cond text-[11px] font-bold uppercase tracking-[0.04em]"
-              style={{
-                background: "var(--md-yellow)",
-                color: "var(--md-ink)",
-                border: "2px solid var(--md-ink)",
-                boxShadow: "3px 3px 0 var(--md-magenta), 5px 5px 0 var(--md-ink)",
-                transform: "rotate(2deg)",
-                minWidth: 60,
-              }}
-            >
-              ♛ CHAMP
-            </span>
-            {team.mode === "daily" && team.dailyRank != null && (
-              <DailyRankStamp rank={team.dailyRank} field={team.dailyFieldSize} secondary />
-            )}
-          </>
-        ) : isRunnerUp ? (
-          <>
-            <span
-              className="font-cond text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-0.5 border-2 border-[var(--md-ink)]"
-              style={{ color: "var(--md-ink)" }}
-            >
-              RUNNER-UP
-            </span>
-            {team.mode !== "daily" ? (
-              <TierBadge seedNet={team.seedNet} size="capsule" />
-            ) : team.dailyRank != null ? (
-              <DailyRankStamp rank={team.dailyRank} field={team.dailyFieldSize} secondary />
-            ) : null}
-          </>
-        ) : team.mode !== "daily" ? (
-          <TierBadge seedNet={team.seedNet} size="capsule" />
-        ) : team.dailyRank != null ? (
-          // Daily has no tier bracket — show that day's leaderboard placement.
-          <DailyRankStamp rank={team.dailyRank} field={team.dailyFieldSize} />
-        ) : null}
+        {isChampion && (
+          <RowStamp fill="var(--md-yellow)" text="var(--md-ink)" title="Champion">
+            ♛ CHAMP
+          </RowStamp>
+        )}
+        {isRunnerUp && (
+          <RowStamp fill="var(--md-white)" text="var(--md-ink)" title="Runner-up">
+            RUNNER-UP
+          </RowStamp>
+        )}
+        {team.mode === "daily"
+          ? team.dailyRank != null && (
+              <DailyRankStamp rank={team.dailyRank} field={team.dailyFieldSize} />
+            )
+          : !isChampion && <TierBadge seedNet={team.seedNet} size="capsule" />}
       </span>
 
       {loading && (
