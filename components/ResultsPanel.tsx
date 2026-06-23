@@ -12,18 +12,82 @@ import { ShareAssetDialog } from "@/components/ui/ShareAssetDialog";
 import { RosterCard, ROSTER_CARD_ROW_HAIRLINE } from "@/components/RosterCard";
 
 // ---- Fit narrative -------------------------------------------------------
-// One-sentence summary of the team fit adjustment. The mockup shows a single
-// human-readable line: "Balanced roster — no usage clashes." Derived from the
-// simulation result fields. Never shows the raw factor numbers.
+// One sentence on the Team Fit adjustment, in SLAM editorial voice (em-dash,
+// no raw numbers — the signed Team Fit value is shown right beside it).
+//
+// The card's old version walked a fixed threshold ladder and fell through to a
+// happy "Balanced roster" default, so a heavily-penalized lineup whose specific
+// factors missed those exact cutoffs got the wrong, cheerful line. Instead we
+// find the SINGLE DOMINANT penalty — the biggest of the five magnitudes that
+// were subtracted off the talent base (all positive points: usagePen,
+// outsidePen, ballhogPen, balancePen, sizePen) — and describe THAT, scaling the
+// tone to how badly it hurt. A negative teamFit can therefore never read as
+// "balanced." Only a roughly-neutral-or-positive teamFit takes the clean /
+// synergy lines.
+//
+// balancePen is itself a sum (no-guard 16 + skew 7/extra), so we re-derive which
+// half is biting from roleCounts rather than trusting the lumped magnitude.
 function fitNarrative(r: SimResult): string {
-  if (r.usageFactor < 0.85) return "Heavy usage overlap — ball-dominant lineup.";
-  if (r.usageFactor < 0.94) return "Some usage overlap — crowded halfcourt.";
-  if (r.nonShooters >= 3) return "Floor-spacing issue — three non-shooters.";
-  if (r.nonShooters === 2) return "Two non-shooters — floor spacing is tight.";
-  if (r.assistFactor < 0.80) return "Ball-hogging tendency — low assist rate.";
-  if (r.synergyBonus > 0.5) return "Complementary stars — strong chemistry bonus.";
-  if (r.balancePen < -1.0) return "Lopsided scoring load — imbalanced attack.";
-  return "Balanced roster — no usage clashes.";
+  const { usagePen, outsidePen, ballhogPen, balancePen, sizePen } = r;
+  const { G, W, B } = r.roleCounts;
+
+  // Which single factor cost the most net? (All are positive magnitudes.)
+  const factors = [
+    { key: "usage", pen: usagePen },
+    { key: "outside", pen: outsidePen },
+    { key: "ballhog", pen: ballhogPen },
+    { key: "balance", pen: balancePen },
+    { key: "size", pen: sizePen },
+  ];
+  const worst = factors.reduce((a, b) => (b.pen > a.pen ? b : a));
+
+  // Roughly-neutral-or-positive fit, or no penalty bites: clean / synergy lines.
+  // (teamFit is already rounded to 1dp; -0.5 is the threshold below which the
+  // negative magnitude is worth calling out as a real construction problem.)
+  if (r.teamFit > -0.5 || worst.pen < 0.5) {
+    if (r.synergyBonus > 0.5) return "Complementary stars — the parts fit.";
+    return "Solid construction — no real flaws.";
+  }
+
+  // A genuine negative fit: name the dominant problem, specifically, and let the
+  // tone track severity. "severe" gates the harshest phrasing for big penalties.
+  switch (worst.key) {
+    case "balance": {
+      // balancePen = no-guard (16) and/or skew (4+ in one spot, 7/extra). Lead
+      // with whichever is actually present; no-guard is the heavier, more common
+      // failure so it wins if both apply.
+      if (G === 0) return "No point guard — nobody to run the offense.";
+      const max = Math.max(G, W, B);
+      if (B >= 4) return "Four bigs — a frontcourt logjam, no spacing.";
+      if (max >= 4) {
+        const spot = G === max ? "guards" : W === max ? "wings" : "bigs";
+        return `Stacked at one spot — too many ${spot}, no balance.`;
+      }
+      return "Lopsided lineup — the positions don't fit together.";
+    }
+    case "outside": {
+      if (r.nonShooters >= 3)
+        return "Three non-shooters — the paint is hopelessly clogged.";
+      return "Two non-shooters — the floor's too tight to breathe.";
+    }
+    case "usage": {
+      const severe = usagePen >= 8;
+      return severe
+        ? "Too many ball-dominant stars — they can't all eat."
+        : "Some usage overlap — the shot diet's a touch crowded.";
+    }
+    case "ballhog": {
+      const severe = ballhogPen >= 8;
+      return severe
+        ? "Iso-heavy — the ball sticks and never moves."
+        : "Ball movement runs light — a little too much iso.";
+    }
+    case "size": {
+      return "Undersized — this lineup gets bullied on the glass.";
+    }
+    default:
+      return "Construction issues — the pieces don't quite fit.";
+  }
 }
 
 // ---- Cover-line kicker ("You built a contender") -------------------------
