@@ -43,6 +43,9 @@ export function SlotMachine({
   const [decadeSpinning, setDecadeSpinning] = useState(false);
   const [decadeLand, setDecadeLand] = useState(0);
   const prevDecade = useRef<number | undefined>(undefined);
+  // True while a full roll's decade reel is held spinning, waiting for the team
+  // to resolve so it can land a beat AFTER the team (left-to-right stop).
+  const decadeWaiting = useRef(false);
 
   // Re-seed the blurred strip occasionally so a long fetch doesn't show the
   // same frozen codes — keeps the scream alive when team stays null.
@@ -53,52 +56,74 @@ export function SlotMachine({
       DECADE_FLICKER[Math.floor(Math.random() * DECADE_FLICKER.length)],
     );
 
-  // BOTH reels spin on any reveal (a full roll, a team skip, a decade skip, or
-  // the first mount), and they stop left-to-right: the TEAM lands first, then
-  // the YEAR a beat (STAGGER_MS) later — like a real slot machine. While the
-  // team is still being fetched (team === null) both keep screaming; the lands
-  // are scheduled from the moment the team resolves.
+  // Team reel: spins ONLY when the team value changes (a team skip, a full roll,
+  // or first mount). While the team is still being fetched (null) it scrolls
+  // until it arrives, then screams for SPIN_MS and lands. A decade-only skip
+  // leaves the team untouched → this stays static.
   useEffect(() => {
-    const teamChanged = team !== prev.current;
-    const decadeChanged = decade !== prevDecade.current;
-    if (!teamChanged && !decadeChanged) return;
+    if (team === prev.current) return;
     prev.current = team;
-    prevDecade.current = decade;
-
     setSpinning(true);
-    setDecadeSpinning(true);
-    const tiv = setInterval(teamTick, TICK_MS);
-    const div = setInterval(decadeTick, TICK_MS);
-
-    // Can't land the team until the fetch resolves — keep both screaming until
-    // a later run arrives with the team known.
+    const iv = setInterval(teamTick, TICK_MS);
     if (team === null) {
-      return () => {
-        clearInterval(tiv);
-        clearInterval(div);
-      };
+      return () => clearInterval(iv);
     }
-
-    const teamTo = setTimeout(() => {
-      clearInterval(tiv);
+    const to = setTimeout(() => {
+      clearInterval(iv);
       setDisplay(team);
       setSpinning(false);
       setTeamLand((n) => n + 1);
     }, SPIN_MS);
-    const decadeTo = setTimeout(() => {
-      clearInterval(div);
-      setDecadeDisplay(decade);
-      setDecadeSpinning(false);
-      setDecadeLand((n) => n + 1);
-    }, SPIN_MS + STAGGER_MS);
-
     return () => {
-      clearInterval(tiv);
-      clearInterval(div);
-      clearTimeout(teamTo);
-      clearTimeout(decadeTo);
+      clearInterval(iv);
+      clearTimeout(to);
     };
-  }, [team, decade]);
+  }, [team]);
+
+  // Decade reel: spins ONLY when the decade value changes (a decade skip, a full
+  // roll, or first mount), so a team-only skip leaves it static. On a FULL roll
+  // (decade changes while team === null) it's held spinning and lands STAGGER_MS
+  // AFTER the team — the reels stop left-to-right. A standalone decade skip lands
+  // on its own SPIN_MS timer.
+  useEffect(() => {
+    const changed = decade !== prevDecade.current;
+    if (changed) {
+      prevDecade.current = decade;
+      setDecadeSpinning(true);
+      const iv = setInterval(decadeTick, TICK_MS);
+      if (team === null) {
+        decadeWaiting.current = true; // full roll: wait for the team to land first
+        return () => clearInterval(iv);
+      }
+      decadeWaiting.current = false;
+      const to = setTimeout(() => {
+        clearInterval(iv);
+        setDecadeDisplay(decade);
+        setDecadeSpinning(false);
+        setDecadeLand((n) => n + 1);
+      }, SPIN_MS);
+      return () => {
+        clearInterval(iv);
+        clearTimeout(to);
+      };
+    }
+    // Decade value didn't change, but a full roll was waiting on the team — it
+    // just resolved. Land the decade a beat after the team (left-to-right stop).
+    if (decadeWaiting.current && team !== null) {
+      decadeWaiting.current = false;
+      const iv = setInterval(decadeTick, TICK_MS);
+      const to = setTimeout(() => {
+        clearInterval(iv);
+        setDecadeDisplay(decade);
+        setDecadeSpinning(false);
+        setDecadeLand((n) => n + 1);
+      }, SPIN_MS + STAGGER_MS);
+      return () => {
+        clearInterval(iv);
+        clearTimeout(to);
+      };
+    }
+  }, [decade, team]);
 
   // Badge (team) + era-box sizing per size. The team chip is a self-contained
   // ink chip with cream Archivo type, so it reads on a dark "roll" card (ink-on-
@@ -109,12 +134,16 @@ export function SlotMachine({
       : size === "sm"
         ? "h-11 w-16 text-base"
         : "h-16 w-20 text-2xl";
+  // Era reel matches the TEAM reel's height (and text scale) so the spin motion
+  // reads identically in both. Width is content-driven (px padding) to fit the
+  // 5-char "1990s". On a black/ink ground like the team chip; the LANDED year is
+  // coral (the red), so the red is what stays centered.
   const eraCls =
     size === "lg"
-      ? "px-3 py-1 text-2xl sm:text-4xl"
+      ? "h-16 px-4 text-3xl sm:h-24 sm:px-6 sm:text-5xl"
       : size === "sm"
-        ? "px-1.5 py-0.5 text-sm"
-        : "px-2 py-0.5 text-xl";
+        ? "h-11 px-3 text-base"
+        : "h-16 px-4 text-2xl";
   const archivo = {
     fontFamily: "var(--font-display)",
     fontWeight: 900,
@@ -160,7 +189,7 @@ export function SlotMachine({
       {/* Era reel — same in-flow-result trick (this is the box that was
           collapsing to "-" because it has no fixed height). */}
       <div
-        className={`md-reel inline-flex items-center border-2 border-[var(--md-ink)] bg-[var(--md-coral)] leading-none text-[var(--md-paper)] ${eraCls}`}
+        className={`md-reel inline-flex items-center justify-center border-2 border-[var(--md-ink)] bg-[var(--md-ink)] leading-none text-[var(--md-paper)] ${eraCls}`}
         style={archivo}
       >
         <div
@@ -169,7 +198,11 @@ export function SlotMachine({
           <span
             key={`decade-${decadeLand}`}
             className={`md-reel__result ${!decadeSpinning && decadeLand > 0 ? "md-reel__land" : ""}`}
-            style={decadeSpinning ? { visibility: "hidden" } : undefined}
+            style={
+              decadeSpinning
+                ? { visibility: "hidden" }
+                : { color: "var(--md-coral)" }
+            }
           >
             {decadeDisplay}s
           </span>
