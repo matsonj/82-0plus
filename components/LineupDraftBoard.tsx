@@ -262,7 +262,7 @@ export function LineupDraftBoard({
             Your Roll · Team + Era
           </span>
         </div>
-        <div className="mt-4 flex flex-col gap-2 lg:mt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+        <div className="mt-4 flex flex-col items-center gap-2 lg:mt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
           {/* Pass the team straight through — the parent already nulls it only
               while the TEAM is rolling (full roll / team skip) and keeps it set
               through a decade skip, so a decade skip won't spin the team reel.
