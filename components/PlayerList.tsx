@@ -156,7 +156,9 @@ export function PlayerList({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={`Filter ${team} roster…`}
-        className="md-input"
+        // Mobile draft rosters are short (~14 players) — typing to filter is noise,
+        // so the input is hidden below lg. Browse (Player Cards) keeps it at all sizes.
+        className={`md-input ${browse ? "" : "hidden lg:block"}`}
         style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}
       />
 
@@ -169,7 +171,7 @@ export function PlayerList({
       )}
 
       {mode === "classic" && status === "ok" && (
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex items-center gap-2">
           <SegmentedControl
             options={POS_FILTERS.map((p) => ({
               value: p,
@@ -179,22 +181,40 @@ export function PlayerList({
             onChange={setPosFilter}
             className="gap-1"
           />
-          <span
-            className="mx-1 h-4 w-px self-center bg-[var(--md-ink)] opacity-30"
-            aria-hidden
-          />
-          <span className="mr-0.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
-            Sort
-          </span>
-          <SegmentedControl
-            options={SORTS.map((sort) => ({
-              value: sort.key,
-              label: sort.label,
-            }))}
-            value={sortKey}
-            onChange={setSortKey}
-            className="gap-1"
-          />
+          <label className="ml-auto flex shrink-0 items-center gap-1.5">
+            <span className="font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+              Sort
+            </span>
+            <span className="relative inline-flex items-center">
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+                aria-label="Sort players by"
+                className="appearance-none border-2 border-[var(--md-ink)] bg-[var(--md-white)] py-1 pl-2.5 pr-7 font-display text-[12px] font-bold uppercase tracking-wide text-[var(--md-ink)]"
+              >
+                {SORTS.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <span
+                className="pointer-events-none absolute right-2 text-[var(--md-ink)]"
+                aria-hidden
+              >
+                <svg width="10" height="7" viewBox="0 0 10 7">
+                  <path
+                    d="M1 1l4 4 4-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+            </span>
+          </label>
         </div>
       )}
 

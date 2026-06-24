@@ -187,10 +187,10 @@ export function GlobalHeader({
     // Full-bleed ink masthead: breaks out of the page container to the viewport
     // edges, then re-centers its content to align with the page below.
     <header
-      className="relative z-30 mb-6 bg-[var(--md-ink)] text-[var(--md-paper)] sm:mb-8"
+      className="relative z-30 mb-4 bg-[var(--md-ink)] text-[var(--md-paper)] sm:mb-8"
       style={{ width: "100vw", marginLeft: "calc(50% - 50vw)" }}
     >
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6 sm:py-3.5">
         {/* Wordmark lockup: DAILY (ink) + 82 (flame), cream box, flame offset. */}
         <Link href="/" aria-label="daily82 home" className="flex shrink-0">
           <span
@@ -249,7 +249,7 @@ export function GlobalHeader({
               type="button"
               aria-label={pop ? "Alerts (new activity)" : "Alerts"}
               onClick={() => (open ? closePanel() : openPanel())}
-              className="relative flex h-10 w-10 items-center justify-center border-2 border-[#3a322a] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5"
+              className="relative flex h-9 w-9 items-center justify-center border-2 border-[#3a322a] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5 sm:h-10 sm:w-10"
               style={{ cursor: "pointer" }}
             >
               <span
@@ -357,7 +357,7 @@ export function GlobalHeader({
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center border-2 border-[#3a322a] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5 sm:hidden"
+            className="flex h-9 w-9 shrink-0 items-center justify-center border-2 border-[#3a322a] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5 sm:hidden"
             style={{ cursor: "pointer" }}
           >
             {menuOpen ? (

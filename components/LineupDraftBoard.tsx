@@ -261,11 +261,8 @@ export function LineupDraftBoard({
           <span className="font-cond text-[13px] font-semibold uppercase tracking-[0.18em] text-[var(--md-paper)]">
             Your Roll · Team + Era
           </span>
-          <span className="font-mono text-[12px] font-bold uppercase tracking-[0.06em] text-[var(--md-yellow)]">
-            {counter}
-          </span>
         </div>
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-4 flex flex-col items-center gap-2 lg:mt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
           {/* Pass the team straight through — the parent already nulls it only
               while the TEAM is rolling (full roll / team skip) and keeps it set
               through a decade skip, so a decade skip won't spin the team reel.
@@ -278,11 +275,7 @@ export function LineupDraftBoard({
             size="lg"
             onSettled={handleReelSettled}
           />
-          {controls && (
-            <div className="flex flex-col items-end gap-2">
-              {controls({ pending: pending !== null, rolling })}
-            </div>
-          )}
+          {controls && controls({ pending: pending !== null, rolling })}
         </div>
       </div>
     ) : null;
@@ -295,11 +288,6 @@ export function LineupDraftBoard({
           <span className="font-cover text-[26px] uppercase leading-none tracking-[-0.01em]">
             Draft a Player
           </span>
-          {source.team !== null && (
-            <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">
-              {source.team} · {source.decade}s
-            </span>
-          )}
         </div>
         <div className="mt-3 w-full">
           {reelSettled && !rolling && source.team !== null ? (
@@ -403,12 +391,6 @@ export function LineupDraftBoard({
           <span className="font-cond text-[14px] font-bold uppercase tracking-[0.16em]">
             {rosterTitle}
           </span>
-          <span
-            className="font-mono text-[12px] font-bold tabular-nums"
-            style={{ color: "var(--md-ink-muted)" }}
-          >
-            {placedCount}/{kinds.length} set
-          </span>
         </div>
 
         {/* Board */}
@@ -424,16 +406,6 @@ export function LineupDraftBoard({
           />
         </div>
 
-        {/* Hint text (grid only — list has inline cues) */}
-        <div className="mt-2 text-center font-byline text-[12px] text-[var(--md-ink-muted)]">
-          {pending
-            ? "Tap a glowing slot to place him."
-            : selected !== null
-              ? "Tap a glowing slot to move him (or tap him again to cancel)."
-              : allPlaced
-                ? "Tap a player, then a slot, to rearrange."
-                : "Draft a player below, then slot him. Eligible open slots light up."}
-        </div>
       </div>
     );
   };
@@ -522,7 +494,7 @@ export function LineupDraftBoard({
   return (
     <>
       {/* ── MOBILE layout (hidden at lg) ── */}
-      <div className="flex flex-col gap-5 lg:hidden">
+      <div className="flex flex-col gap-4 lg:hidden">
         {/* Progress bar */}
         {ProgressBar({})}
 
