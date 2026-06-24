@@ -28,12 +28,12 @@
 - file: app/page.tsx
   line: 418
   kind: error
-  text: "Your result for this day hasn't saved yet — check your connection and try again."
+  text: "Your result for this day hasn't saved yet. Check your connection and try again."
   context: "daily gate: completion not yet saved"
 - file: app/page.tsx
   line: 433
   kind: error
-  text: "Couldn't verify your daily status — check your connection and try again."
+  text: "Couldn't verify your daily status. Check your connection and try again."
   context: "daily gate fail-closed lookup error"
 - file: app/page.tsx
   line: 683
@@ -78,7 +78,7 @@
 - file: app/page.tsx
   line: 869
   kind: share
-  text: "82-0+ 🏀 Daily{ rec}{ (perfect!)} — same five rolls, beat my record:"
+  text: "82-0+ 🏀 Daily{ rec}{ (perfect!)}. Same five rolls, beat my record:"
   context: "template literal — daily share text"
 - file: app/page.tsx
   line: 871
@@ -143,7 +143,7 @@
 - file: app/page.tsx
   line: 1001
   kind: body
-  text: "Name + PIN — your account, across devices."
+  text: "Name + PIN is your account, across devices."
   context: "daily card — sign-in note under the play button (🔒)"
 - file: app/page.tsx
   line: 1010
@@ -233,7 +233,7 @@
 - file: app/layout.tsx
   line: 69
   kind: og
-  text: "daily82 · Build an undefeated season — new challenges daily"
+  text: "daily82 · Build an undefeated season. New challenges daily"
   context: "openGraph image alt"
 - file: app/layout.tsx
   line: 75
@@ -268,7 +268,7 @@
 - file: components/GlobalHeader.tsx
   line: 42
   kind: body
-  text: "Fixed historical team codes — relocated franchises now show their era-correct team (e.g. Vancouver Grizzlies as VAN, Minneapolis Lakers as MNL, the original Charlotte Hornets as CHH)."
+  text: "Fixed historical team codes. Relocated franchises now show their era-correct team (e.g. Vancouver Grizzlies as VAN, Minneapolis Lakers as MNL, the original Charlotte Hornets as CHH)."
   context: "changelog note text in alerts panel"
 - file: components/GlobalHeader.tsx
   line: 176
@@ -424,7 +424,7 @@
   line: 45
   kind: body
   text: |-
-    Five rounds. Each spin gives you one team + era — draft a player and
+    Five rounds. Each spin gives you one team + era. Draft a player and
     slot him at Guard, Wing, Big, or Flex. Fit five together and simulate the season.
   context: "hero description; 'simulate the season.' is highlighted, 'Fit five together and …' is bold"
 - file: components/home/HomeMenu.tsx
@@ -475,7 +475,7 @@
 - file: components/home/HomeMenu.tsx
   line: 119
   kind: body
-  text: "Stats hidden. Draft from memory — true hoops IQ."
+  text: "Stats hidden. Draft from memory, true hoops IQ."
   context: "ModeCard description (Ranked)"
 - file: components/home/HomeMenu.tsx
   line: 120
@@ -508,7 +508,7 @@
   line: 41
   kind: body
   text: |-
-    Fit matters. The sim rewards spacing, playmaking, defense and balanced usage — five ball-dominant stars or two non-shooting bigs will cost you. Teams never repeat.
+    Fit matters. The sim rewards spacing, playmaking, defense and balanced usage. Five ball-dominant stars or two non-shooting bigs will cost you. Teams never repeat.
   context: "step 3; 'Fit matters.' is bold"
 - file: components/HowToPlay.tsx
   line: 45
@@ -519,12 +519,12 @@
 - file: components/HowToPlay.tsx
   line: 53
   kind: body
-  text: "Daily — the same five team/era rolls for everyone today."
+  text: "Daily: the same five team/era rolls for everyone today."
   context: "footer note; 'Daily' is bold/emphasized"
 - file: components/HowToPlay.tsx
   line: 57
   kind: body
-  text: "Classic — stats shown. Ranked — stats hidden, draft from memory."
+  text: "Classic: stats shown. Ranked: stats hidden, draft from memory."
   context: "footer note; 'Classic' and 'Ranked' are bold/emphasized"
 - file: components/layout/SiteFooter.tsx
   line: 45
@@ -539,14 +539,14 @@
 - file: components/layout/SiteFooter.tsx
   line: 63
   kind: body
-  text: "An independent project — not affiliated with or endorsed by the NBA."
+  text: "An independent project, not affiliated with or endorsed by the NBA."
   context: "footer disclaimer; separator is ' — ' (split) or ', ' (centered)"
 
 # === Other pages (daily /d, /tournament, /t, /p, share /s, /cards) ===
 - file: app/d/[date]/page.tsx
   line: 53
   kind: meta-title
-  text: "82-0+ Daily {day} — {sharer.name} went {sharer.wins}–{sharer.losses}. Can you beat it?"
+  text: "82-0+ Daily {day}: {sharer.name} went {sharer.wins}–{sharer.losses}. Can you beat it?"
   context: "template literal; page <title> + OG/twitter title when a verified sharer is present"
 - file: app/d/[date]/page.tsx
   line: 54
@@ -571,7 +571,7 @@
 - file: app/tournament/page.tsx
   line: 49
   kind: label
-  text: "Roll call —"
+  text: "Roll call"
   context: "PageHeader kicker"
 - file: app/tournament/page.tsx
   line: 51
@@ -693,7 +693,7 @@
 - file: app/p/[id]/page.tsx
   line: 44
   kind: error
-  text: "Still finalizing — try again in a moment."
+  text: "Still finalizing. Try again in a moment."
   context: "fallback message for retryable 503 when server gives no error"
 - file: app/p/[id]/page.tsx
   line: 51
@@ -743,7 +743,7 @@
 - file: app/s/page.tsx
   line: 28
   kind: meta-title
-  text: "daily82 🏆 {data.w}–{data.l} — a PERFECT season!"
+  text: "daily82 🏆 {data.w}–{data.l}: a PERFECT season!"
   context: "template literal; title for a perfect-season share"
 - file: app/s/page.tsx
   line: 29
@@ -848,7 +848,7 @@
 - file: app/s/page.tsx
   line: 333
   kind: body
-  text: "This share link is missing or invalid — but you can still build your own undefeated season."
+  text: "This share link is missing or invalid, but you can still build your own undefeated season."
   context: "no/invalid share-link card body"
 - file: app/s/page.tsx
   line: 337
@@ -1095,7 +1095,7 @@
 - file: app/api/og/route.tsx
   line: 533
   kind: label
-  text: "YOUR FINAL STANDINGS — 82-GAME SEASON"
+  text: "YOUR FINAL STANDINGS · 82-GAME SEASON"
   context: "classic/ranked result card / standings eyebrow label"
 - file: app/api/og/route.tsx
   line: 561
@@ -1120,7 +1120,7 @@
 - file: app/api/og/route.tsx
   line: 693
   kind: label
-  text: "BUILD YOURS —"
+  text: "BUILD YOURS"
   context: "classic/ranked result card / footer CTA"
 - file: app/api/og/route.tsx
   line: 694
@@ -1270,7 +1270,7 @@
 - file: lib/shareImage.ts
   line: 442
   kind: label
-  text: "YOUR FINAL STANDINGS — 82-GAME SEASON"
+  text: "YOUR FINAL STANDINGS · 82-GAME SEASON"
   context: "buildShareImage (reg-season card) / money-line eyebrow"
 - file: lib/shareImage.ts
   line: 460
@@ -1380,12 +1380,12 @@
 - file: lib/shareImage.ts
   line: 624
   kind: label
-  text: "YOUR ENTRY — BRACKET RESULT"
+  text: "YOUR ENTRY · BRACKET RESULT"
   context: "buildTournamentShareImage / eyebrow when isDaily (template literal)"
 - file: lib/shareImage.ts
   line: 624
   kind: label
-  text: "YOUR ENTRY — PLAYOFF RESULT"
+  text: "YOUR ENTRY · PLAYOFF RESULT"
   context: "buildTournamentShareImage / eyebrow when not daily (template literal)"
 - file: lib/shareImage.ts
   line: 632
@@ -1618,7 +1618,7 @@
   line: 361
   kind: misc
   text: |-
-    daily82 Tournament · {you.name} — {reachedRoundSentence(you.reachedRound, isChampion)}
+    daily82 Tournament · {you.name}: {reachedRoundSentence(you.reachedRound, isChampion)}
     {shareLink}
   context: "template literal; share text (native share / clipboard)"
 - file: components/TournamentResults.tsx
@@ -1689,7 +1689,7 @@
 - file: components/TournamentResults.tsx
   line: 577
   kind: body
-  text: "— {detail}"
+  text: "· {detail}"
   context: "template literal; non-champion outcome strip detail (em-dash prefix)"
 - file: components/TournamentResults.tsx
   line: 609
@@ -1729,7 +1729,7 @@
 - file: components/TournamentEntry.tsx
   line: 356
   kind: error
-  text: "That account name is taken — wrong PIN?"
+  text: "That account name is taken. Wrong PIN?"
   context: "tournament submit 409 conflict fallback"
 - file: components/TournamentEntry.tsx
   line: 361
@@ -2379,7 +2379,7 @@
 - file: components/TournamentLookup.tsx
   line: 1199
   kind: body
-  text: "🔒 Your name + PIN is your account — same one as the Daily."
+  text: "🔒 Your name + PIN is your account, same one as the Daily."
   context: "lookup form footnote (em-dash)"
 - file: components/TournamentLookup.tsx
   line: 1205
@@ -2740,7 +2740,7 @@
   line: 44
   kind: body
   text: |-
-    Enter your five. The team you just built goes in as-is — then draft a sixth man and choose a captain — they buff your team in unique ways.
+    Enter your five. The team you just built goes in as-is. Then draft a sixth man and choose a captain; each one buffs your team differently.
   context: "how-to rule 1 (em-dashes; 'Enter your five.', 'sixth man', 'captain' bolded)"
 - file: components/TournamentHowToPlay.tsx
   line: 57
@@ -2758,7 +2758,7 @@
   line: 84
   kind: body
   text: |-
-    Come back any time. Your account (name + PIN) remembers every team you enter — look them up to replay the bracket. 🤖 teams are AI fillers; the rest are real people.
+    Come back any time. Your account (name + PIN) remembers every team you enter. Look them up to replay the bracket. 🤖 teams are AI fillers; the rest are real people.
   context: "how-to rule 4 (em-dash; 'Come back any time.' bolded)"
 
 # === Play & results components (PlayerCard, ResultsPanel, PlayerList, Lineup*, SlotMachine, positions) ===
@@ -2946,72 +2946,72 @@
 - file: components/ResultsPanel.tsx
   line: 48
   kind: body
-  text: "Complementary stars — the parts fit."
+  text: "Complementary stars. The parts fit."
   context: "fitNarrative return — positive team fit with synergy"
 - file: components/ResultsPanel.tsx
   line: 49
   kind: body
-  text: "Solid construction — no real flaws."
+  text: "Solid construction. No real flaws."
   context: "fitNarrative return — neutral/positive team fit"
 - file: components/ResultsPanel.tsx
   line: 59
   kind: body
-  text: "No point guard — nobody to run the offense."
+  text: "No point guard. Nobody to run the offense."
   context: "fitNarrative — balance penalty, no guard"
 - file: components/ResultsPanel.tsx
   line: 61
   kind: body
-  text: "Four bigs — a frontcourt logjam, no spacing."
+  text: "Four bigs. A frontcourt logjam, no spacing."
   context: "fitNarrative — balance penalty, B>=4"
 - file: components/ResultsPanel.tsx
   line: 64
   kind: body
-  text: "Stacked at one spot — too many {spot}, no balance."
+  text: "Stacked at one spot. Too many {spot}, no balance."
   context: "fitNarrative — balance penalty; {spot} is guards/wings/bigs; template literal"
 - file: components/ResultsPanel.tsx
   line: 66
   kind: body
-  text: "Lopsided lineup — the positions don't fit together."
+  text: "Lopsided lineup. The positions don't fit together."
   context: "fitNarrative — balance penalty, default"
 - file: components/ResultsPanel.tsx
   line: 70
   kind: body
-  text: "Three non-shooters — the paint is hopelessly clogged."
+  text: "Three non-shooters. The paint is hopelessly clogged."
   context: "fitNarrative — outside penalty, nonShooters>=3"
 - file: components/ResultsPanel.tsx
   line: 71
   kind: body
-  text: "Two non-shooters — the floor's too tight to breathe."
+  text: "Two non-shooters. The floor's too tight to breathe."
   context: "fitNarrative — outside penalty"
 - file: components/ResultsPanel.tsx
   line: 76
   kind: body
-  text: "Too many ball-dominant stars — they can't all eat."
+  text: "Too many ball-dominant stars. They can't all eat."
   context: "fitNarrative — usage penalty, severe"
 - file: components/ResultsPanel.tsx
   line: 77
   kind: body
-  text: "Some usage overlap — the shot diet's a touch crowded."
+  text: "Some usage overlap. The shot diet's a touch crowded."
   context: "fitNarrative — usage penalty, mild"
 - file: components/ResultsPanel.tsx
   line: 81
   kind: body
-  text: "Iso-heavy — the ball sticks and never moves."
+  text: "Iso-heavy. The ball sticks and never moves."
   context: "fitNarrative — ballhog penalty, severe"
 - file: components/ResultsPanel.tsx
   line: 82
   kind: body
-  text: "Ball movement runs light — a little too much iso."
+  text: "Ball movement runs light. A little too much iso."
   context: "fitNarrative — ballhog penalty, mild"
 - file: components/ResultsPanel.tsx
   line: 86
   kind: body
-  text: "Undersized — this lineup gets bullied on the glass."
+  text: "Undersized. This lineup gets bullied on the glass."
   context: "fitNarrative — size penalty"
 - file: components/ResultsPanel.tsx
   line: 89
   kind: body
-  text: "Construction issues — the pieces don't quite fit."
+  text: "Construction issues. The pieces don't quite fit."
   context: "fitNarrative — default fallback"
 - file: components/ResultsPanel.tsx
   line: 95
@@ -4169,7 +4169,7 @@
 - file: components/DailySignIn.tsx
   line: 37
   kind: body
-  text: "Your name + PIN is your account — same one as the tournament. It tracks your daily results across devices. (Same name, different PIN = a separate account; no name is ever taken.)"
+  text: "Your name + PIN is your account, same one as the tournament. It tracks your daily results across devices. (Same name, different PIN = a separate account; no name is ever taken.)"
   context: "sign-in explainer paragraph"
 - file: components/DailySignIn.tsx
   line: 44
@@ -4216,7 +4216,7 @@
 - file: components/private/PrivateTournamentCreate.tsx
   line: 205
   kind: misc
-  text: "Anyone with the link can join — no PIN needed to draft."
+  text: "Anyone with the link can join. No PIN needed to draft."
   context: "CopyLinkField hint prop"
 - file: components/private/PrivateTournamentCreate.tsx
   line: 213
@@ -4261,7 +4261,7 @@
 - file: components/private/PrivateTournamentCreate.tsx
   line: 260
   kind: misc
-  text: "Your account PIN — how you log back in."
+  text: "Your account PIN: how you log back in."
   context: "PinField hint (default state)"
 - file: components/private/PrivateTournamentCreate.tsx
   line: 267
@@ -4496,7 +4496,7 @@
 - file: components/private/PrivateTournamentLobby.tsx
   line: 270
   kind: body
-  text: "The bracket is drawn once all {data.size} entrants lock in their rosters — or when the clock runs out, whichever comes first."
+  text: "The bracket is drawn once all {data.size} entrants lock in their rosters, or when the clock runs out, whichever comes first."
   context: "template literal; bracket note"
 - file: components/private/PrivateTournamentLobby.tsx
   line: 278
@@ -4753,7 +4753,7 @@
 - file: components/private/PrivateTournamentResult.tsx
   line: 269
   kind: misc
-  text: "— {myStatus}"
+  text: "· {myStatus}"
   context: "template literal; round-reached label appended to result callout"
 - file: components/private/PrivateTournamentResult.tsx
   line: 276
@@ -4851,7 +4851,7 @@
 - file: components/cards/CardStack.tsx
   line: 16
   kind: aria
-  text: "{team} — {eras} era{s}"
+  text: "{team}, {eras} era{s}"
   context: "template literal; Link aria-label, e.g. 'LAL — 3 eras' (singular 'era' when eras===1)"
 - file: components/cards/CardStack.tsx
   line: 36
@@ -5078,12 +5078,12 @@
 - file: app/api/private-tournament/create/route.ts
   line: 114
   kind: error
-  text: "a tournament with that name and PIN already exists — pick a different PIN"
+  text: "a tournament with that name and PIN already exists; pick a different PIN"
   context: "JSON error body, 409"
 - file: app/api/private-tournament/create/route.ts
   line: 132
   kind: error
-  text: "couldn't generate a board — try again"
+  text: "couldn't generate a board; try again"
   context: "JSON error body, 500"
 - file: app/api/private-tournament/create/route.ts
   line: 141
@@ -5223,7 +5223,7 @@
 - file: app/api/private-tournament/route.ts
   line: 63
   kind: error
-  text: "still finalizing — try again in a moment"
+  text: "still finalizing; try again in a moment"
   context: "JSON error body, 503 (GET); also sets retryable:true"
 - file: app/api/private-tournament/route.ts
   line: 120
@@ -5433,7 +5433,7 @@
 - file: app/api/tournament/submit/route.ts
   line: 209
   kind: error
-  text: "each player must come from a different team — re-roll a duplicate"
+  text: "each player must come from a different team; re-roll a duplicate"
   context: "JSON error body, 400"
 - file: app/api/tournament/submit/route.ts
   line: 224
@@ -5453,12 +5453,12 @@
 - file: app/api/tournament/submit/route.ts
   line: 286
   kind: error
-  text: "not tournament-eligible — this roster projects to {regWinsFromSeedNet(seedNet)} wins (need {MIN_ELIGIBLE_WINS}+)"
+  text: "not tournament-eligible; this roster projects to {regWinsFromSeedNet(seedNet)} wins (need {MIN_ELIGIBLE_WINS}+)"
   context: "JSON error body, 400; template literal — projected wins and min-wins are computed values"
 - file: app/api/tournament/submit/route.ts
   line: 319
   kind: error
-  text: "tournament field unavailable — seed ghosts"
+  text: "tournament field unavailable; seed ghosts"
   context: "JSON error body, 500"
 - file: app/api/tournament/submit/route.ts
   line: 370
