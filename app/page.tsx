@@ -561,10 +561,29 @@ export default function Home() {
     if (phase !== "play" || result || draftDone) return;
     if (gameType === "daily") {
       const slot = dailySlots[draftedCount];
-      if (slot && (currentTeam !== slot.team || currentDecade !== slot.decade)) {
-        setCurrentDecade(slot.decade);
-        setCurrentTeam(slot.team);
+      // Spin the reel on daily too. The team/era are known up front, but we still
+      // want the slot-machine reveal, so we mirror a free-play roll: flip the team
+      // to null (the reel screams filler against the daily team/decade pools), then
+      // resolve to the known team a beat later so it decelerates and lands.
+      // `rollActive` guards the reactive re-entry while the reveal is in flight;
+      // `rollSeq` ignores a superseded reveal (same pattern as rollRound).
+      if (
+        slot &&
+        !rollActive.current &&
+        (currentTeam !== slot.team || currentDecade !== slot.decade)
+      ) {
+        const myId = ++rollSeq.current;
+        rollActive.current = true;
+        setRolling(true);
         setCurrentReceipt(""); // Daily slots aren't server-rolled; no receipt.
+        setCurrentDecade(slot.decade);
+        setCurrentTeam(null);
+        setTimeout(() => {
+          if (rollSeq.current !== myId) return;
+          setCurrentTeam(slot.team);
+          rollActive.current = false;
+          setRolling(false);
+        }, 400);
       }
       return;
     }

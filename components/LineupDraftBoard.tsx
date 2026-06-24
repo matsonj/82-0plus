@@ -251,8 +251,11 @@ export function LineupDraftBoard({
   );
 
   // ── Shared roll card ──────────────────────────────────────────────────────
+  // Stays mounted while a pick is pending: it sits ABOVE the roster on mobile, so
+  // hiding it on every pick collapsed the header and shifted the glowing target
+  // slots out from under the user's finger. Keeping it put keeps the target fixed.
   const RollCard = () =>
-    !allPlaced && !pending && source ? (
+    !allPlaced && source ? (
       <div className="md-card--cover p-4 sm:p-6">
         <div
           className="flex items-end justify-between pb-3"
