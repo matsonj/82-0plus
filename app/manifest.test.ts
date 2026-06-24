@@ -36,7 +36,9 @@ describe("PWA manifest (#63)", () => {
     for (const icon of m.icons ?? []) {
       const file = join(PUBLIC, icon.src.replace(/^\//, ""));
       expect(() => readFileSync(file), `${icon.src} should exist`).not.toThrow();
-      const [w, h] = icon.sizes.split("x").map(Number);
+      // `sizes` is optional in MetadataRoute.Manifest; we require it on our icons.
+      expect(icon.sizes, `${icon.src} should declare sizes`).toBeTruthy();
+      const [w, h] = (icon.sizes ?? "").split("x").map(Number);
       const meta = await sharp(file).metadata();
       expect(meta.width, `${icon.src} width`).toBe(w);
       expect(meta.height, `${icon.src} height`).toBe(h);
