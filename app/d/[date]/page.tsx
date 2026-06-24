@@ -50,8 +50,8 @@ export async function generateMetadata({
   const sharer = sharerFrom(s, date);
   const day = prettyDate(date);
   const title = sharer
-    ? `82-0+ Daily ${day} — ${sharer.name} went ${sharer.wins}–${sharer.losses}. Can you beat it?`
-    : `82-0+ Daily Challenge · ${day}`;
+    ? `Daily82 ${day}: ${sharer.name} went ${sharer.wins}–${sharer.losses}. Can you beat it?`
+    : `Daily82 Challenge · ${day}`;
   const description =
     "Same five team/era rolls for everyone. Draft the best five and chase 82-0.";
   // OG = redacted card (record + margin, no roster), built from the VERIFIED
@@ -86,7 +86,7 @@ export async function generateMetadata({
       title,
       description,
       type: "website",
-      siteName: "82-0+",
+      siteName: "Daily82",
       url: canonical,
       images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
     },

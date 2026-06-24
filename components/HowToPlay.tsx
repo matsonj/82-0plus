@@ -38,7 +38,7 @@ export function HowToPlay({ onClose }: { onClose: () => void }) {
         </li>
         <li>
           <strong>Fit matters.</strong> The sim rewards spacing, playmaking,
-          defense and balanced usage — five ball-dominant stars or two
+          defense and balanced usage. Five ball-dominant stars or two
           non-shooting bigs will cost you. Teams never repeat.
         </li>
         <li>
@@ -50,12 +50,12 @@ export function HowToPlay({ onClose }: { onClose: () => void }) {
 
       <div className="mt-4 grid gap-1 border-t border-[var(--md-paper-3)] pt-3 text-[13px] text-[var(--md-ink-muted)]">
         <div>
-          <strong className="text-[var(--md-ink)]">Daily</strong> — the same
+          <strong className="text-[var(--md-ink)]">Daily</strong>: the same
           five team/era rolls for everyone today.
         </div>
         <div>
-          <strong className="text-[var(--md-ink)]">Classic</strong> — stats
-          shown. <strong className="text-[var(--md-ink)]">Ranked</strong> —
+          <strong className="text-[var(--md-ink)]">Classic</strong>: stats
+          shown. <strong className="text-[var(--md-ink)]">Ranked</strong>:
           stats hidden, draft from memory.
         </div>
       </div>

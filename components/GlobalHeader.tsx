@@ -39,7 +39,7 @@ const POLL_MS = 60_000;
 const CHANGELOG = {
   id: "2026-06-22-team-codes",
   label: "Changelog · 6/22/2026",
-  text: "Fixed historical team codes — relocated franchises now show their era-correct team (e.g. Vancouver Grizzlies as VAN, Minneapolis Lakers as MNL, the original Charlotte Hornets as CHH).",
+  text: "Fixed historical team codes. Relocated franchises now show their era-correct team (e.g. Vancouver Grizzlies as VAN, Minneapolis Lakers as MNL, the original Charlotte Hornets as CHH).",
   // 7 days after publish, at Pacific midnight (≈ 2026-06-29 07:00 UTC). After
   // this it never shows again, even for someone who never opened the panel.
   expires: Date.parse("2026-06-29T07:00:00Z"),

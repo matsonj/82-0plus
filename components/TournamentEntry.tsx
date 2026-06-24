@@ -353,7 +353,7 @@ export function TournamentEntry({
       if (res.status === 409) {
         setNameTaken(true);
         const data = await res.json().catch(() => ({}));
-        setSubmitError(data?.error ?? "That account name is taken — wrong PIN?");
+        setSubmitError(data?.error ?? "That account name is taken. Wrong PIN?");
         return;
       }
       if (!res.ok) {

@@ -68,7 +68,7 @@
 - file: app/page.tsx
   line: 828
   kind: share
-  text: "82-0+ 🏀 {result.wins}-{result.losses} ({sign}{result.netRating} net) · {modeLabel}"
+  text: "Daily82 🏀 {result.wins}-{result.losses} ({sign}{result.netRating} net) · {modeLabel}"
   context: "template literal — copyable share text first line"
 - file: app/page.tsx
   line: 833
@@ -78,7 +78,7 @@
 - file: app/page.tsx
   line: 869
   kind: share
-  text: "82-0+ 🏀 Daily{ rec}{ (perfect!)}. Same five rolls, beat my record:"
+  text: "Daily82 🏀 Daily{ rec}{ (perfect!)}. Same five rolls, beat my record:"
   context: "template literal — daily share text"
 - file: app/page.tsx
   line: 871
@@ -475,7 +475,7 @@
 - file: components/home/HomeMenu.tsx
   line: 119
   kind: body
-  text: "Stats hidden. Draft from memory, true hoops IQ."
+  text: "Stats hidden. Draft from memory and show off."
   context: "ModeCard description (Ranked)"
 - file: components/home/HomeMenu.tsx
   line: 120
@@ -546,12 +546,12 @@
 - file: app/d/[date]/page.tsx
   line: 53
   kind: meta-title
-  text: "82-0+ Daily {day}: {sharer.name} went {sharer.wins}–{sharer.losses}. Can you beat it?"
+  text: "Daily82 {day}: {sharer.name} went {sharer.wins}–{sharer.losses}. Can you beat it?"
   context: "template literal; page <title> + OG/twitter title when a verified sharer is present"
 - file: app/d/[date]/page.tsx
   line: 54
   kind: meta-title
-  text: "82-0+ Daily Challenge · {day}"
+  text: "Daily82 Challenge · {day}"
   context: "template literal; page <title> + OG/twitter title when no sharer"
 - file: app/d/[date]/page.tsx
   line: 56
@@ -561,7 +561,7 @@
 - file: app/d/[date]/page.tsx
   line: 89
   kind: og
-  text: "82-0+"
+  text: "Daily82"
   context: "openGraph.siteName"
 - file: app/tournament/page.tsx
   line: 47
@@ -2379,7 +2379,7 @@
 - file: components/TournamentLookup.tsx
   line: 1199
   kind: body
-  text: "🔒 Your name + PIN is your account, same one as the Daily."
+  text: "🔒 Login with your Name + PIN."
   context: "lookup form footnote (em-dash)"
 - file: components/TournamentLookup.tsx
   line: 1205
@@ -4169,7 +4169,7 @@
 - file: components/DailySignIn.tsx
   line: 37
   kind: body
-  text: "Your name + PIN is your account, same one as the tournament. It tracks your daily results across devices. (Same name, different PIN = a separate account; no name is ever taken.)"
+  text: "Log in with your name + PIN to track your daily results across devices."
   context: "sign-in explainer paragraph"
 - file: components/DailySignIn.tsx
   line: 44
@@ -4216,7 +4216,7 @@
 - file: components/private/PrivateTournamentCreate.tsx
   line: 205
   kind: misc
-  text: "Anyone with the link can join. No PIN needed to draft."
+  text: "Anyone with the link can join."
   context: "CopyLinkField hint prop"
 - file: components/private/PrivateTournamentCreate.tsx
   line: 213
@@ -4496,7 +4496,7 @@
 - file: components/private/PrivateTournamentLobby.tsx
   line: 270
   kind: body
-  text: "The bracket is drawn once all {data.size} entrants lock in their rosters, or when the clock runs out, whichever comes first."
+  text: "The bracket is drawn once all {data.size} entrants lock in their rosters or when the clock runs out, whichever comes first."
   context: "template literal; bracket note"
 - file: components/private/PrivateTournamentLobby.tsx
   line: 278
@@ -4617,7 +4617,7 @@
 - file: components/private/PrivateTournamentDraft.tsx
   line: 277
   kind: misc
-  text: "82-0+ 🏀 my {wins}-{losses} private-tournament five"
+  text: "Daily82 🏀 my {wins}-{losses} private-tournament five"
   context: "template literal; shareText passed to ResultsPanel"
 - file: components/private/PrivateTournamentDraft.tsx
   line: 279
@@ -4851,7 +4851,7 @@
 - file: components/cards/CardStack.tsx
   line: 16
   kind: aria
-  text: "{team}, {eras} era{s}"
+  text: "{team} - {eras} era{s}"
   context: "template literal; Link aria-label, e.g. 'LAL — 3 eras' (singular 'era' when eras===1)"
 - file: components/cards/CardStack.tsx
   line: 36
@@ -5078,7 +5078,7 @@
 - file: app/api/private-tournament/create/route.ts
   line: 114
   kind: error
-  text: "a tournament with that name and PIN already exists; pick a different PIN"
+  text: "Error creating Tournament. Try again."
   context: "JSON error body, 409"
 - file: app/api/private-tournament/create/route.ts
   line: 132

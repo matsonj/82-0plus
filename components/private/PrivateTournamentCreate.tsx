@@ -202,7 +202,7 @@ export function PrivateTournamentCreate({
         <CopyLinkField
           label="Share link"
           value={fullShare}
-          hint="Anyone with the link can join — no PIN needed to draft."
+          hint="Anyone with the link can join."
         />
         <ButtonLink
           href={created.shareUrl}
@@ -257,7 +257,7 @@ export function PrivateTournamentCreate({
             hint={
               adminPin.length > 0 && !adminPinOk
                 ? "PIN must be 4–6 digits"
-                : "Your account PIN — how you log back in."
+                : "Your account PIN: how you log back in."
             }
           />
         </div>

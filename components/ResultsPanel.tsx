@@ -45,8 +45,8 @@ function fitNarrative(r: SimResult): string {
   // (teamFit is already rounded to 1dp; -0.5 is the threshold below which the
   // negative magnitude is worth calling out as a real construction problem.)
   if (r.teamFit > -0.5 || worst.pen < 0.5) {
-    if (r.synergyBonus > 0.5) return "Complementary stars — the parts fit.";
-    return "Solid construction — no real flaws.";
+    if (r.synergyBonus > 0.5) return "Complementary stars. The parts fit.";
+    return "Solid construction. No real flaws.";
   }
 
   // A genuine negative fit: name the dominant problem, specifically, and let the
@@ -56,37 +56,37 @@ function fitNarrative(r: SimResult): string {
       // balancePen = no-guard (16) and/or skew (4+ in one spot, 7/extra). Lead
       // with whichever is actually present; no-guard is the heavier, more common
       // failure so it wins if both apply.
-      if (G === 0) return "No point guard — nobody to run the offense.";
+      if (G === 0) return "No point guard. Nobody to run the offense.";
       const max = Math.max(G, W, B);
-      if (B >= 4) return "Four bigs — a frontcourt logjam, no spacing.";
+      if (B >= 4) return "Four bigs. A frontcourt logjam, no spacing.";
       if (max >= 4) {
         const spot = G === max ? "guards" : W === max ? "wings" : "bigs";
-        return `Stacked at one spot — too many ${spot}, no balance.`;
+        return `Stacked at one spot. Too many ${spot}, no balance.`;
       }
-      return "Lopsided lineup — the positions don't fit together.";
+      return "Lopsided lineup. The positions don't fit together.";
     }
     case "outside": {
       if (r.nonShooters >= 3)
-        return "Three non-shooters — the paint is hopelessly clogged.";
-      return "Two non-shooters — the floor's too tight to breathe.";
+        return "Three non-shooters. The paint is hopelessly clogged.";
+      return "Two non-shooters. The floor's too tight to breathe.";
     }
     case "usage": {
       const severe = usagePen >= 8;
       return severe
-        ? "Too many ball-dominant stars — they can't all eat."
-        : "Some usage overlap — the shot diet's a touch crowded.";
+        ? "Too many ball-dominant stars. They can't all eat."
+        : "Some usage overlap. The shot diet's a touch crowded.";
     }
     case "ballhog": {
       const severe = ballhogPen >= 8;
       return severe
-        ? "Iso-heavy — the ball sticks and never moves."
-        : "Ball movement runs light — a little too much iso.";
+        ? "Iso-heavy. The ball sticks and never moves."
+        : "Ball movement runs light. A little too much iso.";
     }
     case "size": {
-      return "Undersized — this lineup gets bullied on the glass.";
+      return "Undersized. This lineup gets bullied on the glass.";
     }
     default:
-      return "Construction issues — the pieces don't quite fit.";
+      return "Construction issues. The pieces don't quite fit.";
   }
 }
 

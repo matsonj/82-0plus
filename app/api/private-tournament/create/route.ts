@@ -110,8 +110,7 @@ export async function POST(req: NextRequest) {
       return jsonWithSessionHint(
         sessionHint,
         {
-          error:
-            "a tournament with that name and PIN already exists — pick a different PIN",
+          error: "Error creating Tournament. Try again.",
         },
         { status: 409 },
       );
@@ -128,7 +127,7 @@ export async function POST(req: NextRequest) {
       } catch {
         return jsonWithSessionHint(
           sessionHint,
-          { error: "couldn't generate a board — try again" },
+          { error: "couldn't generate a board; try again" },
           { status: 500 },
         );
       }

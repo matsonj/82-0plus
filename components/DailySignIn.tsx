@@ -34,9 +34,7 @@ export function DailySignIn({
   return (
     <ModalFrame title={title} onClose={onCancel}>
       <p className="mt-1 text-[13px] leading-snug text-[var(--md-ink-muted)]">
-        Your name + PIN is your account — same one as the tournament. It tracks
-        your daily results across devices. (Same name, different PIN = a separate
-        account; no name is ever taken.)
+        Log in with your name + PIN to track your daily results across devices.
       </p>
 
       <NameField

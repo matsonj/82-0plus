@@ -530,7 +530,7 @@ export async function GET(request: Request) {
                   marginBottom: 8,
                 }}
               >
-                YOUR FINAL STANDINGS — 82-GAME SEASON
+                YOUR FINAL STANDINGS · 82-GAME SEASON
               </div>
 
               {/* Big record: flame wins + ink dash + ink losses */}
@@ -690,7 +690,7 @@ export async function GET(request: Request) {
                 textTransform: "uppercase",
               }}
             >
-              BUILD YOURS —
+              BUILD YOURS
               <span style={{ color: CORAL }}>DAILY82.COM</span>
             </div>
             <div

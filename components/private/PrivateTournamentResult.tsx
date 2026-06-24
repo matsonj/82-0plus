@@ -266,7 +266,7 @@ export function PrivateTournamentResult({
               </span>
               {myStatus && (
                 <span className="font-display text-[13px] text-[var(--md-ink-muted)]">
-                  — {myStatus}
+                  · {myStatus}
                 </span>
               )}
             </>

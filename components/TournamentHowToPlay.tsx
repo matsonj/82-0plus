@@ -43,8 +43,8 @@ export function TournamentHowToPlay({ onClose }: { onClose: () => void }) {
             </span>
             <span>
               <strong>Enter your five.</strong> The team you just built goes in
-              as-is — then draft a <strong>sixth man</strong> and choose a{" "}
-              <strong>captain</strong> — they buff your team in unique ways.
+              as-is. Then draft a <strong>sixth man</strong> and choose a{" "}
+              <strong>captain</strong>; each one buffs your team differently.
             </span>
           </li>
           <li className="flex gap-3">
@@ -83,7 +83,7 @@ export function TournamentHowToPlay({ onClose }: { onClose: () => void }) {
             </span>
             <span>
               <strong>Come back any time.</strong> Your account (name + PIN)
-              remembers every team you enter — look them up to replay the
+              remembers every team you enter. Look them up to replay the
               bracket. 🤖 teams are AI fillers; the rest are real people.
             </span>
           </li>

@@ -439,7 +439,7 @@ export async function buildShareImage(
   ctx.fillStyle = MUTED_DK;
   ctx.letterSpacing = "0.06em";
   ctx.font = `400 17px ${fam.byline}`;
-  ctx.fillText("YOUR FINAL STANDINGS — 82-GAME SEASON", CONTENT_L, eyebrowY);
+  ctx.fillText("YOUR FINAL STANDINGS · 82-GAME SEASON", CONTENT_L, eyebrowY);
   ctx.restore();
 
   // Big W–L baseline. Anton ~210px; wins flame, dash muted, losses ink.
@@ -621,7 +621,7 @@ export async function buildTournamentShareImage(args: {
   ctx.letterSpacing = "0.06em";
   ctx.font = `400 17px ${fam.byline}`;
   ctx.fillText(
-    isDaily ? "YOUR ENTRY — BRACKET RESULT" : "YOUR ENTRY — PLAYOFF RESULT",
+    isDaily ? "YOUR ENTRY · BRACKET RESULT" : "YOUR ENTRY · PLAYOFF RESULT",
     CONTENT_L,
     200,
   );

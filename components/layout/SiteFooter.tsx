@@ -60,7 +60,7 @@ function FooterCopy({ split = false }: { split?: boolean }) {
             : "mt-1 font-byline text-[11px] text-[var(--md-ink-muted)]"
         }
       >
-        An independent project{split ? " — " : ", "}not affiliated with or endorsed by the NBA.
+        An independent project{split ? ", " : ", "}not affiliated with or endorsed by the NBA.
       </p>
     </>
   );

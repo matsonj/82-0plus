@@ -358,7 +358,7 @@ export function TournamentResults({
 
   const share = async () => {
     if (!myTeam || !shareReady || !shareBlob) return;
-    const text = `daily82 Tournament · ${you.name} — ${reachedRoundSentence(you.reachedRound, isChampion)}\n${shareLink}`;
+    const text = `daily82 Tournament · ${you.name}: ${reachedRoundSentence(you.reachedRound, isChampion)}\n${shareLink}`;
     const outcome = await presentShare({
       blob: shareBlob,
       filename: "daily82-tournament.png",
@@ -573,7 +573,7 @@ export function TournamentResults({
                 </span>
                 {detail && (
                   <span className="font-mono text-[15px]" style={{ color: "var(--md-ink-muted)" }}>
-                    — {detail}
+                    · {detail}
                   </span>
                 )}
               </div>

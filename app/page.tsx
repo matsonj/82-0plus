@@ -415,7 +415,7 @@ export default function Home() {
           }
           if (outcome === "pending") {
             setDailyGateError(
-              "Your result for this day hasn't saved yet — check your connection and try again.",
+              "Your result for this day hasn't saved yet. Check your connection and try again.",
             );
             return;
           }
@@ -430,7 +430,7 @@ export default function Home() {
         // Fail closed: never draft on a lookup failure (that's the replay hole).
         setDailyChecking(false);
         setDailyGateError(
-          "Couldn't verify your daily status — check your connection and try again.",
+          "Couldn't verify your daily status. Check your connection and try again.",
         );
       }
     },
@@ -825,7 +825,7 @@ export default function Home() {
       : `${SITE_URL}/s?r=${encodeURIComponent(shareCodeStr)}`;
   const shareText = result
     ? [
-        `82-0+ 🏀 ${result.wins}-${result.losses} (${result.netRating >= 0 ? "+" : ""}${result.netRating} net) · ${modeLabel}`,
+        `Daily82 🏀 ${result.wins}-${result.losses} (${result.netRating >= 0 ? "+" : ""}${result.netRating} net) · ${modeLabel}`,
         // Daily: don't list the picks in the copyable text either (no spoilers).
         ...(gameType === "daily"
           ? []
@@ -866,9 +866,9 @@ export default function Home() {
     }
     const url = `${SITE_URL}/d/${today}${token ? `?s=${encodeURIComponent(token)}` : ""}`;
     const rec = todayResult ? `${todayResult.wins}-${todayResult.losses}` : "";
-    const text = `82-0+ 🏀 Daily${rec ? ` ${rec}` : ""}${
+    const text = `Daily82 🏀 Daily${rec ? ` ${rec}` : ""}${
       todayResult?.perfect ? " (perfect!)" : ""
-    } — same five rolls, beat my record:`;
+    }. Same five rolls, beat my record:`;
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
         await navigator.share({ text, url });
@@ -998,7 +998,7 @@ export default function Home() {
           <div className="mt-3 flex items-center gap-2">
             <span aria-hidden>🔒</span>
             <span className="font-byline text-[12px] text-[var(--md-paper-3)]">
-              Name + PIN — your account, across devices.
+              Name + PIN is your account, across devices.
             </span>
           </div>
         </>

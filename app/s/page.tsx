@@ -25,7 +25,7 @@ export async function generateMetadata({
 
   const sign = data.n >= 0 ? "+" : "";
   const title = data.p
-    ? `daily82 🏆 ${data.w}–${data.l} — a PERFECT season!`
+    ? `daily82 🏆 ${data.w}–${data.l}: a PERFECT season!`
     : `daily82 🏀 ${data.w}–${data.l} (${sign}${data.n.toFixed(1)} net)`;
   const description = `${data.m} · ${data.r
     .map((p) => `${p.t} '${String(p.s).slice(2)} ${p.name}`)
@@ -330,7 +330,7 @@ export default async function SharePage({
         <div className="relative z-10 mx-auto mt-12 w-full max-w-md">
           <div className="md-card md-card--lift flex flex-col gap-4 p-6 text-center">
             <p className="font-mono text-sm text-[var(--md-ink-muted)]">
-              This share link is missing or invalid — but you can still build your own
+              This share link is missing or invalid, but you can still build your own
               undefeated season.
             </p>
             <Link href="/" className="md-btn md-btn--lg">

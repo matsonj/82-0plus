@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
         // Recoverable: tell the UI it can retry the GET (finalization is idempotent).
         return jsonWithSessionHint(
           sessionHint,
-          { error: "still finalizing — try again in a moment", retryable: true },
+          { error: "still finalizing; try again in a moment", retryable: true },
           { status: 503 },
         );
       }

@@ -66,7 +66,7 @@ export const metadata: Metadata = {
         url: "/api/og?v=home",
         width: 1200,
         height: 630,
-        alt: "daily82 · Build an undefeated season — new challenges daily",
+        alt: "daily82 · Build an undefeated season. New challenges daily",
       },
     ],
   },
