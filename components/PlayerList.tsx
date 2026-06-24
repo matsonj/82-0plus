@@ -156,7 +156,9 @@ export function PlayerList({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={`Filter ${team} roster…`}
-        className="md-input"
+        // Mobile draft rosters are short (~14 players) — typing to filter is noise,
+        // so the input is hidden below lg. Browse (Player Cards) keeps it at all sizes.
+        className={`md-input ${browse ? "" : "hidden lg:block"}`}
         style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}
       />
 
@@ -169,7 +171,7 @@ export function PlayerList({
       )}
 
       {mode === "classic" && status === "ok" && (
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex flex-nowrap items-center gap-1 overflow-x-auto">
           <SegmentedControl
             options={POS_FILTERS.map((p) => ({
               value: p,
@@ -177,13 +179,13 @@ export function PlayerList({
             }))}
             value={posFilter}
             onChange={setPosFilter}
-            className="gap-1"
+            className="gap-1 shrink-0"
           />
           <span
-            className="mx-1 h-4 w-px self-center bg-[var(--md-ink)] opacity-30"
+            className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--md-ink)] opacity-30"
             aria-hidden
           />
-          <span className="mr-0.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+          <span className="mr-0.5 shrink-0 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
             Sort
           </span>
           <SegmentedControl
@@ -193,7 +195,7 @@ export function PlayerList({
             }))}
             value={sortKey}
             onChange={setSortKey}
-            className="gap-1"
+            className="gap-1 shrink-0"
           />
         </div>
       )}

@@ -265,7 +265,7 @@ export function LineupDraftBoard({
             {counter}
           </span>
         </div>
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-4 flex flex-col gap-4 lg:mt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-2">
           {/* Pass the team straight through — the parent already nulls it only
               while the TEAM is rolling (full roll / team skip) and keeps it set
               through a decade skip, so a decade skip won't spin the team reel.
@@ -278,11 +278,7 @@ export function LineupDraftBoard({
             size="lg"
             onSettled={handleReelSettled}
           />
-          {controls && (
-            <div className="flex flex-col items-end gap-2">
-              {controls({ pending: pending !== null, rolling })}
-            </div>
-          )}
+          {controls && controls({ pending: pending !== null, rolling })}
         </div>
       </div>
     ) : null;
@@ -432,7 +428,7 @@ export function LineupDraftBoard({
               ? "Tap a glowing slot to move him (or tap him again to cancel)."
               : allPlaced
                 ? "Tap a player, then a slot, to rearrange."
-                : "Draft a player below, then slot him. Eligible open slots light up."}
+                : "Draft below, then assign to an open slot."}
         </div>
       </div>
     );
@@ -522,7 +518,7 @@ export function LineupDraftBoard({
   return (
     <>
       {/* ── MOBILE layout (hidden at lg) ── */}
-      <div className="flex flex-col gap-5 lg:hidden">
+      <div className="flex flex-col gap-4 lg:hidden">
         {/* Progress bar */}
         {ProgressBar({})}
 
