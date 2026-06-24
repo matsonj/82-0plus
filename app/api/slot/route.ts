@@ -1,5 +1,10 @@
 import { NextRequest } from "next/server";
-import { getTeamWeights, getPlayableTeams, getPlayers } from "@/lib/queries";
+import {
+  getTeamWeights,
+  getPlayableTeams,
+  getPlayers,
+  getTeamDecades,
+} from "@/lib/queries";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { signRoll } from "@/lib/tournamentToken";
 import type { PublicPlayer } from "@/lib/types";
@@ -82,6 +87,12 @@ export async function GET(req: NextRequest) {
       if (filtered.length >= 2) pool = filtered;
     }
     const team = weightedPick(pool);
+    // The landed team's full set of draftable decades (≥ MIN_PLAYERS_PER_COMBO),
+    // so the client knows whether a same-team decade skip is even possible. Some
+    // teams (e.g. KCO and the other defunct/short-lived franchises) only clear the
+    // bar in a single decade — the decade-skip control gates on this so it can't
+    // be pressed into a dead end. Cheap: reads the already-warm in-memory index.
+    const teamDecades = await getTeamDecades(team, queryOptions);
     // Signed receipt: proof the server randomly rolled this (team, decade),
     // redeemable when entering the tournament. The decade-skip exchanges it for a
     // new-decade receipt via /api/team-decades.
@@ -90,12 +101,14 @@ export async function GET(req: NextRequest) {
       decade: number;
       receipt: string;
       reelTeams: string[];
+      teamDecades: number[];
       players?: PublicPlayer[];
     } = {
       team,
       decade,
       receipt: signRoll(team, decade),
       reelTeams: pool.map((item) => item.team),
+      teamDecades,
     };
     if (includePlayers) {
       body.players = await getPlayers(team, decade, mode, queryOptions);
