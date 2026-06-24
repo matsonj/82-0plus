@@ -143,6 +143,12 @@ export default function Home() {
   const [currentReceipt, setCurrentReceipt] = useState<string>("");
   const [teamReelPool, setTeamReelPool] = useState<string[]>([]);
   const [decadeReelPool, setDecadeReelPool] = useState<number[]>([]);
+  // The CURRENT team's draftable decades (from /api/slot or the decade-skip
+  // exchange). Distinct from `decadeReelPool` (league-wide, drives the reel
+  // flicker): this is the team's real eras, so the decade-skip control can be
+  // disabled when the team has nowhere else to go (e.g. single-decade defunct
+  // franchises like KCO) instead of dead-ending in an error.
+  const [currentTeamDecades, setCurrentTeamDecades] = useState<number[]>([]);
   const [simulating, setSimulating] = useState(false);
   const [booting, setBooting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,6 +207,7 @@ export default function Home() {
     setDailyRosters({});
     setTeamReelPool([]);
     setDecadeReelPool([]);
+    setCurrentTeamDecades([]);
     setError(null);
   }, []);
 
@@ -225,6 +232,9 @@ export default function Home() {
       setCurrentPlayers(null);
       setTeamReelPool([]);
       setDecadeReelPool(decades);
+      // Cleared until the team resolves below, so the decade-skip control can't
+      // briefly read a prior team's eras between this roll and its response.
+      setCurrentTeamDecades([]);
       try {
         const url = `/api/slot?decade=${decade}${excludes.length ? `&exclude=${excludes.join(",")}` : ""}&includePlayers=1&mode=${mode}`;
         const res = await fetch(url);
@@ -235,6 +245,9 @@ export default function Home() {
         setCurrentTeam(data.team);
         setCurrentReceipt(data.receipt ?? "");
         setCurrentPlayers(Array.isArray(data.players) ? data.players : null);
+        setCurrentTeamDecades(
+          Array.isArray(data.teamDecades) ? data.teamDecades : [],
+        );
       } catch {
         if (rollSeq.current === myId) setError("Couldn't roll a team. Try again.");
       } finally {
@@ -550,6 +563,7 @@ export default function Home() {
     setDailyRosters({});
     setTeamReelPool([]);
     setDecadeReelPool([]);
+    setCurrentTeamDecades([]);
     setLineup(KINDS.map(() => null));
     setCurrentDecade(null);
     setCurrentTeam(null);
@@ -677,6 +691,7 @@ export default function Home() {
       // Same team, new era — adopt the freshly-minted receipt for that era.
       const newDecade = pickWeightedDecade(others, usage);
       setDecadeReelPool(teamDecades ?? []);
+      setCurrentTeamDecades(teamDecades ?? []);
       setCurrentDecade(newDecade);
       setCurrentReceipt(receipts?.[newDecade] ?? "");
       setCurrentPlayers(null);
@@ -1226,7 +1241,9 @@ export default function Home() {
                   <button
                     className="md-btn md-btn--sm md-btn--ink"
                     onClick={decadeSkip}
-                    disabled={decadeSkips <= 0 || r || decades.length < 2}
+                    disabled={
+                      decadeSkips <= 0 || r || currentTeamDecades.length < 2
+                    }
                   >
                     ↻ New decade ({decadeSkips})
                   </button>

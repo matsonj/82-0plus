@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   Anton,
   Archivo,
@@ -77,6 +77,12 @@ export const metadata: Metadata = {
       "New challenges daily. Draft a 5-man roster across the decades and see if it can go undefeated.",
     images: ["/api/og?v=home"],
   },
+};
+
+// Tints the mobile browser address bar / installed-app status bar with the SLAM
+// flame, matching the manifest theme_color (see app/manifest.ts).
+export const viewport: Viewport = {
+  themeColor: "#E5261F",
 };
 
 export default function RootLayout({
