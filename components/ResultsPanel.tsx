@@ -313,6 +313,160 @@ function TheFiveCard({
   );
 }
 
+// ---- THE FIVE (mobile): cream lineup table -------------------------------
+// Mobile-only (lg:hidden) counterpart to the dark desktop TheFiveCard, matching
+// artboard 871-0: ink-on-paper, Anton heading, Space Mono rows, a filled ink seed
+// chip with a gold numeral, and the GQ rating fenced off by a hairline rule. No
+// team-totals row on mobile (the dark desktop card keeps that).
+function MobileFiveTable({
+  roster,
+  cardsOn,
+  mode,
+  onCardOpen,
+}: {
+  roster: SimRosterLine[];
+  cardsOn: boolean;
+  mode: GameMode;
+  onCardOpen: (i: number) => void;
+}) {
+  const statW = 40;
+  const gqGap = 6; // extra space before GQ — the divider sits in it
+  const headStyle = {
+    fontSize: 10,
+    letterSpacing: "0.08em",
+    color: "#5c564b",
+  } as const;
+  return (
+    <div className="lg:hidden">
+      {/* Heading */}
+      <div className="flex items-end justify-between gap-3 pb-3">
+        <h3
+          className="font-cover uppercase leading-none"
+          style={{ fontSize: 30, letterSpacing: "0.01em", color: "var(--md-ink)" }}
+        >
+          The Five
+        </h3>
+        <span
+          className="font-mono uppercase"
+          style={{ fontSize: 11, letterSpacing: "0.06em", color: "#7a7060" }}
+        >
+          Starters
+        </span>
+      </div>
+
+      {/* Table — relative so the GQ divider can span the header + rows */}
+      <div className="relative">
+        {/* Column header */}
+        <div
+          className="flex items-center gap-1 py-[7px]"
+          style={{
+            borderTop: "2px solid var(--md-ink)",
+            borderBottom: "1px solid var(--md-ink)",
+          }}
+        >
+          <span className="shrink-0 font-mono uppercase" style={{ width: 26, ...headStyle }}>
+            #
+          </span>
+          <span className="grow font-mono uppercase" style={{ flexBasis: 0, ...headStyle }}>
+            Player
+          </span>
+          {["PTS", "REB", "AST"].map((l) => (
+            <span
+              key={l}
+              className="shrink-0 text-right font-mono uppercase"
+              style={{ width: statW, ...headStyle }}
+            >
+              {l}
+            </span>
+          ))}
+          <span
+            className="shrink-0 text-right font-mono uppercase"
+            style={{ width: statW, marginLeft: gqGap, ...headStyle }}
+          >
+            GQ
+          </span>
+        </div>
+
+        {/* Player rows */}
+        {roster.map((r, i) => {
+          const yearStr = String(r.best_season).slice(2);
+          const allDefSuffix =
+            mode === "classic" && r.allDef === 1
+              ? " 🥇"
+              : mode === "classic" && r.allDef === 2
+                ? " 🥈"
+                : "";
+          const isLast = i === roster.length - 1;
+          const row = (
+            <div
+              className="flex items-center gap-1 py-[11px]"
+              style={{ borderBottom: isLast ? "2px solid var(--md-ink)" : "1px solid #c9c0ad" }}
+            >
+              {/* Filled ink seed chip with gold numeral */}
+              <span
+                className="flex shrink-0 items-center justify-center font-cond font-bold"
+                style={{ width: 26, height: 26, background: "var(--md-ink)", color: "var(--md-yellow)", fontSize: 14 }}
+              >
+                {i + 1}
+              </span>
+              {/* Full name + team / year */}
+              <div className="flex grow flex-col" style={{ flexBasis: 0, minWidth: 0, gap: 2 }}>
+                <div
+                  className="font-mono truncate"
+                  style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--md-ink)" }}
+                >
+                  {r.player_name}
+                  {allDefSuffix}
+                </div>
+                <div
+                  className="font-mono uppercase leading-none"
+                  style={{ fontSize: 11, letterSpacing: "0.04em", color: "#7a7060" }}
+                >
+                  {r.team} &rsquo;{yearStr}
+                </div>
+              </div>
+              {([r.pts, r.reb, r.ast] as number[]).map((v, si) => (
+                <span
+                  key={si}
+                  className="shrink-0 text-right font-mono font-bold tabular-nums"
+                  style={{ width: statW, fontSize: 15, color: "var(--md-ink)" }}
+                >
+                  {v.toFixed(1)}
+                </span>
+              ))}
+              {/* GQ — quality rating, fenced off by the divider */}
+              <span
+                className="shrink-0 text-right font-mono font-bold tabular-nums"
+                style={{ width: statW, marginLeft: gqGap, fontSize: 15, color: "var(--md-ink)" }}
+              >
+                {r.gq.toFixed(1)}
+              </span>
+            </div>
+          );
+          return cardsOn ? (
+            <button
+              key={r.entity_id}
+              type="button"
+              className="block w-full text-left transition-colors hover:bg-[rgba(21,17,14,0.04)]"
+              onClick={() => onCardOpen(i)}
+            >
+              {row}
+            </button>
+          ) : (
+            <div key={r.entity_id}>{row}</div>
+          );
+        })}
+
+        {/* GQ divider — hairline fencing the rating off from the box scores. */}
+        <div
+          aria-hidden
+          style={{ position: "absolute", top: 0, bottom: 0, right: 45, width: 1, background: "#b8ac90", pointerEvents: "none" }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ---- Mobile ink money card (record + net) --------------------------------
 // On mobile (871-0), the W-L record and net rating live inside a dark ink card
 // matching the cover card style. On desktop this is replaced by the cream left
@@ -929,13 +1083,22 @@ export function ResultsPanel({
               Width tuned to ~48% of the max-w-5xl result column so it balances
               the left column and the subtitle fits on one line (matches 872-0). */}
           <div className="order-1 lg:order-2 lg:w-[480px] lg:shrink-0">
-            <TheFiveCard
+            {/* Mobile: cream ink-on-paper table (871-0). Desktop: dark card (872-0). */}
+            <MobileFiveTable
               roster={roster}
-              result={result}
               cardsOn={cardsOn}
               mode={mode}
               onCardOpen={openCard}
             />
+            <div className="hidden lg:block">
+              <TheFiveCard
+                roster={roster}
+                result={result}
+                cardsOn={cardsOn}
+                mode={mode}
+                onCardOpen={openCard}
+              />
+            </div>
           </div>
         </div>
 
