@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { normalizeName } from "@/lib/tournamentValidation";
+import { pickKey, decadeLabel, gqDiffView, slotWinner } from "@/lib/rosterCompare";
 import { SITE_URL } from "@/lib/site";
 import { presentShare } from "@/lib/shareActions";
 import type { DailyResult } from "@/lib/dailyResults";
@@ -519,10 +520,8 @@ function TournCard({
 }
 
 // ── Roster compare ──
-// A stable per-player identity (matches BracketView.playerKey) so the same pick
-// shows up on both sides of the head-to-head.
-const pickKey = (p: { name: string; team: string; season: number }) =>
-  `${p.name}|${p.team}|${p.season}`;
+// pickKey / decadeLabel / gqDiffView / slotWinner live in lib/rosterCompare (pure
+// + unit-tested). Below are just the React cells that render their output.
 
 // "GSW '10s" — the slot's shared team + decade (everyone drafts the same slot).
 function teamEra(line: { team: string; season: number }): string {
@@ -540,61 +539,113 @@ function RosterComparison({ sharer, you }: { sharer: Sharer; you: DailyResult })
   );
 }
 
-// One drafted player as `name GQ`, with the GQ hugging its own name (not floated
-// to the column edge, which read as if it belonged to the next player). The GQ
-// goes coral only when `better` — i.e. it's the higher-graded pick for the slot.
-// Shared picks (you both took the same player) go italic/muted.
-function PickCell({
-  line,
-  shared,
-  better,
-}: {
-  line: { name: string; gq: number } | undefined;
-  shared: boolean;
-  better: boolean;
-}) {
-  if (!line) {
-    return <span className="pr-3 font-mono text-[12px] text-[var(--md-ink-muted)]">&mdash;</span>;
-  }
+// Monochrome team chip from the SLAM design system (team-color accent bar dropped
+// — team colors aren't used anywhere else in the app).
+function TeamBadge({ team }: { team: string }) {
   return (
     <span
-      className="flex min-w-0 items-baseline gap-2 pr-3"
-      title={shared ? "You both picked this player" : undefined}
+      className="font-archivo flex h-[30px] w-10 shrink-0 items-center justify-center overflow-clip border-2 border-[var(--md-ink)]"
+      style={{
+        background: "var(--md-ink)",
+        color: "var(--md-paper)",
+        fontVariationSettings: '"wght" 900, "wdth" 80',
+        fontSize: 14,
+        letterSpacing: "-0.02em",
+      }}
     >
-      <span
-        className={`min-w-0 truncate font-mono text-[13px] font-bold leading-tight ${shared ? "italic" : ""}`}
-        style={{ color: shared ? "var(--md-ink-muted)" : "var(--md-ink)" }}
-      >
-        {line.name}
-      </span>
-      <span
-        className="shrink-0 font-mono text-[12px] font-bold tabular-nums"
-        style={{ color: better ? "var(--md-coral)" : "var(--md-ink-muted)" }}
-        title="Game Quality"
-      >
-        {line.gq.toFixed(1)}
-      </span>
+      {team}
     </span>
   );
 }
 
-// Interleaved head-to-head: one row per slot (same team/era for both), the
-// sharer's pick against yours. PTS is the only stat (the daily slot's team/era is
-// identical, so the player choice is what differs).
-//
-// Pairing is by TEAM, not array index: stored rosters are ordered by the drafted
-// player's real position (hydrateRoster, backcourt→frontcourt), so the same index
-// can be a different board slot for each player. Teams never repeat on a daily
-// board (lib/boardGen), so the team uniquely identifies the slot — and both
-// players drafted from the same five, so every team lines up.
+// One player's name cell. Winner of the slot is coral, the other ink; a shared
+// pick (you both drafted the same player) goes muted italic. `align` faces the
+// name toward the central GQ-DIFF column.
+function PlayerName({
+  line,
+  shared,
+  winner,
+  align,
+}: {
+  line: { name: string } | undefined;
+  shared: boolean;
+  winner: boolean;
+  align: "left" | "right";
+}) {
+  if (!line) return <span className="min-w-0 flex-1" aria-hidden />;
+  return (
+    <span
+      className={`min-w-0 flex-1 truncate font-mono text-[13px] leading-tight ${
+        shared ? "font-normal italic" : "font-bold"
+      } ${align === "right" ? "text-right" : "text-left"}`}
+      style={{ color: shared ? "var(--md-ink-muted)" : winner ? "var(--md-coral)" : "var(--md-ink)" }}
+      title={shared ? "You both picked this player" : undefined}
+    >
+      {line.name}
+    </span>
+  );
+}
+
+// The central GQ-DIFF cell, signed from YOUR side (positive = you're ahead).
+// Visual impact scales with the gap: ≤10 a quiet number; >10 a marker stamp;
+// >20 a bigger stamp. Colour encodes direction — press-yellow when you're ahead,
+// inverted flame-red when you're behind. A push (same player / no gap) is a dash.
+function GqDiff({
+  you,
+  them,
+  shared,
+}: {
+  you: { gq: number };
+  them: { gq: number } | undefined;
+  shared: boolean;
+}) {
+  const v = gqDiffView(you.gq, them?.gq, shared);
+  if (v.kind === "dash") {
+    return <span className="font-mono text-[12px] text-[var(--md-paper-3)]">&mdash;</span>;
+  }
+  if (v.kind === "number") {
+    return (
+      <span className="font-mono text-[13px] font-bold tabular-nums text-[var(--md-ink)]">
+        {v.text}
+      </span>
+    );
+  }
+  // Marker stamp: press-yellow when you're ahead (flame-pink offset), inverted
+  // flame-red when you're behind (press-yellow offset); bigger when the gap > 20.
+  return (
+    <span
+      className="font-marker inline-flex items-center border-2 border-[var(--md-ink)]"
+      style={{
+        background: v.ahead ? "var(--md-yellow)" : "var(--md-coral)",
+        color: v.ahead ? "var(--md-ink)" : "var(--md-white)",
+        boxShadow: v.ahead ? "2px 2px 0 0 #e0218a" : "2px 2px 0 0 var(--md-yellow)",
+        padding: v.big ? "4px 12px" : "3px 10px",
+        fontSize: v.big ? 18 : 15,
+        lineHeight: v.big ? "20px" : "16px",
+        rotate: "-4deg",
+      }}
+    >
+      {v.text}
+    </span>
+  );
+}
+
+// Head-to-head, one row per slot: YOU ▸ | GQ DIFF | ◂ opponent, the two picks
+// flanking a central signed GQ difference. Pairing is by TEAM, not array index:
+// stored rosters are ordered by the drafted player's real position (hydrateRoster,
+// backcourt→frontcourt), so the same index can be a different board slot for each
+// player. Teams never repeat on a daily board (lib/boardGen), so the team uniquely
+// identifies the slot — and both players drafted from the same five, so every row
+// lines up.
 function RosterVersus({ sharer, you }: { sharer: Sharer; you: DailyResult }) {
   const yours = you.roster;
   const theirByTeam = new Map(sharer.roster.map((p) => [p.team, p]));
-  const cols = "28px 84px minmax(0,1fr) minmax(0,1fr)";
+  const head =
+    "shrink-0 font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink)]";
 
   return (
     <div className="mt-8">
-      <div className="mb-3 flex items-baseline gap-2 border-b border-[var(--md-ink)] pb-2">
+      <div className="mb-3 flex items-baseline gap-2 border-b-2 border-[var(--md-ink)] pb-2">
         <span
           className="font-archivo uppercase"
           style={{ fontVariationSettings: '"wdth" 88', fontWeight: 800, fontSize: 18, letterSpacing: "-0.01em" }}
@@ -602,64 +653,53 @@ function RosterVersus({ sharer, you }: { sharer: Sharer; you: DailyResult }) {
           Roster Comparison
         </span>
         <span className="h-px flex-1 bg-[var(--md-paper-3)]" aria-hidden />
-        <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
-          GQ per pick · <span style={{ color: "var(--md-coral)" }}>coral</span> = higher
-        </span>
       </div>
 
       {/* Column headers */}
-      <div
-        className="mb-1 grid items-baseline border-b border-[var(--md-paper-3)] pb-2"
-        style={{ gridTemplateColumns: cols }}
-      >
-        <span className="font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-          #
-        </span>
-        <span className="font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-          Team · Era
-        </span>
-        <span
-          className="min-w-0 truncate pr-2 font-cond text-[10px] font-bold uppercase tracking-[0.12em]"
-          style={{ color: "var(--md-coral)" }}
-        >
-          {sharer.name}
-        </span>
-        <span className="font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)]">
-          You
-        </span>
+      <div className="mb-1 flex items-center gap-2.5 border-b border-[var(--md-paper-3)] pb-2 sm:gap-3.5">
+        <span className={`${head} w-6 sm:w-7`}>#</span>
+        <span className={`${head} w-10 sm:w-[130px]`}>Era</span>
+        <span className={`${head} min-w-0 flex-1 grow truncate text-right`}>You</span>
+        <span className={`${head} w-[96px] text-center sm:w-[140px]`}>GQ Diff</span>
+        <span className={`${head} min-w-0 flex-1 grow truncate`}>{sharer.name}</span>
       </div>
 
       {yours.map((mine, i) => {
-        // Match the sharer's pick for the SAME board slot by team (see above).
-        const their = theirByTeam.get(mine.team);
-        const shared = !!their && pickKey(mine) === pickKey(their);
-        // Per slot, the higher GQ is the better pick (coral). Never on a shared
-        // pick (same player → same GQ) or when a side is missing.
-        const mineBetter = !shared && !!their && mine.gq > their.gq;
-        const theirBetter = !shared && !!their && their.gq > mine.gq;
+        // Match the opponent's pick for the SAME board slot by team (see above).
+        const them = theirByTeam.get(mine.team);
+        const shared = !!them && pickKey(mine) === pickKey(them);
+        const winner = slotWinner(mine.gq, them?.gq, shared);
+        const youWin = winner === "you";
+        const themWin = winner === "them";
         return (
           <div
             key={mine.team}
-            className="grid items-center border-b border-[var(--md-paper-3)] py-2.5"
-            style={{
-              gridTemplateColumns: cols,
-              background: i % 2 === 1 ? "var(--md-paper-2)" : undefined,
-            }}
+            className="flex items-center gap-2.5 border-b border-[var(--md-paper-3)] py-3 sm:gap-3.5"
           >
-            <span
-              className="font-mono flex h-5 w-5 items-center justify-center border border-[var(--md-ink)] text-[11px] font-bold tabular-nums"
-              style={{ background: "var(--md-white)" }}
-            >
-              {i + 1}
+            {/* Slot number */}
+            <span className="flex w-6 shrink-0 sm:w-7">
+              <span
+                className="font-mono flex h-[22px] w-[22px] items-center justify-center border border-[var(--md-ink)] text-[11px] font-bold tabular-nums"
+                style={{ background: "var(--md-white)" }}
+              >
+                {i + 1}
+              </span>
             </span>
-            <span
-              className="font-cond text-[10px] font-bold uppercase tracking-[0.06em]"
-              style={{ color: "var(--md-ink-muted)" }}
-            >
-              {teamEra(mine)}
+            {/* Team badge + decade */}
+            <span className="flex w-10 shrink-0 items-center gap-2 sm:w-[130px]">
+              <TeamBadge team={mine.team} />
+              <span className="hidden font-cond text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--md-ink-muted)] sm:inline">
+                {decadeLabel(mine.season)}
+              </span>
             </span>
-            <PickCell line={their} shared={shared} better={theirBetter} />
-            <PickCell line={mine} shared={shared} better={mineBetter} />
+            {/* Your pick (faces center) */}
+            <PlayerName line={mine} shared={shared} winner={youWin} align="right" />
+            {/* Signed GQ difference, from your side */}
+            <span className="flex w-[96px] shrink-0 items-center justify-center sm:w-[140px]">
+              <GqDiff you={mine} them={them} shared={shared} />
+            </span>
+            {/* Opponent's pick (faces center) */}
+            <PlayerName line={them} shared={shared} winner={themWin} align="left" />
           </div>
         );
       })}
