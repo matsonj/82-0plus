@@ -214,6 +214,18 @@ body {
   }
 }
 
+/* iOS Safari zooms any focused <input> whose font-size is < 16px, which on a
+   phone yanks the whole page in and breaks the layout (e.g. the Player Cards
+   search, set to 13px). Force a 16px floor on touch devices so focusing a
+   search/filter field never triggers the zoom. Unlayered + !important so it
+   beats the utility class AND the inline font-size override; desktop (fine
+   pointer) keeps the smaller designed sizes. */
+@media (pointer: coarse) {
+  .md-input {
+    font-size: 16px !important;
+  }
+}
+
 /* ---------- Team badge ---------- */
 @layer components {
   .md-badge {
