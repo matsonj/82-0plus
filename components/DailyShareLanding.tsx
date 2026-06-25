@@ -889,8 +889,13 @@ async function findTournamentRun(
     });
     if (!res.ok) return null;
     const data = (await res.json()) as TournamentLookupResponse;
-    // teams are sorted newest-first; the first daily match for this date wins.
-    const team = data.teams.find((t) => t.mode === "daily" && t.dailyDate === date);
+    // Only a REAL entered bracket is a tournament run. "My Teams" also surfaces
+    // synthesized daily-COMPLETION rows (teamId "daily:<date>", record 0–0,
+    // reached_round 0) for dailies you played but never entered — those must not
+    // render here as a bogus 0–0 "Lost R1" tournament card. Skip them by their marker.
+    const team = data.teams.find(
+      (t) => t.mode === "daily" && t.dailyDate === date && !t.teamId.startsWith("daily:"),
+    );
     if (!team) return null;
     return {
       recordW: team.recordW,
