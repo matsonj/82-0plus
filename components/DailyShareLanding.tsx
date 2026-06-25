@@ -578,10 +578,15 @@ function PickCell({
 // Interleaved head-to-head: one row per slot (same team/era for both), the
 // sharer's pick against yours. PTS is the only stat (the daily slot's team/era is
 // identical, so the player choice is what differs).
+//
+// Pairing is by TEAM, not array index: stored rosters are ordered by the drafted
+// player's real position (hydrateRoster, backcourt→frontcourt), so the same index
+// can be a different board slot for each player. Teams never repeat on a daily
+// board (lib/boardGen), so the team uniquely identifies the slot — and both
+// players drafted from the same five, so every team lines up.
 function RosterVersus({ sharer, you }: { sharer: Sharer; you: DailyResult }) {
   const yours = you.roster;
-  const theirs = sharer.roster;
-  const rows = Math.max(yours.length, theirs.length);
+  const theirByTeam = new Map(sharer.roster.map((p) => [p.team, p]));
   const cols = "28px 84px minmax(0,1fr) minmax(0,1fr)";
 
   return (
@@ -619,15 +624,13 @@ function RosterVersus({ sharer, you }: { sharer: Sharer; you: DailyResult }) {
         </span>
       </div>
 
-      {Array.from({ length: rows }).map((_, i) => {
-        const mine = yours[i];
-        const their = theirs[i];
-        // Both sides share the slot's team + decade; read it from whichever exists.
-        const era = mine ?? their;
-        const shared = !!mine && !!their && pickKey(mine) === pickKey(their);
+      {yours.map((mine, i) => {
+        // Match the sharer's pick for the SAME board slot by team (see above).
+        const their = theirByTeam.get(mine.team);
+        const shared = !!their && pickKey(mine) === pickKey(their);
         return (
           <div
-            key={i}
+            key={mine.team}
             className="grid items-center border-b border-[var(--md-paper-3)] py-2.5"
             style={{
               gridTemplateColumns: cols,
@@ -644,7 +647,7 @@ function RosterVersus({ sharer, you }: { sharer: Sharer; you: DailyResult }) {
               className="font-cond text-[10px] font-bold uppercase tracking-[0.06em]"
               style={{ color: "var(--md-ink-muted)" }}
             >
-              {era ? teamEra(era) : "—"}
+              {teamEra(mine)}
             </span>
             <PickCell line={their} shared={shared} />
             <PickCell line={mine} shared={shared} />
