@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { track } from "@vercel/analytics";
 import type { SimRosterLine, SimResult, GameMode } from "@/lib/types";
 import { buildShareImage } from "@/lib/shareImage";
 import { type CardPlayer, usePlayerCardDeck } from "@/components/PlayerCard";
@@ -512,6 +513,10 @@ export function ResultsPanel({
 
   const share = async () => {
     if (!shareBlob || !shareReady) return;
+    // Telemetry: the post-game share (virality signal), tagged by mode.
+    track("result_shared", {
+      mode: isDaily ? "daily" : mode === "hoopiq" ? "ranked" : "classic",
+    });
     const outcome = await presentShare({
       blob: shareBlob,
       filename: "daily82-season.png",

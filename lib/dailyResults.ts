@@ -1,4 +1,5 @@
 import "server-only";
+import { track } from "@vercel/analytics/server";
 import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
 import { queryRW, ensureSchema } from "./tournamentDb";
 import { getUsersByName, insertUser } from "./tournamentQueries";
@@ -120,6 +121,11 @@ async function authenticateUncoalesced(
   const salt = randomBytes(16).toString("hex");
   const pinHash = scryptSync(pin, salt, 32).toString("hex");
   const userId = await insertUser({ name, nameNorm, pinHash, pinSalt: salt });
+  // Telemetry: a brand-new account (first sight of this name+PIN). This is the
+  // ONLY place a user row is created, so it catches signups from every entry
+  // point (daily sign-in + tournament register/create). Never let an analytics
+  // hiccup break account creation.
+  await track("account_created").catch(() => {});
   return { ok: true, userId, name, nameNorm };
 }
 

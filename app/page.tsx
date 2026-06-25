@@ -30,6 +30,7 @@ import { HomeMenu } from "@/components/home/HomeMenu";
 import { Capsule } from "@/components/ui";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
+import { track } from "@vercel/analytics";
 import { encodeShare } from "@/lib/shareCode";
 import { SITE_URL } from "@/lib/site";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
@@ -190,6 +191,16 @@ export default function Home() {
   const draftDone = draftedCount === KINDS.length;
 
   const resetDraftState = useCallback((nextMode: GameMode, nextType: GameType) => {
+    // Telemetry: every new draft (classic / ranked / daily) flows through this
+    // single reset, so it's the one chokepoint for "game started", tagged by mode.
+    track("game_started", {
+      mode:
+        nextType === "daily"
+          ? "daily"
+          : nextMode === "hoopiq"
+            ? "ranked"
+            : "classic",
+    });
     setMode(nextMode);
     setGameType(nextType);
     setResult(null);
@@ -732,6 +743,15 @@ export default function Home() {
       const r = data.result as SimResult;
       setResult(r);
       setResultRoster((data.roster as SimRosterLine[]) ?? []);
+      // Telemetry: core-loop completion — the player reached the sim payoff.
+      track("season_simulated", {
+        mode:
+          gameType === "daily"
+            ? "daily"
+            : mode === "hoopiq"
+              ? "ranked"
+              : "classic",
+      });
       if (gameType === "daily") {
         const rec = { wins: r.wins, losses: r.losses, perfect: r.perfect };
         // The DATE that was played (today, or an archived day on replay). The
@@ -869,6 +889,8 @@ export default function Home() {
     const text = `Daily82 🏀${rec ? ` ${rec}` : ""}${
       todayResult?.perfect ? " (perfect!)" : ""
     }. Same five rolls, beat my record:`;
+    // Telemetry: a daily result re-shared from the menu (virality signal).
+    track("result_shared", { mode: "daily" });
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
         await navigator.share({ text, url });
