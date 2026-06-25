@@ -15,6 +15,17 @@ export interface DailyShareTourn {
   r: number; // reached round: 0 = lost R1 … 4 = champion
 }
 
+/** One of the sharer's five picks, in lineup slot order — for a head-to-head
+ *  roster compare. Stats beyond pts are intentionally omitted to keep the URL
+ *  small (the daily slot's team/era is identical for both players, so only the
+ *  player choice + scoring differs). */
+export interface DailyShareRosterLine {
+  n: string; // player name
+  tm: string; // team
+  s: number; // exact season (year) the player was drafted from
+  pts: number; // points per game (one decimal)
+}
+
 export interface DailyShare {
   d: string; // date YYYY-MM-DD
   u: string; // sharer name
@@ -23,6 +34,15 @@ export interface DailyShare {
   n: number; // projected scoring margin (one decimal)
   p: boolean; // perfect
   t?: DailyShareTourn; // optional: the sharer's tournament run for a head-to-head
+  r?: DailyShareRosterLine[]; // optional: the sharer's five picks for a roster compare
+}
+
+/** Map stored daily roster lines to the compact share shape (structural param so
+ *  this stays decoupled from lib/dailyResults). Used by both mint routes. */
+export function toDailyShareRoster(
+  lines: { name: string; team: string; season: number; pts: number }[],
+): DailyShareRosterLine[] {
+  return lines.map((l) => ({ n: l.name, tm: l.team, s: l.season, pts: l.pts }));
 }
 
 function b64url(s: string): string {
@@ -38,9 +58,17 @@ const sig = (body: string) =>
 export function signDailyShare(p: DailyShare): string {
   // Base = the reg-season head-to-head (always present). A tournament run, when
   // the sharer has one, appends 4 more entries — older 6-entry tokens stay valid.
-  const arr: (string | number)[] = [p.d, p.u, p.w, p.l, Math.round(p.n * 10), p.p ? 1 : 0];
+  // The roster, when present, is appended as ONE trailing nested-array element
+  // (each line `[name, team, season, pts*10]`). Being an array makes it
+  // structurally distinct from the scalar tournament entries, so the decoder can
+  // tell them apart by type regardless of whether a tournament run is also present.
+  const arr: (string | number | (string | number)[][])[] =
+    [p.d, p.u, p.w, p.l, Math.round(p.n * 10), p.p ? 1 : 0];
   if (p.t) {
     arr.push(p.t.w, p.t.l, Math.round(p.t.n * 10), p.t.r);
+  }
+  if (p.r && p.r.length) {
+    arr.push(p.r.map((l) => [l.n, l.tm, l.s, Math.round(l.pts * 10)]));
   }
   const body = b64url(JSON.stringify(arr));
   return `${body}.${sig(body)}`;
@@ -63,14 +91,27 @@ export function verifyDailyShare(
   if (got.length !== want.length) return null;
   if (!timingSafeEqual(Buffer.from(got), Buffer.from(want))) return null;
   try {
-    const a = JSON.parse(fromB64url(body)) as (string | number)[];
+    const a = JSON.parse(fromB64url(body)) as unknown[];
     const share: DailyShare = {
       d: String(a[0]), u: String(a[1]),
       w: Number(a[2]), l: Number(a[3]), n: Number(a[4]) / 10, p: a[5] === 1,
     };
-    // A 10-entry token carries the sharer's tournament run too (see signDailyShare).
-    if (a.length >= 10) {
+    // The roster, when present, is the trailing nested-array element (see
+    // signDailyShare). Stripping it leaves the scalar "core" whose length still
+    // distinguishes the optional tournament run — so old 6-/10-entry tokens, whose
+    // last element is a number, decode exactly as before.
+    const hasRoster = Array.isArray(a[a.length - 1]);
+    const coreLen = a.length - (hasRoster ? 1 : 0);
+    // A 10-entry core carries the sharer's tournament run too (see signDailyShare).
+    if (coreLen >= 10) {
       share.t = { w: Number(a[6]), l: Number(a[7]), n: Number(a[8]) / 10, r: Number(a[9]) };
+    }
+    if (hasRoster) {
+      const raw = a[a.length - 1] as unknown[];
+      share.r = raw.map((line) => {
+        const x = line as (string | number)[];
+        return { n: String(x[0]), tm: String(x[1]), s: Number(x[2]), pts: Number(x[3]) / 10 };
+      });
     }
     // The signed date must equal the date being viewed — otherwise the token is
     // mis-bound (a real record from a different daily).

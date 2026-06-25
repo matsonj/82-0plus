@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { authenticate, getDailyResult } from "@/lib/dailyResults";
 import { getUserTeams } from "@/lib/tournamentQueries";
-import { signDailyShare } from "@/lib/dailyShareToken";
+import { signDailyShare, toDailyShareRoster } from "@/lib/dailyShareToken";
 import { assertTournamentSecret } from "@/lib/secret";
 
 export const runtime = "nodejs";
@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
       t: tourn
         ? { w: tourn.recordW, l: tourn.recordL, n: tourn.realizedMargin, r: tourn.reachedRound }
         : undefined,
+      // The sharer's five picks, so the share link's head-to-head can compare rosters.
+      r: toDailyShareRoster(result.roster),
     });
     return jsonWithSessionHint(sessionHint, { share });
   } catch (err) {

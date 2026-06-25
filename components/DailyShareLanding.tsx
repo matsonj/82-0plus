@@ -50,6 +50,14 @@ interface TournRun {
   reachedRound: number;
 }
 
+/** One of the sharer's five picks, carried in the link for a roster compare. */
+export interface SharerPick {
+  name: string;
+  team: string;
+  season: number;
+  pts: number;
+}
+
 /** Sharer's redacted result carried in the link. */
 export interface Sharer {
   name: string;
@@ -59,6 +67,9 @@ export interface Sharer {
   perfect: boolean;
   // The sharer's tournament run, if the link carried one (added at share time).
   tournament?: TournRun | null;
+  // The sharer's five picks (slot order), when the link carried them. Empty on
+  // older links → the roster compare falls back to the viewer's picks only.
+  roster: SharerPick[];
 }
 
 type State =
@@ -506,19 +517,146 @@ function TournCard({
   );
 }
 
-// ── Your roster table ──
-// Shows the viewer's 5 picks. The sharer's picks are intentionally not in the
-// share token (daily = "no spoilers"), so we show only the viewer's side.
+// ── Roster compare ──
 // Slot labels match the board: G · FLEX · W · FLEX · B.
 const SLOT_LABELS = ["GUARD", "FLEX", "WING", "FLEX", "BIG"] as const;
 
-function RosterComparison({
-  sharer: _sharer,
-  you,
+// A stable per-player identity (matches BracketView.playerKey) so the same pick
+// shows up on both sides of the head-to-head.
+const pickKey = (p: { name: string; team: string; season: number }) =>
+  `${p.name}|${p.team}|${p.season}`;
+
+// "GSW '10s" — the slot's shared team + decade (everyone drafts the same slot).
+function teamEra(line: { team: string; season: number }): string {
+  return `${line.team} '${String(Math.floor(line.season / 10) * 10).slice(2)}s`;
+}
+
+// Roster section: an interleaved slot-by-slot compare when the link carries the
+// sharer's picks; otherwise the viewer's picks only (older links).
+function RosterComparison({ sharer, you }: { sharer: Sharer; you: DailyResult }) {
+  if (!you.roster.length) return null;
+  return sharer.roster.length > 0 ? (
+    <RosterVersus sharer={sharer} you={you} />
+  ) : (
+    <YourPicks you={you} />
+  );
+}
+
+// One drafted player as a name + PTS, right-aligned. Shared picks (you both took
+// the same player) go italic/muted — they're not a differentiator.
+function PickCell({
+  line,
+  shared,
 }: {
-  sharer: Sharer;
-  you: DailyResult;
+  line: { name: string; pts: number } | undefined;
+  shared: boolean;
 }) {
+  if (!line) {
+    return <span className="pr-2 font-mono text-[12px] text-[var(--md-ink-muted)]">&mdash;</span>;
+  }
+  return (
+    <span
+      className="flex min-w-0 items-baseline gap-1.5 pr-2"
+      title={shared ? "You both picked this player" : undefined}
+    >
+      <span
+        className={`min-w-0 flex-1 truncate font-mono text-[13px] font-bold leading-tight ${shared ? "italic" : ""}`}
+        style={{ color: shared ? "var(--md-ink-muted)" : "var(--md-ink)" }}
+      >
+        {line.name}
+      </span>
+      <span
+        className="shrink-0 font-mono text-[12px] font-bold tabular-nums"
+        style={{ color: shared ? "var(--md-ink-muted)" : "var(--md-coral)" }}
+      >
+        {line.pts.toFixed(1)}
+      </span>
+    </span>
+  );
+}
+
+// Interleaved head-to-head: one row per slot (same team/era for both), the
+// sharer's pick against yours. PTS is the only stat (the daily slot's team/era is
+// identical, so the player choice is what differs).
+function RosterVersus({ sharer, you }: { sharer: Sharer; you: DailyResult }) {
+  const yours = you.roster;
+  const theirs = sharer.roster;
+  const rows = Math.max(yours.length, theirs.length);
+  const cols = "28px 84px minmax(0,1fr) minmax(0,1fr)";
+
+  return (
+    <div className="mt-8">
+      <div className="mb-3 flex items-baseline gap-2 border-b border-[var(--md-ink)] pb-2">
+        <span
+          className="font-archivo uppercase"
+          style={{ fontVariationSettings: '"wdth" 88', fontWeight: 800, fontSize: 18, letterSpacing: "-0.01em" }}
+        >
+          Roster Comparison
+        </span>
+        <span className="h-px flex-1 bg-[var(--md-paper-3)]" aria-hidden />
+        <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">same slots · pick vs pick</span>
+      </div>
+
+      {/* Column headers */}
+      <div
+        className="mb-1 grid items-baseline border-b border-[var(--md-paper-3)] pb-2"
+        style={{ gridTemplateColumns: cols }}
+      >
+        <span className="font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+          #
+        </span>
+        <span className="font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+          Team · Era
+        </span>
+        <span
+          className="min-w-0 truncate pr-2 font-cond text-[10px] font-bold uppercase tracking-[0.12em]"
+          style={{ color: "var(--md-coral)" }}
+        >
+          {sharer.name}
+        </span>
+        <span className="font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)]">
+          You
+        </span>
+      </div>
+
+      {Array.from({ length: rows }).map((_, i) => {
+        const mine = yours[i];
+        const their = theirs[i];
+        // Both sides share the slot's team + decade; read it from whichever exists.
+        const era = mine ?? their;
+        const shared = !!mine && !!their && pickKey(mine) === pickKey(their);
+        return (
+          <div
+            key={i}
+            className="grid items-center border-b border-[var(--md-paper-3)] py-2.5"
+            style={{
+              gridTemplateColumns: cols,
+              background: i % 2 === 1 ? "var(--md-paper-2)" : undefined,
+            }}
+          >
+            <span
+              className="font-mono flex h-5 w-5 items-center justify-center border border-[var(--md-ink)] text-[11px] font-bold tabular-nums"
+              style={{ background: "var(--md-white)" }}
+            >
+              {i + 1}
+            </span>
+            <span
+              className="font-cond text-[10px] font-bold uppercase tracking-[0.06em]"
+              style={{ color: "var(--md-ink-muted)" }}
+            >
+              {era ? teamEra(era) : "—"}
+            </span>
+            <PickCell line={their} shared={shared} />
+            <PickCell line={mine} shared={shared} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Your roster table (fallback for older links with no sharer roster) ──
+function YourPicks({ you }: { you: DailyResult }) {
   const { roster } = you;
   if (!roster.length) return null;
 

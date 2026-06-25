@@ -35,6 +35,11 @@ function sharerFrom(s: string | undefined, routeDate: string): Sharer | null {
     tournament: v.t
       ? { recordW: v.t.w, recordL: v.t.l, realizedMargin: v.t.n, reachedRound: v.t.r }
       : null,
+    // The sharer's five picks, when the token carries them (older links have none →
+    // the roster compare falls back to the viewer's picks only).
+    roster: v.r
+      ? v.r.map((l) => ({ name: l.n, team: l.tm, season: l.s, pts: l.pts }))
+      : [],
   };
 }
 
