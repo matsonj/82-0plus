@@ -573,15 +573,24 @@ function PlayerName({
   align: "left" | "right";
 }) {
   if (!line) return <span className="min-w-0 flex-1" aria-hidden />;
+  // Mobile: stack the name on its spaces (WILT / CHAMBERLAIN) and truncate any
+  // single line that's still too wide for the narrow column — far more legible
+  // than chopping the whole name to "WILT CHAM…". Desktop (sm+) flows the words
+  // back onto one line.
+  const words = line.name.split(" ");
   return (
     <span
-      className={`min-w-0 flex-1 truncate font-mono text-[13px] leading-tight ${
+      className={`flex min-w-0 flex-1 flex-col font-mono text-[13px] leading-tight sm:flex-row sm:flex-wrap sm:gap-x-1.5 ${
         shared ? "font-normal italic" : "font-bold"
-      } ${align === "right" ? "text-right" : "text-left"}`}
+      } ${align === "right" ? "items-end text-right sm:justify-end" : "items-start text-left sm:justify-start"}`}
       style={{ color: shared ? "var(--md-ink-muted)" : winner ? "var(--md-coral)" : "var(--md-ink)" }}
-      title={shared ? "You both picked this player" : undefined}
+      title={shared ? "You both picked this player" : line.name}
     >
-      {line.name}
+      {words.map((w, i) => (
+        <span key={i} className="max-w-full truncate">
+          {w}
+        </span>
+      ))}
     </span>
   );
 }
