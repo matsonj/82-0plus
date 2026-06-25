@@ -41,7 +41,7 @@ export default function PrivateTournamentPage({
         // Lazy finalization still running — the GET is idempotent; let the user retry.
         const d = await res.json().catch(() => ({}));
         if (d?.retryable) {
-          setErrorMsg(d?.error ?? "Still finalizing — try again in a moment.");
+          setErrorMsg(d?.error ?? "Still finalizing. Try again in a moment.");
           setStatus("retry");
           return;
         }

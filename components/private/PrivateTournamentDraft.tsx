@@ -274,7 +274,7 @@ export function PrivateTournamentDraft({
       <ResultsPanel
         roster={partial.roster}
         result={partial.result}
-        shareText={`82-0+ 🏀 my ${partial.result.wins}-${partial.result.losses} private-tournament five`}
+        shareText={`Daily82 🏀 my ${partial.result.wins}-${partial.result.losses} private-tournament five`}
         shareLink={`${SITE_URL}/p/${tournamentId}`}
         modeLabel={mode === "hoopiq" ? "Private - Ranked" : "Private - Classic"}
         mode={gameMode}

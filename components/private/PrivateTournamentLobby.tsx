@@ -267,7 +267,7 @@ export function PrivateTournamentLobby({
           {/* Bracket note */}
           <p className="mt-4 flex items-start gap-2 font-display text-[12px] text-[var(--md-ink-muted)]">
             <span className="mt-0.5 shrink-0 text-[10px]">{"{}"}</span>
-            <span>The bracket is drawn once all {data.size} entrants lock in their rosters — or when the clock runs out, whichever comes first.</span>
+            <span>The bracket is drawn once all {data.size} entrants lock in their rosters or when the clock runs out, whichever comes first.</span>
           </p>
 
           {/* Draft / status CTA — shown below table on mobile, above invite on desktop */}

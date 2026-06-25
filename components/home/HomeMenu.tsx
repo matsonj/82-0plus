@@ -41,7 +41,7 @@ export function HomeMenu({
           }
           description={
             <>
-              Five rounds. Each spin gives you one team + era — draft a player and
+              Five rounds. Each spin gives you one team + era. Draft a player and
               slot him at Guard, Wing, Big, or Flex.{" "}
               <span className="font-bold">
                 Fit five together and{" "}
@@ -117,7 +117,7 @@ export function HomeMenu({
         <ModeCard
           number="02"
           title="Ranked"
-          description="Stats hidden. Draft from memory — true hoops IQ."
+          description="Stats hidden. Draft from memory and show off."
           cta="Play Ranked"
           dark
           onClick={() => onStartGame("hoopiq")}

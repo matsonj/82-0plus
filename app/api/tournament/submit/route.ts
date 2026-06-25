@@ -206,7 +206,7 @@ export async function POST(req: NextRequest) {
     if (new Set(allTeams).size !== allTeams.length) {
       return jsonWithSessionHint(
         sessionHint,
-        { error: "each player must come from a different team — re-roll a duplicate" },
+        { error: "each player must come from a different team; re-roll a duplicate" },
         { status: 400 },
       );
     }
@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
       return jsonWithSessionHint(
         sessionHint,
         {
-          error: `not tournament-eligible — this roster projects to ${regWinsFromSeedNet(
+          error: `not tournament-eligible; this roster projects to ${regWinsFromSeedNet(
             seedNet,
           )} wins (need ${MIN_ELIGIBLE_WINS}+)`,
         },
@@ -315,7 +315,7 @@ export async function POST(req: NextRequest) {
     if (field.length !== 16) {
       return jsonWithSessionHint(
         sessionHint,
-        { error: "tournament field unavailable — seed ghosts" },
+        { error: "tournament field unavailable; seed ghosts" },
         { status: 500 },
       );
     }

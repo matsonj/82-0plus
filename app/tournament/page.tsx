@@ -46,7 +46,7 @@ export default function TournamentPage({
           eyebrowVariant="line"
           eyebrowLeft="MY TEAMS · THE BRACKET DESK"
           contentClassName="mt-3"
-          kicker="Roll call —"
+          kicker="Roll call"
           kickerClassName="font-byline mb-1 block text-[18px] italic text-[var(--md-coral)]"
           title={<>HOW FAR DID<br />YOU GET?</>}
           titleClassName="leading-none"

@@ -13,7 +13,7 @@ import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { CaptainPicker } from "@/components/CaptainPicker";
 import { TournamentResults } from "@/components/TournamentResults";
-import { TournamentHowToPlay } from "@/components/TournamentHowToPlay";
+import { HowToPlay } from "@/components/HowToPlay";
 import { Button, Capsule, NameField, Notice, PinField } from "@/components/ui";
 import {
   validateName,
@@ -353,7 +353,7 @@ export function TournamentEntry({
       if (res.status === 409) {
         setNameTaken(true);
         const data = await res.json().catch(() => ({}));
-        setSubmitError(data?.error ?? "That account name is taken — wrong PIN?");
+        setSubmitError(data?.error ?? "That account name is taken. Wrong PIN?");
         return;
       }
       if (!res.ok) {
@@ -413,7 +413,10 @@ export function TournamentEntry({
     // column; the post-submit bracket result returns above (full section width).
     <div className="mx-auto flex w-full max-w-lg flex-col gap-5">
       {showHowTo && (
-        <TournamentHowToPlay onClose={() => setShowHowTo(false)} />
+        <HowToPlay
+          onClose={() => setShowHowTo(false)}
+          initialTab="playoffs"
+        />
       )}
 
       {/* The locked starting five */}

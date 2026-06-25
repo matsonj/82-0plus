@@ -1196,7 +1196,7 @@ export function TournamentLookup({
         </Button>
 
         <p className="font-mono text-[11px] italic" style={{ color: "var(--md-paper-3)" }}>
-          🔒 Your name + PIN is your account — same one as the Daily.
+          🔒 Login with your Name + PIN.
         </p>
       </form>
 

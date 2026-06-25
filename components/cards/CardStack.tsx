@@ -13,7 +13,7 @@ export function CardStack({
     <Link
       href={href}
       className="group relative mr-1.5 mt-1.5 block transition-transform hover:-translate-y-0.5"
-      aria-label={`${team} — ${eras} era${eras === 1 ? "" : "s"}`}
+      aria-label={`${team} - ${eras} era${eras === 1 ? "" : "s"}`}
     >
       {eras >= 3 && (
         <span
