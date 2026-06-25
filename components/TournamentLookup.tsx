@@ -779,6 +779,12 @@ export function TournamentLookup({
 
   const openTeam = async (teamId: string) => {
     if (loadingTeamId) return;
+    // Synthesized daily-completion rows ('daily:<date>') have no stored bracket —
+    // send the click to that day's page instead of the (404-ing) bracket viewer.
+    if (teamId.startsWith("daily:")) {
+      window.location.assign(`/d/${teamId.slice("daily:".length)}`);
+      return;
+    }
     setLoadingTeamId(teamId);
     setListError(null);
     try {
