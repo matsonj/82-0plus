@@ -67,7 +67,8 @@ export interface Sharer {
   perfect: boolean;
   // The sharer's tournament run, if the link carried one (added at share time).
   tournament?: TournRun | null;
-  // The sharer's five picks (slot order), when the link carried them. Empty on
+  // The sharer's five picks, when the link carried them (order is the stored
+  // display order, not significant — RosterVersus matches by team). Empty on
   // older links → the roster compare falls back to the viewer's picks only.
   roster: SharerPick[];
 }
