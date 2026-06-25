@@ -43,7 +43,7 @@ export interface SimRosterLine {
   pts: number;
   reb: number;
   ast: number;
-  gq: number; // Game Quality as a 0–100 integer (revealed only on the summary)
+  gq: number; // Game Quality, 0–100 to one decimal (revealed only on the summary)
   allDef: number; // All-Defensive team that season: 1 (1st), 2 (2nd), 0 (none)
 }
 
