@@ -6,7 +6,7 @@ import { getOfferedIds, hydrateRoster } from "@/lib/queries";
 import { simulateRoster } from "@/lib/scoring";
 import { parseLineupPicks, lineupEligible } from "@/lib/lineup";
 import { authenticate, recordDailyResult } from "@/lib/dailyResults";
-import { signDailyShare } from "@/lib/dailyShareToken";
+import { signDailyShare, toDailyShareRoster } from "@/lib/dailyShareToken";
 import { assertTournamentSecret } from "@/lib/secret";
 
 export const runtime = "nodejs";
@@ -98,6 +98,8 @@ export async function POST(req: NextRequest) {
     // link's head-to-head numbers can't be forged.
     const share = signDailyShare({
       d: date, u: auth.name, w: stored.wins, l: stored.losses, n: stored.margin, p: stored.perfect,
+      // The sharer's five picks, so the share link's head-to-head can compare rosters.
+      r: toDailyShareRoster(stored.roster),
     });
     return jsonWithSessionHint(sessionHint, { result: stored, share });
   } catch (err) {

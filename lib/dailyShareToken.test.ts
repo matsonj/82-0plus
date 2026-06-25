@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { signDailyShare, verifyDailyShare, type DailyShare } from "./dailyShareToken";
+import {
+  signDailyShare,
+  verifyDailyShare,
+  toDailyShareRoster,
+  type DailyShare,
+} from "./dailyShareToken";
 
 const SHARE: DailyShare = {
   d: "2026-06-01",
@@ -67,5 +72,49 @@ describe("dailyShareToken — date-bound share receipts", () => {
   it("still verifies a tournament-bearing token bound to the wrong date as null", () => {
     const tok = signDailyShare({ ...SHARE, t: { w: 1, l: 0, n: 1.1, r: 0 } });
     expect(verifyDailyShare(tok, "2026-06-09")).toBeNull();
+  });
+
+  const ROSTER = [
+    { name: "Stephen Curry", team: "GSW", season: 2016, pts: 30.1 },
+    { name: "Kevin Durant", team: "OKC", season: 2014, pts: 32.0 },
+    { name: "Scottie Pippen", team: "CHI", season: 1996, pts: 19.4 },
+    { name: "James Worthy", team: "LAL", season: 1987, pts: 19.1 },
+    { name: "Wilt Chamberlain", team: "PHI", season: 1967, pts: 24.1 },
+  ];
+
+  it("round-trips the sharer's roster (no tournament)", () => {
+    const tok = signDailyShare({ ...SHARE, r: toDailyShareRoster(ROSTER) });
+    const v = verifyDailyShare(tok, "2026-06-01");
+    expect(v?.t).toBeUndefined();
+    expect(v?.r).toHaveLength(5);
+    expect(v?.r?.[0]).toEqual({ n: "Stephen Curry", tm: "GSW", s: 2016, pts: 30.1 });
+    expect(v?.r?.[4].pts).toBeCloseTo(24.1, 5);
+  });
+
+  it("round-trips roster AND tournament together", () => {
+    const tok = signDailyShare({
+      ...SHARE,
+      t: { w: 12, l: 3, n: -2.5, r: 3 },
+      r: toDailyShareRoster(ROSTER),
+    });
+    const v = verifyDailyShare(tok, "2026-06-01");
+    expect(v?.t?.w).toBe(12);
+    expect(v?.t?.r).toBe(3);
+    expect(v?.r).toHaveLength(5);
+    expect(v?.r?.[2].n).toBe("Scottie Pippen");
+  });
+
+  it("omits the roster when not provided, and for an empty roster (no `r`)", () => {
+    expect(verifyDailyShare(signDailyShare(SHARE))?.r).toBeUndefined();
+    expect(verifyDailyShare(signDailyShare({ ...SHARE, r: [] }))?.r).toBeUndefined();
+  });
+
+  it("decodes a legacy 10-entry tournament token (no trailing roster array) unchanged", () => {
+    // A token minted before rosters existed: tournament present, no roster. The
+    // last element is a number, so it must NOT be mistaken for a roster.
+    const tok = signDailyShare({ ...SHARE, t: { w: 5, l: 2, n: 3.3, r: 2 } });
+    const v = verifyDailyShare(tok, "2026-06-01");
+    expect(v?.t).toEqual({ w: 5, l: 2, n: 3.3, r: 2 });
+    expect(v?.r).toBeUndefined();
   });
 });
