@@ -612,7 +612,7 @@ export async function hydrateRoster(
       entity_id: p.entity_id, player_name: p.player_name, team: p.team,
       best_season: p.best_season, positions: eligiblePositions(p),
       pts: p.pts, reb: p.reb, ast: p.ast,
-      gq: Math.round((p.value ?? 0) * 100), // 0–100, revealed only post-sim
+      gq: Math.round((p.value ?? 0) * 1000) / 10, // 0–100 to one decimal, revealed only post-sim
       allDef: p.all_def ?? 0,
     });
   }

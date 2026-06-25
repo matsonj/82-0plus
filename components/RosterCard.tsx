@@ -107,8 +107,9 @@ export function RosterCard({
         </div>
       )}
 
-      {/* Body — column band + rows live in a padded well */}
-      <div className="px-5 pb-5 pt-5 sm:px-6 sm:pb-6">
+      {/* Body — column band + rows live in a padded well. `relative` so callers
+          can drop in a full-height column divider (e.g. THE FIVE's GQ rule). */}
+      <div className="relative px-5 pb-5 pt-5 sm:px-6 sm:pb-6">
         {columnHeader != null && (
           <div
             className="flex items-center px-4 py-[11px]"

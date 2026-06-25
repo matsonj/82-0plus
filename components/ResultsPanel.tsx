@@ -127,6 +127,11 @@ function TheFiveCard({
   const statW = 56;
   // Fixed-width seed-chip cell (the gold-outlined 1–5 box lives inside it).
   const seedW = 44;
+  // GQ is a quality RATING, not a box score, so it's fenced off from PTS/REB/AST
+  // by a full-height divider with a gap before it. Desktop-only: the dark table is
+  // too narrow for a 4th lane on mobile (mobile keeps the 3-stat layout for now).
+  const gqGap = 18; // breathing room before the GQ lane (the divider sits in it)
+  const gqDividerRight = 81; // from the row's right edge: px-4 (16) + statW (56) + half gap (9)
 
   // Column-band / row-hairline values shared with the draft card.
   const bandLabel = (col: string, width?: number, alignRight = false) => (
@@ -157,6 +162,19 @@ function TheFiveCard({
           {bandLabel("PTS", statW, true)}
           {bandLabel("REB", statW, true)}
           {bandLabel("AST", statW, true)}
+          <span
+            className="hidden lg:block font-cond font-semibold uppercase text-right"
+            style={{
+              fontSize: 12,
+              letterSpacing: "0.16em",
+              color: "#9a8f79",
+              width: statW,
+              flexShrink: 0,
+              marginLeft: gqGap,
+            }}
+          >
+            GQ
+          </span>
         </>
       }
       footer={
@@ -183,9 +201,31 @@ function TheFiveCard({
               </span>
             ),
           )}
+          {/* Team GQ — fenced off by the divider; bold white like team PTS. */}
+          <span
+            className="hidden lg:block font-mono font-bold tabular-nums shrink-0 text-right"
+            style={{ fontSize: 17, width: statW, color: "var(--md-white)", marginLeft: gqGap }}
+          >
+            {(result.meanGQ * 100).toFixed(1)}
+          </span>
         </div>
       }
     >
+      {/* GQ column divider — full-height rule fencing the rating off from the box
+          scores. Absolute inside RosterCard's relative well. Desktop-only. */}
+      <div
+        aria-hidden
+        className="hidden lg:block"
+        style={{
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          right: gqDividerRight,
+          width: 1,
+          background: "#4a4036",
+          pointerEvents: "none",
+        }}
+      />
       {/* Player rows */}
       <div className="flex flex-col">
         {roster.map((r, i) => {
@@ -245,6 +285,13 @@ function TheFiveCard({
                   {v.toFixed(1)}
                 </span>
               ))}
+              {/* GQ — quality rating, fenced off; bold white like PTS. */}
+              <span
+                className="hidden lg:block font-mono font-bold tabular-nums shrink-0 text-right"
+                style={{ fontSize: 17, width: statW, color: "var(--md-white)", marginLeft: gqGap }}
+              >
+                {r.gq.toFixed(1)}
+              </span>
             </div>
           );
 
