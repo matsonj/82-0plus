@@ -52,8 +52,8 @@ export async function presentShare({ blob, filename, text, link }: ShareArgs): P
     try {
       await nav.share(
         canShareFile
-          ? { files: [file as File], text, url: link, title: "82-0+" }
-          : { text, url: link, title: "82-0+" },
+          ? { files: [file as File], text, url: link, title: "Daily82" }
+          : { text, url: link, title: "Daily82" },
       );
       return "shared";
     } catch (err) {

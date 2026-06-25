@@ -866,7 +866,7 @@ export default function Home() {
     }
     const url = `${SITE_URL}/d/${today}${token ? `?s=${encodeURIComponent(token)}` : ""}`;
     const rec = todayResult ? `${todayResult.wins}-${todayResult.losses}` : "";
-    const text = `Daily82 🏀 Daily${rec ? ` ${rec}` : ""}${
+    const text = `Daily82 🏀${rec ? ` ${rec}` : ""}${
       todayResult?.perfect ? " (perfect!)" : ""
     }. Same five rolls, beat my record:`;
     try {
