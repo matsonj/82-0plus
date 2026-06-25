@@ -15,10 +15,12 @@ export interface DailyShareTourn {
   r: number; // reached round: 0 = lost R1 … 4 = champion
 }
 
-/** One of the sharer's five picks, in lineup slot order — for a head-to-head
- *  roster compare. Stats beyond pts are intentionally omitted to keep the URL
- *  small (the daily slot's team/era is identical for both players, so only the
- *  player choice + scoring differs). */
+/** One of the sharer's five picks, for a head-to-head roster compare. The array
+ *  is in whatever order the stored roster is (hydrateRoster's position-sorted
+ *  display order) — order is NOT significant: the compare keys by team (teams
+ *  never repeat on a daily board). Stats beyond pts are intentionally omitted to
+ *  keep the URL small (the slot's team/era is identical for both players, so only
+ *  the player choice + scoring differs). */
 export interface DailyShareRosterLine {
   n: string; // player name
   tm: string; // team
