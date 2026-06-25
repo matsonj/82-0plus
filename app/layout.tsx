@@ -8,6 +8,7 @@ import {
   Special_Elite,
   Permanent_Marker,
 } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { SITE_URL } from "@/lib/site";
 
@@ -93,7 +94,10 @@ export default function RootLayout({
       lang="en"
       className={`${anton.variable} ${archivo.variable} ${oswald.variable} ${spaceMono.variable} ${spaceGrotesk.variable} ${specialElite.variable} ${permanentMarker.variable} h-full`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
