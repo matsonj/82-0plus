@@ -57,14 +57,42 @@ interface TeamSummaryRow {
   daily_field: number | null; // total entries that date (daily only)
 }
 
-/** All memorialized teams for a user, newest first (lookup detail list). The
- *  daily_results join surfaces the actual 82-game record for daily teams (kept in
- *  lockstep with the RW twin getUserTeams). */
+// Starter-set signature from a JSON roster array at `path` — sorted
+// "name|team|season" keys, so two rosters compare equal regardless of slot order.
+// Mirrors the signature in listDailyResults so the dedup here matches the
+// champion-credit logic there. teams.roster_display nests under $.roster[*];
+// daily_results.roster_json is a bare array ($[*]).
+function rosterSig(col: string, path: string): string {
+  return `list_sort([json_extract_string(e, '$.name') || '|' ||
+                     json_extract_string(e, '$.team') || '|' ||
+                     json_extract_string(e, '$.season')
+                     FOR e IN json_extract(${col}, '${path}')])`;
+}
+
+/** All memorialized teams for a user, newest first (the public "My Teams" list).
+ *
+ *  Two sources, unioned:
+ *   1. ENTERED teams from `teams` (any mode). The daily_results join surfaces the
+ *      actual 82-game record for daily teams.
+ *   2. Un-entered DAILY COMPLETIONS from `daily_results` that have no matching
+ *      entered team — synthesized as didn't-enter daily rows (record 0–0,
+ *      reached_round 0) so a daily you played but never ran through a bracket
+ *      still appears in My Teams (the empty-state literally promises this).
+ *      Dedup is by roster signature (same rule as listDailyResults' champion
+ *      credit): a completion whose five match an entered daily team for that date
+ *      is already represented by that richer entry, so it's skipped.
+ *
+ *  NOTE: this deliberately DIVERGES from the RW twin getUserTeams, which stays
+ *  entered-only — its sole caller (/api/daily/share) does .find() for an ENTERED
+ *  daily team and must not pick up a 0–0 completion. Synthesized rows carry a
+ *  'daily:<date>' team_id (no real bracket); the lookup UI routes their click to
+ *  /d/<date> instead of the bracket viewer. */
 export async function getUserTeamsRO(
   userId: string,
 ): Promise<TournamentTeamSummary[]> {
   const rows = await queryTournamentRO<TeamSummaryRow>(
-    `SELECT t.team_id, t.team_name, t.mode, t.record_w, t.record_l, t.realized_margin,
+    `SELECT CAST(t.team_id AS VARCHAR) AS team_id, t.team_name, t.mode,
+            t.record_w, t.record_l, t.realized_margin,
             t.reached_round, t.champion_name, t.seed_net, t.daily_date, t.created_at,
             t.roster_display, dr.wins AS season_w, dr.losses AS season_l,
             CASE WHEN t.mode = 'daily' AND dr.wins IS NOT NULL THEN
@@ -81,7 +109,32 @@ export async function getUserTeamsRO(
        LEFT JOIN ${RO_DB}.daily_results dr
          ON dr.user_id = t.user_id AND dr.daily_date = t.daily_date
       WHERE t.user_id = $1
-      ORDER BY t.created_at DESC`,
+     UNION ALL BY NAME
+     SELECT 'daily:' || dr.daily_date AS team_id,
+            'Daily Challenge' AS team_name,
+            'daily' AS mode,
+            0 AS record_w, 0 AS record_l, CAST(0 AS DOUBLE) AS realized_margin,
+            0 AS reached_round, '' AS champion_name,
+            dr.margin AS seed_net, dr.daily_date AS daily_date, dr.created_at AS created_at,
+            json_object('roster', dr.roster_json) AS roster_display,
+            dr.wins AS season_w, dr.losses AS season_l,
+            (SELECT COUNT(*) FROM ${RO_DB}.daily_results o
+               WHERE o.daily_date = dr.daily_date
+                 AND (o.wins > dr.wins
+                      OR (o.wins = dr.wins AND o.margin > dr.margin))) + 1 AS daily_rank,
+            (SELECT COUNT(*) FROM ${RO_DB}.daily_results
+               WHERE daily_date = dr.daily_date) AS daily_field
+       FROM ${RO_DB}.daily_results dr
+      WHERE dr.user_id = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM ${RO_DB}.teams t2
+           WHERE t2.user_id = dr.user_id
+             AND t2.daily_date = dr.daily_date
+             AND t2.mode = 'daily'
+             AND ${rosterSig("t2.roster_display", "$.roster[*]")}
+               = ${rosterSig("dr.roster_json", "$[*]")}
+        )
+      ORDER BY created_at DESC`,
     [userId],
   );
   return rows.map((r) => {

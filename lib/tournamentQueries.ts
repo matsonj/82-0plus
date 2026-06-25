@@ -557,10 +557,16 @@ interface TeamSummaryRow {
   season_l: number | null;
 }
 
-/** All memorialized teams for a user, newest first. Carries the roster display
+/** All ENTERED teams for a user, newest first. Carries the roster display
  *  (names) so the list can reveal a roster without fetching the full bracket, and
  *  the actual 82-game record for daily teams (joined from daily_results) so the
- *  card can show the real reg-season record, not a seed-net projection. */
+ *  card can show the real reg-season record, not a seed-net projection.
+ *
+ *  Entered-only ON PURPOSE: unlike the RO twin getUserTeamsRO (which also unions
+ *  un-entered daily completions for the "My Teams" list), this stays bracket-only
+ *  because its sole caller, /api/daily/share, does .find() for an ENTERED daily
+ *  team to bake into the share token — a synthesized 0–0 completion would forge a
+ *  bogus tournament run there. Don't union daily_results in here. */
 export async function getUserTeams(
   userId: string,
 ): Promise<TournamentTeamSummary[]> {
