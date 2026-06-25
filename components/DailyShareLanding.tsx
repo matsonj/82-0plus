@@ -518,9 +518,6 @@ function TournCard({
 }
 
 // ── Roster compare ──
-// Slot labels match the board: G · FLEX · W · FLEX · B.
-const SLOT_LABELS = ["GUARD", "FLEX", "WING", "FLEX", "BIG"] as const;
-
 // A stable per-player identity (matches BracketView.playerKey) so the same pick
 // shows up on both sides of the head-to-head.
 const pickKey = (p: { name: string; team: string; season: number }) =>
@@ -681,7 +678,7 @@ function YourPicks({ you }: { you: DailyResult }) {
         className="mb-1 grid border-b border-[var(--md-paper-3)] pb-2"
         style={{ gridTemplateColumns: "40px minmax(0,2fr) minmax(0,4fr) 52px 48px 48px" }}
       >
-        {(["#", "Slot", "Player", "PTS", "REB", "AST"] as const).map((h) => (
+        {(["#", "Team · Era", "Player", "PTS", "REB", "AST"] as const).map((h) => (
           <span
             key={h}
             className="font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]"
@@ -707,21 +704,18 @@ function YourPicks({ you }: { you: DailyResult }) {
           >
             {i + 1}
           </span>
-          {/* Slot label */}
+          {/* Team · era — the slot's true identity (the lineup slot isn't stored,
+              and the roster is position-sorted, so a G/FLEX/W/B label can't be
+              recovered reliably). */}
           <span
-            className="font-cond text-[10px] font-bold uppercase tracking-[0.1em]"
+            className="font-cond text-[10px] font-bold uppercase tracking-[0.06em]"
             style={{ color: "var(--md-ink-muted)" }}
           >
-            {SLOT_LABELS[i] ?? `S${i + 1}`}
+            {teamEra(line)}
           </span>
-          {/* Player name + team/era */}
-          <div>
-            <div className="font-mono text-[13px] font-bold text-[var(--md-ink)] leading-tight">
-              {line.name}
-            </div>
-            <div className="font-mono text-[10px] text-[var(--md-ink-muted)]">
-              {line.team} · {Math.floor(line.season / 10) * 10}s
-            </div>
+          {/* Player name */}
+          <div className="font-mono text-[13px] font-bold text-[var(--md-ink)] leading-tight">
+            {line.name}
           </div>
           {/* Stats */}
           <span className="font-mono text-[13px] font-bold tabular-nums text-right" style={{ color: "var(--md-coral)" }}>
