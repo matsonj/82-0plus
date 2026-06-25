@@ -1,4 +1,5 @@
 import { scryptSync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { track } from "@vercel/analytics/server";
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { authenticate } from "@/lib/dailyResults";
@@ -174,6 +175,10 @@ export async function POST(req: NextRequest) {
       board,
       expiresAt,
     });
+
+    // Telemetry: a private tournament was created. mode + size are the two knobs
+    // worth breaking down by (within base Pro's 2-property cap).
+    await track("tournament_created", { mode, size }).catch(() => {});
 
     return jsonWithSessionHint(sessionHint, {
       tournamentId: storedId,
