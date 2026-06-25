@@ -130,8 +130,8 @@ function TheFiveCard({
   // GQ is a quality RATING, not a box score, so it's fenced off from PTS/REB/AST
   // by a full-height divider with a gap before it. Desktop-only: the dark table is
   // too narrow for a 4th lane on mobile (mobile keeps the 3-stat layout for now).
-  const gqGap = 18; // breathing room before the GQ lane (the divider sits in it)
-  const gqDividerRight = 81; // from the row's right edge: px-4 (16) + statW (56) + half gap (9)
+  const gqGap = 32; // breathing room before the GQ lane (the divider sits in it)
+  const gqDividerRight = 88; // row right: px-4 (16) + statW (56) + 16 → ~16px each side of the divider
 
   // Column-band / row-hairline values shared with the draft card.
   const bandLabel = (col: string, width?: number, alignRight = false) => (
