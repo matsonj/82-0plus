@@ -18,14 +18,14 @@ export interface DailyShareTourn {
 /** One of the sharer's five picks, for a head-to-head roster compare. The array
  *  is in whatever order the stored roster is (hydrateRoster's position-sorted
  *  display order) — order is NOT significant: the compare keys by team (teams
- *  never repeat on a daily board). Stats beyond pts are intentionally omitted to
- *  keep the URL small (the slot's team/era is identical for both players, so only
- *  the player choice + scoring differs). */
+ *  never repeat on a daily board). Only GQ is carried (no box stats) to keep the
+ *  URL small — the slot's team/era is identical for both players, so the player
+ *  choice + how well it graded (GQ) is what differs. */
 export interface DailyShareRosterLine {
   n: string; // player name
   tm: string; // team
   s: number; // exact season (year) the player was drafted from
-  pts: number; // points per game (one decimal)
+  gq: number; // game quality, 0–100 (one decimal); revealed post-sim
 }
 
 export interface DailyShare {
@@ -42,9 +42,9 @@ export interface DailyShare {
 /** Map stored daily roster lines to the compact share shape (structural param so
  *  this stays decoupled from lib/dailyResults). Used by both mint routes. */
 export function toDailyShareRoster(
-  lines: { name: string; team: string; season: number; pts: number }[],
+  lines: { name: string; team: string; season: number; gq: number }[],
 ): DailyShareRosterLine[] {
-  return lines.map((l) => ({ n: l.name, tm: l.team, s: l.season, pts: l.pts }));
+  return lines.map((l) => ({ n: l.name, tm: l.team, s: l.season, gq: l.gq }));
 }
 
 function b64url(s: string): string {
@@ -70,7 +70,7 @@ export function signDailyShare(p: DailyShare): string {
     arr.push(p.t.w, p.t.l, Math.round(p.t.n * 10), p.t.r);
   }
   if (p.r && p.r.length) {
-    arr.push(p.r.map((l) => [l.n, l.tm, l.s, Math.round(l.pts * 10)]));
+    arr.push(p.r.map((l) => [l.n, l.tm, l.s, Math.round(l.gq * 10)]));
   }
   const body = b64url(JSON.stringify(arr));
   return `${body}.${sig(body)}`;
@@ -112,7 +112,7 @@ export function verifyDailyShare(
       const raw = a[a.length - 1] as unknown[];
       share.r = raw.map((line) => {
         const x = line as (string | number)[];
-        return { n: String(x[0]), tm: String(x[1]), s: Number(x[2]), pts: Number(x[3]) / 10 };
+        return { n: String(x[0]), tm: String(x[1]), s: Number(x[2]), gq: Number(x[3]) / 10 };
       });
     }
     // The signed date must equal the date being viewed — otherwise the token is

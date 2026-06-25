@@ -55,7 +55,7 @@ export interface SharerPick {
   name: string;
   team: string;
   season: number;
-  pts: number;
+  gq: number;
 }
 
 /** Sharer's redacted result carried in the link. */
@@ -540,34 +540,39 @@ function RosterComparison({ sharer, you }: { sharer: Sharer; you: DailyResult })
   );
 }
 
-// One drafted player as a name + PTS, right-aligned. Shared picks (you both took
-// the same player) go italic/muted — they're not a differentiator.
+// One drafted player as `name GQ`, with the GQ hugging its own name (not floated
+// to the column edge, which read as if it belonged to the next player). The GQ
+// goes coral only when `better` — i.e. it's the higher-graded pick for the slot.
+// Shared picks (you both took the same player) go italic/muted.
 function PickCell({
   line,
   shared,
+  better,
 }: {
-  line: { name: string; pts: number } | undefined;
+  line: { name: string; gq: number } | undefined;
   shared: boolean;
+  better: boolean;
 }) {
   if (!line) {
-    return <span className="pr-2 font-mono text-[12px] text-[var(--md-ink-muted)]">&mdash;</span>;
+    return <span className="pr-3 font-mono text-[12px] text-[var(--md-ink-muted)]">&mdash;</span>;
   }
   return (
     <span
-      className="flex min-w-0 items-baseline gap-1.5 pr-2"
+      className="flex min-w-0 items-baseline gap-2 pr-3"
       title={shared ? "You both picked this player" : undefined}
     >
       <span
-        className={`min-w-0 flex-1 truncate font-mono text-[13px] font-bold leading-tight ${shared ? "italic" : ""}`}
+        className={`min-w-0 truncate font-mono text-[13px] font-bold leading-tight ${shared ? "italic" : ""}`}
         style={{ color: shared ? "var(--md-ink-muted)" : "var(--md-ink)" }}
       >
         {line.name}
       </span>
       <span
         className="shrink-0 font-mono text-[12px] font-bold tabular-nums"
-        style={{ color: shared ? "var(--md-ink-muted)" : "var(--md-coral)" }}
+        style={{ color: better ? "var(--md-coral)" : "var(--md-ink-muted)" }}
+        title="Game Quality"
       >
-        {line.pts.toFixed(1)}
+        {line.gq.toFixed(1)}
       </span>
     </span>
   );
@@ -597,7 +602,9 @@ function RosterVersus({ sharer, you }: { sharer: Sharer; you: DailyResult }) {
           Roster Comparison
         </span>
         <span className="h-px flex-1 bg-[var(--md-paper-3)]" aria-hidden />
-        <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">same slots · pick vs pick</span>
+        <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
+          GQ per pick · <span style={{ color: "var(--md-coral)" }}>coral</span> = higher
+        </span>
       </div>
 
       {/* Column headers */}
@@ -626,6 +633,10 @@ function RosterVersus({ sharer, you }: { sharer: Sharer; you: DailyResult }) {
         // Match the sharer's pick for the SAME board slot by team (see above).
         const their = theirByTeam.get(mine.team);
         const shared = !!their && pickKey(mine) === pickKey(their);
+        // Per slot, the higher GQ is the better pick (coral). Never on a shared
+        // pick (same player → same GQ) or when a side is missing.
+        const mineBetter = !shared && !!their && mine.gq > their.gq;
+        const theirBetter = !shared && !!their && their.gq > mine.gq;
         return (
           <div
             key={mine.team}
@@ -647,8 +658,8 @@ function RosterVersus({ sharer, you }: { sharer: Sharer; you: DailyResult }) {
             >
               {teamEra(mine)}
             </span>
-            <PickCell line={their} shared={shared} />
-            <PickCell line={mine} shared={shared} />
+            <PickCell line={their} shared={shared} better={theirBetter} />
+            <PickCell line={mine} shared={shared} better={mineBetter} />
           </div>
         );
       })}
