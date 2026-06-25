@@ -75,11 +75,11 @@ describe("dailyShareToken — date-bound share receipts", () => {
   });
 
   const ROSTER = [
-    { name: "Stephen Curry", team: "GSW", season: 2016, pts: 30.1 },
-    { name: "Kevin Durant", team: "OKC", season: 2014, pts: 32.0 },
-    { name: "Scottie Pippen", team: "CHI", season: 1996, pts: 19.4 },
-    { name: "James Worthy", team: "LAL", season: 1987, pts: 19.1 },
-    { name: "Wilt Chamberlain", team: "PHI", season: 1967, pts: 24.1 },
+    { name: "Stephen Curry", team: "GSW", season: 2016, gq: 92.4 },
+    { name: "Kevin Durant", team: "OKC", season: 2014, gq: 88.0 },
+    { name: "Scottie Pippen", team: "CHI", season: 1996, gq: 74.6 },
+    { name: "James Worthy", team: "LAL", season: 1987, gq: 71.1 },
+    { name: "Wilt Chamberlain", team: "PHI", season: 1967, gq: 96.1 },
   ];
 
   it("round-trips the sharer's roster (no tournament)", () => {
@@ -87,8 +87,8 @@ describe("dailyShareToken — date-bound share receipts", () => {
     const v = verifyDailyShare(tok, "2026-06-01");
     expect(v?.t).toBeUndefined();
     expect(v?.r).toHaveLength(5);
-    expect(v?.r?.[0]).toEqual({ n: "Stephen Curry", tm: "GSW", s: 2016, pts: 30.1 });
-    expect(v?.r?.[4].pts).toBeCloseTo(24.1, 5);
+    expect(v?.r?.[0]).toEqual({ n: "Stephen Curry", tm: "GSW", s: 2016, gq: 92.4 });
+    expect(v?.r?.[4].gq).toBeCloseTo(96.1, 5);
   });
 
   it("round-trips roster AND tournament together", () => {
