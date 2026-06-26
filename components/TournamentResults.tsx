@@ -8,6 +8,7 @@ import type {
   BracketTeam,
 } from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
+import { SimulateReveal } from "@/components/SimulateReveal";
 import { buildTournamentShareImage } from "@/lib/shareImage";
 import { presentShare } from "@/lib/shareActions";
 import { getSavedUser } from "@/lib/tournamentSession";
@@ -35,14 +36,6 @@ function regSeasonRecord(seedNet: number): { w: number; l: number } {
 function fmtNet(n: number): string {
   const v = Math.round(n);
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v)}`;
-}
-
-// Which tournament label to show in the kicker, e.g. "DAILY TOURNAMENT".
-function tournamentKicker(mode?: TournamentMode, isPrivate?: boolean): string {
-  if (isPrivate) return "Private Tournament";
-  if (mode === "daily") return "Daily Tournament";
-  if (mode === "hoopiq") return "Ranked Tournament";
-  return "Classic Tournament";
 }
 
 // Which tournament this run was — for the share card.
@@ -120,8 +113,8 @@ function outcomeFooterLine(
 
 // The viewer's team summary: net rating + record + collapsible roster. Placed
 // before the bracket so it's immediately visible. The roster is the viewer's
-// OWN team (never a spoiler to themselves), so it's always shown — open by
-// default for non-daily, collapsed-but-openable for daily.
+// OWN team (never a spoiler to themselves), but it's collapsed by default — the
+// squad is detail, expanded on tap.
 function YourTeamCard({
   team,
   you,
@@ -133,8 +126,8 @@ function YourTeamCard({
   isDaily: boolean;
   bracket: BracketResult;
 }) {
-  // Roster toggle — open by default so it's visible on first load.
-  const [rosterOpen, setRosterOpen] = useState(!isDaily);
+  // Roster toggle — collapsed by default; the squad is detail, surfaced on tap.
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   const { totalW, totalL } = computeRoundRecords(bracket, you.id);
   const isChampion = bracket.championId === you.id;
@@ -220,8 +213,8 @@ function YourTeamCard({
         </div>
       )}
 
-      {/* Roster — always shown for the viewer's own team (never a spoiler to
-          themselves); collapsed by default for daily, open otherwise. */}
+      {/* Roster — the viewer's own team (never a spoiler to themselves);
+          collapsed by default, expanded on tap. */}
       {team.roster && (
         <>
           <button
@@ -282,16 +275,24 @@ export function TournamentResults({
   mode,
   dailyDate,
   onReset,
+  reveal = false,
 }: {
   data: TournamentRunResponse;
   mode?: TournamentMode;
   dailyDate?: string | null;
   onReset?: () => void;
+  // When true (a fresh tournament entry), gate the results behind the SIMULATE
+  // reveal; dismissing it falls through to this full results page. Saved/shared
+  // views pass false and land here directly.
+  reveal?: boolean;
 }) {
   const { bracket, you } = data;
   const isChampion = bracket.championId === you.id;
   const myTeam = bracket.teams.find((t) => t.id === you.id);
   const isDaily = mode === "daily";
+
+  // Reveal gate: starts "not done" only for fresh entries (reveal=true).
+  const [revealDone, setRevealDone] = useState(!reveal);
 
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
@@ -379,13 +380,64 @@ export function TournamentResults({
     setShareUrl(null);
   };
 
-  // Outcome footer sentence for the viewer.
-  const { finish, detail } = outcomeFooterLine(
+  // Outcome footer sentence for the viewer. (detail is intentionally unused — the
+  // reveal + bracket already convey "lost in R1 to X".)
+  const { finish } = outcomeFooterLine(
     you.name,
     you.reachedRound,
     isChampion,
     bracket,
     you.id,
+  );
+
+  // Outcome callout — surfaced ABOVE the bracket: the final placement outweighs
+  // the round-by-round detail below. Champion → press-yellow box; everyone else
+  // → cobalt YOU chip + finish + how-it-ended detail.
+  const outcomeCallout = isChampion ? (
+    <div
+      className="inline-flex items-center gap-3 px-4 py-3"
+      style={{
+        background: "var(--md-yellow)",
+        color: "var(--md-ink)",
+        boxShadow: "var(--md-shadow-sm)",
+      }}
+    >
+      <span style={{ fontSize: 20 }}>♛</span>
+      <div>
+        <div
+          className="font-archivo font-bold leading-tight"
+          style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
+        >
+          {you.name}
+        </div>
+        <div
+          className="font-cond font-bold uppercase tracking-[0.1em] mt-0.5"
+          style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
+        >
+          Champion · {finish}
+        </div>
+      </div>
+    </div>
+  ) : (
+    <div className="flex flex-wrap items-center gap-3">
+      <span
+        className="shrink-0 px-3 py-1.5 font-cond text-[13px] font-semibold uppercase tracking-[0.12em]"
+        style={{ background: "var(--md-cobalt)", color: "var(--md-white)" }}
+      >
+        {you.name}
+      </span>
+      <span className="font-mono text-[15px]" style={{ color: "var(--md-ink-muted)" }}>
+        finished
+      </span>
+      <span
+        className="font-cond text-[22px] font-semibold uppercase tracking-[0.04em]"
+        style={{ color: "var(--md-ink)" }}
+      >
+        {finish}
+      </span>
+      {/* The "· lost in R1 to X" detail is omitted here — the SIMULATE reveal
+          already told that story, and the bracket below shows the eliminator. */}
+    </div>
   );
 
   // Tournament headline — private uses `bracket.tournamentName` if available,
@@ -411,6 +463,18 @@ export function TournamentResults({
     return "Classic Tournament";
   })();
 
+  // Fresh entry: play the SIMULATE reveal first. Dismissing it ("See full
+  // results") sets revealDone and falls through to the full results below.
+  if (!revealDone) {
+    return (
+      <SimulateReveal
+        data={data}
+        mode={mode}
+        onDismiss={() => setRevealDone(true)}
+      />
+    );
+  }
+
   return (
     <>
       {shareUrl && (
@@ -427,23 +491,11 @@ export function TournamentResults({
 
       <div className="flex flex-col gap-8">
 
-        {/* ---- Masthead: red eyebrow + Anton title + subline (GDU-0) ----
-            The champion no longer appears here — it lives once, as the gold
-            terminus at the end of the bracket's FINAL connector. */}
+        {/* ---- Masthead: Anton cover title ----
+            No eyebrow chip — it just echoed the headline. The champion no longer
+            appears here either; it lives once, as the gold terminus at the end of
+            the bracket's FINAL connector. */}
         <div>
-          {/* Eyebrow chip — flame-red, Oswald caps */}
-          <div className="mb-4">
-            <span
-              className="inline-flex items-center font-cond font-semibold uppercase tracking-[0.16em] px-3 py-[7px]"
-              style={{
-                fontSize: 14,
-                background: "var(--md-coral)",
-                color: "var(--md-white)",
-              }}
-            >
-              {tournamentKicker(mode)}
-            </span>
-          </div>
           {/* Tournament name — Anton cover headline */}
           <h1
             className="font-cover uppercase leading-none"
@@ -487,6 +539,11 @@ export function TournamentResults({
           </div>
         )}
 
+        {/* ---- Outcome — how you finished ----
+            Placed above the bracket on purpose: the final result is the headline;
+            the bracket below is the round-by-round detail. */}
+        {outcomeCallout}
+
         {/* ---- The bracket — hero/centerpiece ---- */}
         <div>
           {/* Section head — marker eyebrow + Anton title + "YOUR PATH" legend */}
@@ -517,104 +574,45 @@ export function TournamentResults({
           <BracketView bracket={bracket} youId={you.id} sharedBoard={isDaily} />
         </div>
 
-        {/* ---- Result strip: outcome one-liner + share button ---- */}
-        {/*
-          GDU-0: a hairline rule, then a row with the viewer's outcome on the
-          left ("NGMI finished QUARTERFINALS — eliminated by (2) AK") and a flame
-          "SHARE THE BRACKET" button on the right. On mobile this stacks.
-        */}
+        {/* ---- Actions: share + back ----
+            The outcome one-liner now lives above the bracket; this strip is just
+            the actions, after the bracket detail. A hairline, then the buttons. */}
         <div className="flex flex-col gap-5">
           <div style={{ height: 1.5, background: "var(--md-paper-3)" }} />
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            {/* Viewer outcome */}
-            {isChampion ? (
-              /* Champion gets the full press-yellow treatment */
-              <div
-                className="inline-flex items-center gap-3 px-4 py-3"
+          <div className="flex flex-wrap items-center gap-3">
+            {myTeam && (
+              <Button
+                size="lg"
+                className="flex items-center gap-2"
                 style={{
-                  background: "var(--md-yellow)",
-                  color: "var(--md-ink)",
-                  boxShadow: "var(--md-shadow-sm)",
+                  background: "var(--md-coral)",
+                  color: "var(--md-white)",
+                  borderColor: "var(--md-ink)",
                 }}
+                onClick={share}
+                disabled={!shareReady}
               >
-                <span style={{ fontSize: 20 }}>♛</span>
-                <div>
-                  <div
-                    className="font-archivo font-bold leading-tight"
-                    style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
-                  >
-                    {you.name}
-                  </div>
-                  <div
-                    className="font-cond font-bold uppercase tracking-[0.1em] mt-0.5"
-                    style={{ fontSize: 10, color: "var(--md-ink-muted)" }}
-                  >
-                    Champion · {finish}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* Non-champion: cobalt YOU chip + finish + detail */
-              <div className="flex flex-wrap items-center gap-3">
-                <span
-                  className="shrink-0 px-3 py-1.5 font-cond text-[13px] font-semibold uppercase tracking-[0.12em]"
-                  style={{ background: "var(--md-cobalt)", color: "var(--md-white)" }}
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                  style={{ flexShrink: 0 }}
+                  aria-hidden="true"
                 >
-                  {you.name}
-                </span>
-                <span className="font-mono text-[15px]" style={{ color: "var(--md-ink-muted)" }}>
-                  finished
-                </span>
-                <span
-                  className="font-cond text-[22px] font-semibold uppercase tracking-[0.04em]"
-                  style={{ color: "var(--md-ink)" }}
-                >
-                  {finish}
-                </span>
-                {detail && (
-                  <span className="font-mono text-[15px]" style={{ color: "var(--md-ink-muted)" }}>
-                    · {detail}
-                  </span>
-                )}
-              </div>
+                  <path
+                    d="M18 8a3 3 0 1 0-2.8-4H15a3 3 0 0 0 .2 1.1L8.9 8.6a3 3 0 1 0 0 6.8l6.3 3.5A3 3 0 1 0 18 16a3 3 0 0 0-2.1.9L9.6 13.4a3 3 0 0 0 0-2.8l6.3-3.5A3 3 0 0 0 18 8Z"
+                    fill="currentColor"
+                  />
+                </svg>
+                {shareReady ? "Share the Bracket" : "Preparing…"}
+              </Button>
             )}
-
-            {/* Share + Back buttons */}
-            <div className="flex shrink-0 flex-wrap items-center gap-3">
-              {myTeam && (
-                <Button
-                  size="lg"
-                  className="flex items-center gap-2"
-                  style={{
-                    background: "var(--md-coral)",
-                    color: "var(--md-white)",
-                    borderColor: "var(--md-ink)",
-                  }}
-                  onClick={share}
-                  disabled={!shareReady}
-                >
-                  <svg
-                    width="17"
-                    height="17"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                    style={{ flexShrink: 0 }}
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M18 8a3 3 0 1 0-2.8-4H15a3 3 0 0 0 .2 1.1L8.9 8.6a3 3 0 1 0 0 6.8l6.3 3.5A3 3 0 1 0 18 16a3 3 0 0 0-2.1.9L9.6 13.4a3 3 0 0 0 0-2.8l6.3-3.5A3 3 0 0 0 18 8Z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                  {shareReady ? "Share the Bracket" : "Preparing…"}
-                </Button>
-              )}
-              {onReset && (
-                <Button size="lg" variant="secondary" onClick={onReset}>
-                  Back
-                </Button>
-              )}
-            </div>
+            {onReset && (
+              <Button size="lg" variant="secondary" onClick={onReset}>
+                Back
+              </Button>
+            )}
           </div>
         </div>
       </div>

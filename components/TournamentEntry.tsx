@@ -382,6 +382,7 @@ export function TournamentEntry({
         mode={mode}
         dailyDate={dailyDate}
         onReset={onBack}
+        reveal
       />
     );
   }
