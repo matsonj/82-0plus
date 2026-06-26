@@ -526,6 +526,38 @@ body {
   100% { box-shadow: inset 0 0 0 0 rgba(255, 196, 0, 0); } /* fade */
 }
 
+/* ---------- SIMULATE reveal (game-by-game tournament playback) ---------- */
+/* A game row drops DOWN from the previous game (starts tucked up behind it). */
+@keyframes sim-drop-in {
+  0%   { opacity: 0; transform: translateY(-16px); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0); }
+}
+/* The W/L chip fades in a beat AFTER the row lands. */
+@keyframes sim-chip-in {
+  0%   { opacity: 0; transform: scale(0.78); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* A stamp slaps on at a slight angle. */
+@keyframes sim-stamp-in {
+  0%   { opacity: 0; transform: rotate(var(--sim-rot, -5deg)) scale(1.35); }
+  55%  { opacity: 1; transform: rotate(var(--sim-rot, -5deg)) scale(0.94); }
+  100% { opacity: 1; transform: rotate(var(--sim-rot, -5deg)) scale(1); }
+}
+/* The final result screen swipes in from the right (over the game list). */
+@keyframes sim-swipe-in {
+  0%   { opacity: 0; transform: translateX(100%); }
+  30%  { opacity: 1; }
+  100% { opacity: 1; transform: translateX(0); }
+}
+.sim-drop-in { animation: sim-drop-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.sim-chip-in { animation: sim-chip-in 220ms ease-out both; }
+.sim-stamp-in { animation: sim-stamp-in 360ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.sim-swipe-in { animation: sim-swipe-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .sim-drop-in, .sim-chip-in, .sim-stamp-in, .sim-swipe-in { animation: none; }
+}
+
 /* ---------- Stat grid (SACRED — clean insert, legibility first) ---------- */
 .md-statline {
   display: grid;
