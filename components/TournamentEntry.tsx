@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   GameMode,
   PublicPlayer,
@@ -24,6 +24,7 @@ import {
 } from "@/lib/tournamentValidation";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
 import { draftSourceKey, type DraftRosterMap } from "@/lib/draftSources";
+import { suggestTeamName } from "@/lib/teamNameSuggest";
 
 const HOWTO_KEY = "md820-seen-tournament-howto";
 
@@ -97,6 +98,9 @@ export function TournamentEntry({
   const [loggedIn, setLoggedIn] = useState(false);
   const [showHowTo, setShowHowTo] = useState(false);
   const [teamName, setTeamName] = useState("");
+  // The team name is pre-filled with a suggestion from the handle; once the
+  // player edits it ("touched"), we stop overwriting it.
+  const [teamNameTouched, setTeamNameTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [nameTaken, setNameTaken] = useState(false);
@@ -144,6 +148,17 @@ export function TournamentEntry({
     setUsername("");
     setPin("");
   };
+
+  // Suggest a default team name from the handle ("JMONEY" → "JMONEY'S JOKERS").
+  // It tracks the handle live (logged-out players type it on this step) until the
+  // player edits the team name themselves.
+  const suggestedTeamName = useMemo(
+    () => suggestTeamName(isPrivate && privateConfig ? privateConfig.name : username),
+    [isPrivate, privateConfig, username],
+  );
+  useEffect(() => {
+    if (!teamNameTouched) setTeamName(suggestedTeamName);
+  }, [suggestedTeamName, teamNameTouched]);
 
   useEffect(() => {
     if (benchIsFixed) {
@@ -423,7 +438,7 @@ export function TournamentEntry({
         : isPrivate
           ? "Submit team"
           : "Enter the playoffs →"
-      : "Claim your team →";
+      : "Name your team →";
   const primaryDisabled = step === "submit" ? !canSubmit : captainSlot === null;
   const onPrimary = step === "submit" ? submit : () => setAdvancedToClaim(true);
   const onBackStep = () => {
@@ -587,7 +602,7 @@ export function TournamentEntry({
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-1.5">
                 <h2 className="font-cover text-[32px] uppercase leading-[0.92] tracking-[-0.01em] sm:text-[40px]">
-                  Claim your team
+                  Name your team
                 </h2>
                 <p className="text-[14px] text-[var(--md-ink-muted)]">
                   Name your squad and lock your account — then send it to the bracket.
@@ -604,7 +619,8 @@ export function TournamentEntry({
                   value={teamName}
                   maxLength={NAME_MAX_LEN}
                   autoCapitalize="characters"
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setTeamNameTouched(true);
                     setTeamName(
                       e.target.value
                         .toUpperCase()
@@ -613,8 +629,8 @@ export function TournamentEntry({
                         // survive the strip below (MJ’s CREW → MJ'S CREW, not MJS).
                         .replace(/[‘’'`]/g, "'")
                         .replace(/[^A-Z ']/g, ""),
-                    )
-                  }
+                    );
+                  }}
                   placeholder="DREAMTEAM"
                   style={{
                     background: "var(--md-paper-2)",
@@ -624,7 +640,9 @@ export function TournamentEntry({
                 <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
                   {teamName.length > 0 && !teamNameCheck.ok
                     ? teamNameCheck.reason
-                    : "This team's name · letters, spaces & ' · 16 max"}
+                    : !teamNameTouched
+                      ? "We named it for you — don't love it? Tap to rename."
+                      : "Letters, spaces & ' · 16 max"}
                 </span>
               </label>
 
