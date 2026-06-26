@@ -16,6 +16,15 @@ export const DAILY_STARTER_SLOTS = 5;
 // 5 starters + 1 bench (sixth man).
 const DAILY_TOTAL_SLOTS = DAILY_STARTER_SLOTS + 1;
 
+// Daily boards on/after this date weight the decade pick by each era's
+// playable-team count (boardGen "byTeamCount"), so eras appear in proportion to
+// how many teams they offer instead of every era being equally likely. Earlier
+// dates keep the original flat weighting so every previously played daily
+// reproduces byte-for-byte — the submit route re-derives the board to verify
+// picks, so a past board must not shift. Compared lexicographically: keep it
+// "YYYY-MM-DD". Bumping it earlier would re-roll already-played days.
+export const BOARD_V2_FROM_DATE = "2026-06-27";
+
 export interface DailySlot {
   team: string;
   decade: number;
@@ -42,6 +51,8 @@ export async function computeDailyBoard(
     seed: `82-0+:${date}`,
     totalSlots: DAILY_TOTAL_SLOTS,
     requireFull: false,
+    // Future dates weight eras by team count; past dates stay flat (see above).
+    decadeWeighting: date >= BOARD_V2_FROM_DATE ? "byTeamCount" : "flat",
     options,
   });
 

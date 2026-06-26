@@ -10,8 +10,11 @@
 // The loop is, per round:
 //   • candidate decades = those that still have an un-used, playable team
 //     (drafted teams never repeat);
-//   • pick a decade weighted by 0.1^(times that decade has already been used)
-//     (90% decay per use, so slots spread across eras);
+//   • pick a decade weighted by base × 0.1^(times that decade has already been
+//     used) — 90% decay per use, so slots spread across eras. `decadeWeighting`
+//     sets base: "flat" → 1 (legacy); "byTeamCount" → the decade's playable-team
+//     count, so eras appear in proportion to how many teams they offer instead
+//     of every era being equally likely (which over-represents sparse old eras);
 //   • within that decade, sort the playable, un-used teams by weight desc with a
 //     localeCompare tie-break (DB row order isn't stable, so this keeps the seed
 //     reproducible) and pick one weighted by team weight.
@@ -36,6 +39,16 @@ export interface BuildBoardArgs {
    * When false (daily's sparse-day behavior), return as many as it can.
    */
   requireFull: boolean;
+  /**
+   * How the per-round decade pick is weighted (the same 90%-per-use decay
+   * applies on top of either):
+   *   "flat"        — every candidate decade starts equal (legacy).
+   *   "byTeamCount" — weight ∝ the decade's playable-team count, so sparse old
+   *                   eras stop being over-represented per team.
+   * Defaults to "flat" so existing seeds reproduce byte-for-byte unless a caller
+   * opts in (Daily from BOARD_V2_FROM_DATE; all new blind private boards).
+   */
+  decadeWeighting?: "flat" | "byTeamCount";
   options?: QueryOptions;
 }
 
@@ -63,6 +76,7 @@ export async function buildTeamDecadeBoard({
   totalSlots,
   requireFull,
   options = {},
+  decadeWeighting = "flat",
 }: BuildBoardArgs): Promise<TeamDecadeSlot[]> {
   const rng = mulberry32(hashSeed(seed));
 
@@ -95,7 +109,13 @@ export async function buildTeamDecadeBoard({
     if (candidates.length === 0) break;
     const decade = weightedPick(
       candidates,
-      candidates.map((d) => Math.pow(0.1, usage[d] ?? 0)),
+      candidates.map((d) => {
+        // base = 1 (flat) or the decade's playable-team count (byTeamCount),
+        // then the same 90%-per-use decay so repeated eras fall off fast.
+        const base =
+          decadeWeighting === "byTeamCount" ? playableByDecade.get(d)!.size : 1;
+        return base * Math.pow(0.1, usage[d] ?? 0);
+      }),
       rng,
     );
 
