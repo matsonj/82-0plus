@@ -925,10 +925,10 @@ export function ResultsPanel({
                   Row 2:  [ SHARE ]  [ PLAY AGAIN ]   two-up, equal width
                 Enter Playoffs is the dominant next action — the strongest
                 treatment in the system (bold flame fill + 3px ink border + 6px
-                ink pop shadow), winning by both position (top) and weight so it
-                never collides with the red Share button sitting in row 2.
-                Share stays prominent + coral but is demoted to row 2; Play Again
-                is the lighter cream / ink-outline secondary.
+                ink pop shadow), winning by position (top) and weight. Share is
+                its inverse — ink fill with a coral trim + coral pop shadow — so
+                the two never read as competing solid-red fields; Play Again is
+                the lighter cream / ink-outline secondary.
                 When onEnterTournament is undefined (e.g. sparse Daily with no
                 bench) we OMIT row 1 entirely — never a dead/disabled button —
                 and row 2 alone carries Share + Play Again. */}
@@ -969,10 +969,11 @@ export function ResultsPanel({
                   </div>
                 )}
 
-                {/* Row 2 — SHARE (coral, prominent) + PLAY AGAIN (cream outline).
-                    Equal-width via flex-1 so they fill the same span as row 1.
-                    Same 6px ink pop shadow as the primary so the row reads as a
-                    unit. When there's no primary row above, Share leads here. */}
+                {/* Row 2 — SHARE (ink fill, coral trim + coral pop shadow — the
+                    inverse of the coral primary, so two solid reds never sit
+                    adjacent) + PLAY AGAIN (cream / ink outline). Equal-width via
+                    flex-1 so they fill the same span as row 1. When there's no
+                    primary row above, Share leads here. */}
                 <div className="flex w-full items-stretch gap-3 lg:gap-4">
                   <button
                     type="button"
@@ -980,10 +981,10 @@ export function ResultsPanel({
                     disabled={!shareBlob || !shareReady}
                     className="inline-flex flex-1 items-center justify-center gap-2.5 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
                     style={{
-                      background: "var(--md-coral)",
+                      background: "var(--md-ink)",
                       color: "var(--md-white)",
-                      border: "2px solid var(--md-ink)",
-                      boxShadow: "6px 6px 0 0 var(--md-ink)",
+                      border: "2px solid var(--md-coral)",
+                      boxShadow: "6px 6px 0 0 var(--md-coral)",
                       fontSize: 16,
                       letterSpacing: "0.12em",
                       padding: "16px 22px",
