@@ -10,11 +10,12 @@ import type {
 import { type SlotKind } from "@/lib/positions";
 import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
-import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
-import { CaptainPicker } from "@/components/CaptainPicker";
+import { type LineupEntry } from "@/components/LineupBoard";
 import { TournamentResults } from "@/components/TournamentResults";
+import { TournamentProgress, type EntryStep } from "@/components/TournamentProgress";
+import { TournamentRoster } from "@/components/TournamentRoster";
 import { HowToPlay } from "@/components/HowToPlay";
-import { Button, Capsule, NameField, Notice, PinField } from "@/components/ui";
+import { Button, NameField, Notice, PinField } from "@/components/ui";
 import {
   validateName,
   validateTeamName,
@@ -43,8 +44,6 @@ function pickWeightedDecade(
   }
   return pool[pool.length - 1];
 }
-
-type Step = "sixth" | "finalize";
 
 export function TournamentEntry({
   initialLineup,
@@ -102,11 +101,15 @@ export function TournamentEntry({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [nameTaken, setNameTaken] = useState(false);
   const [result, setResult] = useState<TournamentRunResponse | null>(null);
+  // The flow runs Sixth Man → Captain → Submit. `sixth` gates the first
+  // transition (a bench player is picked); `advancedToClaim` gates the second
+  // (the captain is confirmed via "Claim your team"). Both derive `step` below.
+  const [advancedToClaim, setAdvancedToClaim] = useState(false);
 
   const rollSeq = useRef(0);
   const rollActive = useRef(false);
 
-  const step: Step = sixth ? "finalize" : "sixth";
+  const step: EntryStep = !sixth ? "sixth" : !advancedToClaim ? "captain" : "submit";
 
   const usedIds = [
     ...starters.map((e) => e.player.entity_id),
@@ -409,193 +412,235 @@ export function TournamentEntry({
     );
   }
 
+  // Footer/sidebar action wiring, shared by the mobile footer + desktop sidebar.
+  const showPrimary = step !== "sixth";
+  const primaryLabel =
+    step === "submit"
+      ? submitting
+        ? isPrivate
+          ? "Submitting…"
+          : "Running…"
+        : isPrivate
+          ? "Submit team"
+          : "Enter the playoffs →"
+      : "Claim your team →";
+  const primaryDisabled = step === "submit" ? !canSubmit : captainSlot === null;
+  const onPrimary = step === "submit" ? submit : () => setAdvancedToClaim(true);
+  const onBackStep = () => {
+    if (step === "submit") setAdvancedToClaim(false);
+    else if (step === "captain") setSixth(null); // re-draft the sixth man
+    else onBack(); // sixth step → leave the flow
+  };
+  const backLabel = step === "sixth" ? "Cancel" : "Back";
+
+  const rosterProps = {
+    kinds: KINDS,
+    starters: lineup,
+    sixth,
+    step,
+    captainSlot,
+    onCrownCaptain: step === "captain" ? setCaptainSlot : undefined,
+  } as const;
+
   return (
-    // The entry flow (sixth-man draft + captain/name form) is a narrow single
-    // column; the post-submit bracket result returns above (full section width).
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-5">
+    // Single column on mobile; two columns on desktop (action + roster sidebar).
+    // The masthead (mode chip included) comes from the page's GlobalHeader.
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
       {showHowTo && (
-        <HowToPlay
-          onClose={() => setShowHowTo(false)}
-          initialTab="playoffs"
-        />
+        <HowToPlay onClose={() => setShowHowTo(false)} initialTab="playoffs" />
       )}
 
-      {/* The locked starting five */}
-      <div>
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-            Your starting five
-          </span>
-          <Capsule
-            style={
-              listMode === "hoopiq"
-                ? { background: "var(--md-ink)", color: "var(--md-white)" }
-                : undefined
-            }
-          >
-            {isPrivate
-              ? mode === "hoopiq"
-                ? "Private · Ranked"
-                : "Private · Classic"
-              : `${
-                  mode === "daily"
-                    ? "Daily"
-                    : mode === "hoopiq"
-                      ? "Ranked"
-                    : "Classic"
-                } Playoffs`}
-          </Capsule>
-        </div>
-        <LineupBoard
-          kinds={KINDS}
-          entries={lineup}
-          targets={[]}
-          selected={null}
-          onSlotClick={() => {}}
-        />
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+        {/* ---- Main column: progress, (mobile roster), step body, (mobile actions) ---- */}
+        <div className="flex min-w-0 flex-1 flex-col gap-5">
+          <TournamentProgress step={step} />
 
-        {sixth && (
-          <div className="md-card mt-2 flex items-center justify-between gap-2 p-3">
-            <div className="flex flex-col">
-              <span className="font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                Sixth Man
-              </span>
-              <span className="font-archivo text-[14px] font-bold leading-tight" style={{ fontWeight: 800, fontVariationSettings: '"wdth" 88' }}>
-                {sixth.player.player_name}
-              </span>
-              <span className="font-mono text-[11px] text-[var(--md-coral-deep)]">
-                {sixth.team} &rsquo;{String(sixth.player.best_season).slice(2)}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
+          {/* Roster — mobile chip strip; desktop shows the panel in the sidebar. */}
+          <TournamentRoster variant="strip" className="lg:hidden" {...rosterProps} />
 
-      {rollError && (
-        <Notice tone="error" className="bg-transparent p-3 text-[13px]">
-          {rollError}
-        </Notice>
-      )}
-
-      {/* ---- SIXTH MAN: the bench round ---- */}
-      {step === "sixth" && (
-        <div className="md-card md-card--lift flex flex-col items-center gap-4 p-4 sm:p-5">
-          <div className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-            {isDaily
-              ? "Draft your Sixth Man · today's bench slot"
-              : benchIsFixed
-                ? "Draft your Sixth Man · playoff bench slot"
-                : "Draft your Sixth Man · any position"}
-          </div>
-          {currentDecade !== null && (
-            <SlotMachine
-              team={currentTeam}
-              decade={currentDecade}
-              teamPool={teamReelPool}
-              decadePool={decadeReelPool.length > 0 ? decadeReelPool : decades}
-              size="lg"
-              onSettled={() => setBenchReelSettled(true)}
-            />
+          {rollError && (
+            <Notice tone="error" className="bg-transparent p-3 text-[13px]">
+              {rollError}
+            </Notice>
           )}
-          {!benchIsFixed && (
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={teamSkip}
-                disabled={teamSkips <= 0 || rolling}
-              >
-                ↻ Team skip ({teamSkips})
-              </Button>
+
+          {/* ---- STEP: SIXTH MAN ---- */}
+          {step === "sixth" && (
+            <div className="flex flex-col gap-4">
+              <h2 className="font-cover text-[32px] uppercase leading-[0.92] tracking-[-0.01em] sm:text-[40px]">
+                Draft your sixth man
+              </h2>
+              {currentDecade !== null && (
+                <SlotMachine
+                  team={currentTeam}
+                  decade={currentDecade}
+                  teamPool={teamReelPool}
+                  decadePool={decadeReelPool.length > 0 ? decadeReelPool : decades}
+                  size="lg"
+                  onSettled={() => setBenchReelSettled(true)}
+                />
+              )}
+              {!benchIsFixed && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={teamSkip}
+                    disabled={teamSkips <= 0 || rolling}
+                  >
+                    ↻ Team skip ({teamSkips})
+                  </Button>
+                </div>
+              )}
+              {benchReelSettled && currentTeam && currentDecade !== null && !rolling ? (
+                <PlayerList
+                  team={currentTeam}
+                  decade={currentDecade}
+                  mode={listMode}
+                  players={benchPlayers}
+                  playersMode={
+                    benchPlayers !== null && benchPlayers !== undefined ? listMode : null
+                  }
+                  allowRespin={!benchIsFixed}
+                  draftable={draftable}
+                  onPick={pickSixth}
+                  onNoneEligible={() =>
+                    rollRound({
+                      decade: currentDecade ?? undefined,
+                      excludeTeam: currentTeam ?? undefined,
+                    })
+                  }
+                />
+              ) : (
+                <div className="py-8 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
+                  Spinning the reel…
+                </div>
+              )}
             </div>
           )}
-          <div className="w-full">
-            {benchReelSettled && currentTeam && currentDecade !== null && !rolling ? (
-              <PlayerList
-                team={currentTeam}
-                decade={currentDecade}
-                mode={listMode}
-                players={benchPlayers}
-                playersMode={
-                  benchPlayers !== null && benchPlayers !== undefined ? listMode : null
-                }
-                allowRespin={!benchIsFixed}
-                draftable={draftable}
-                onPick={pickSixth}
-                onNoneEligible={() =>
-                  rollRound({
-                    decade: currentDecade ?? undefined,
-                    excludeTeam: currentTeam ?? undefined,
-                  })
-                }
-              />
-            ) : (
-              <div className="py-8 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
-                Spinning the reel…
-              </div>
-            )}
-          </div>
-          <Button size="sm" variant="secondary" onClick={onBack}>
-            Cancel
-          </Button>
-        </div>
-      )}
 
-      {/* ---- FINALIZE: captain + name + pin ---- */}
-      {step === "finalize" && (
-        <div className="md-card md-card--lift flex flex-col gap-4 p-4 sm:p-5">
-          <div
-            className="font-archivo leading-tight"
-            style={{ fontSize: 20, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
-          >
-            Pick your captain
-          </div>
-          <p className="-mt-2 text-[13px] text-[var(--md-ink-muted)]">
-            Tap one of your five starters.
-          </p>
-          <CaptainPicker
-            kinds={KINDS}
-            entries={lineup}
-            value={captainSlot}
-            onChange={setCaptainSlot}
-          />
-
-          {captainSlot !== null && (
-            <div className="border-t-2 border-[var(--md-ink)] pt-4">
-              <div
-                className="font-archivo leading-tight"
-                style={{ fontSize: 20, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
-              >
-                Claim your team
+          {/* ---- STEP: CAPTAIN ---- */}
+          {step === "captain" && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <h2 className="font-cover text-[32px] uppercase leading-[0.92] tracking-[-0.01em] sm:text-[40px]">
+                  Pick your captain
+                </h2>
+                <p className="text-[14px] text-[var(--md-ink-muted)]">
+                  Tap a starter in your roster to crown them — your captain anchors the lineup.
+                </p>
               </div>
-              <div className="mt-3 flex flex-col gap-3">
-                {isPrivate ? (
-                  <div className="flex items-center gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
-                    <span className="font-mono text-[13px]">
-                      Playing as{" "}
-                      <strong className="text-[var(--md-coral-deep)]">
-                        {privateConfig.name}
-                      </strong>
+              {captainSlot !== null && lineup[captainSlot] ? (
+                <div
+                  className="flex flex-col gap-3 p-5 sm:p-6"
+                  style={{
+                    background: "var(--md-ink)",
+                    border: "2.5px solid var(--md-yellow)",
+                    boxShadow: "6px 6px 0 0 var(--md-yellow)",
+                  }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="bg-[var(--md-yellow)] px-2 py-0.5 font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)]">
+                      ★ Captain
+                    </span>
+                    <span className="font-cond text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--md-paper-3)]">
+                      {KINDS[captainSlot] === "G"
+                        ? "Guard"
+                        : KINDS[captainSlot] === "W"
+                          ? "Wing"
+                          : KINDS[captainSlot] === "B"
+                            ? "Big"
+                            : "Flex"}
                     </span>
                   </div>
-                ) : loggedIn ? (
-                  <div className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
-                    <span className="font-mono text-[13px]">
-                      Playing as{" "}
-                      <strong className="text-[var(--md-coral-deep)]">
-                        {username}
-                      </strong>
-                    </span>
-                    <button
-                      type="button"
-                      className="font-mono text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-                      onClick={logOut}
-                    >
-                      Log out
-                    </button>
-                  </div>
-                ) : (
-                  <>
+                  <span className="font-cover text-[34px] uppercase leading-[0.9] text-[var(--md-paper)] sm:text-[42px]">
+                    {lineup[captainSlot]!.player.player_name}
+                  </span>
+                  <span className="font-archivo text-[14px] font-semibold text-[var(--md-paper-3)]">
+                    {lineup[captainSlot]!.team} &rsquo;
+                    {String(lineup[captainSlot]!.player.best_season).slice(2)}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center border-2 border-dashed border-[var(--md-paper-3)] py-12 text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
+                  Pick a captain to continue.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ---- STEP: SUBMIT (claim) ---- */}
+          {step === "submit" && (
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-1.5">
+                <h2 className="font-cover text-[32px] uppercase leading-[0.92] tracking-[-0.01em] sm:text-[40px]">
+                  Claim your team
+                </h2>
+                <p className="text-[14px] text-[var(--md-ink-muted)]">
+                  Name your squad and lock your account — then send it to the bracket.
+                </p>
+              </div>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                  ✎ Team name{" "}
+                  <span className="text-[var(--md-coral-deep)]">(tap to edit)</span>
+                </span>
+                <input
+                  className="md-input md-input--name"
+                  value={teamName}
+                  maxLength={NAME_MAX_LEN}
+                  autoCapitalize="characters"
+                  onChange={(e) =>
+                    setTeamName(
+                      e.target.value
+                        .toUpperCase()
+                        // Normalize curly quotes (’ ‘ U+2019/U+2018 — what mobile
+                        // keyboards insert) and backtick to a straight ' so they
+                        // survive the strip below (MJ’s CREW → MJ'S CREW, not MJS).
+                        .replace(/[‘’'`]/g, "'")
+                        .replace(/[^A-Z ']/g, ""),
+                    )
+                  }
+                  placeholder="DREAMTEAM"
+                  style={{
+                    background: "var(--md-paper-2)",
+                    boxShadow: "var(--md-shadow-md)",
+                  }}
+                />
+                <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
+                  {teamName.length > 0 && !teamNameCheck.ok
+                    ? teamNameCheck.reason
+                    : "This team's name · letters, spaces & ' · 16 max"}
+                </span>
+              </label>
+
+              {isPrivate ? (
+                <div className="flex items-center gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
+                  <span className="font-mono text-[13px]">
+                    Playing as{" "}
+                    <strong className="text-[var(--md-coral-deep)]">
+                      {privateConfig.name}
+                    </strong>
+                  </span>
+                </div>
+              ) : loggedIn ? (
+                <div className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
+                  <span className="font-mono text-[13px]">
+                    Playing as{" "}
+                    <strong className="text-[var(--md-coral-deep)]">{username}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="font-mono text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
+                    onClick={logOut}
+                  >
+                    Log out
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3">
+                  <div className="flex-1">
                     <NameField
                       label="Your name"
                       value={username}
@@ -608,98 +653,72 @@ export function TournamentEntry({
                       hint={
                         username.length > 0 && !usernameCheck.ok
                           ? usernameCheck.reason
-                          : "Your account name · letters, numbers, spaces · 16 max"
+                          : "Letters, numbers, spaces · 16 max"
                       }
                     />
-                    <p className="-mt-2 font-mono text-[11px] text-[var(--md-ink-muted)]">
-                      This is how you log back in to check your teams.
-                    </p>
-
+                  </div>
+                  <div className="w-[38%] max-w-[150px]">
                     <PinField
                       label="PIN"
                       value={pin}
                       onChange={(event) => setPin(event.target.value)}
                       hint={
-                        pin.length > 0 && !pinOk
-                          ? "PIN must be 4–6 digits"
-                          : "Remembers your account so you can check back."
+                        pin.length > 0 && !pinOk ? "4–6 digits" : "Logs you back in."
                       }
                     />
-                  </>
-                )}
+                  </div>
+                </div>
+              )}
 
-                <label className="flex flex-col gap-1">
-                  <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                    ✎ Team name{" "}
-                    <span className="text-[var(--md-coral-deep)]">(tap to edit)</span>
-                  </span>
-                  <input
-                    className="md-input md-input--name"
-                    value={teamName}
-                    maxLength={NAME_MAX_LEN}
-                    autoCapitalize="characters"
-                    onChange={(e) =>
-                      setTeamName(
-                        e.target.value
-                          .toUpperCase()
-                          // Normalize curly quotes (’ ‘ U+2019/U+2018 — what mobile
-                          // keyboards insert) and backtick to a straight ' so they
-                          // survive the strip below (MJ’s CREW → MJ'S CREW, not MJS).
-                          .replace(/[‘’'`]/g, "'")
-                          .replace(/[^A-Z ']/g, ""),
-                      )
-                    }
-                    placeholder="DREAMTEAM"
-                    style={{
-                      background: "var(--md-paper-2)",
-                      boxShadow: "var(--md-shadow-md)",
-                    }}
-                  />
-                  <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
-                    {teamName.length > 0 && !teamNameCheck.ok
-                      ? teamNameCheck.reason
-                      : "This team's name · letters, spaces & ' · 16 max"}
-                  </span>
-                </label>
-              </div>
+              {submitError && (
+                <Notice tone="error" className="text-[13px]">
+                  {submitError}
+                </Notice>
+              )}
             </div>
           )}
 
-          {submitError && (
-            <Notice tone="error" className="text-[13px]">
-              {submitError}
-            </Notice>
-          )}
-
-          {captainSlot === null && (
-            <p className="text-center font-mono text-[13px] text-[var(--md-ink-muted)]">
-              Pick a captain to continue.
-            </p>
-          )}
-
-          <div className="flex flex-wrap justify-center gap-2">
-            {captainSlot !== null && (
+          {/* ---- Mobile actions (desktop actions live under the sidebar panel) ---- */}
+          <div className="flex items-stretch gap-3 border-t-2 border-[var(--md-ink)] pt-4 lg:hidden">
+            <Button size="lg" variant="secondary" onClick={onBackStep}>
+              ← {backLabel}
+            </Button>
+            {showPrimary ? (
               <Button
                 size="lg"
-                variant="teal"
-                disabled={!canSubmit}
-                onClick={submit}
+                className="flex-1"
+                disabled={primaryDisabled}
+                onClick={onPrimary}
               >
-                {submitting
-                  ? isPrivate
-                    ? "Submitting…"
-                    : "Running…"
-                  : isPrivate
-                    ? "Submit team"
-                    : "Enter the playoffs"}
+                {primaryLabel}
               </Button>
+            ) : (
+              <span className="flex flex-1 items-center justify-end text-right font-mono text-[11px] leading-tight text-[var(--md-ink-muted)]">
+                Tap a player to add your sixth man →
+              </span>
             )}
-            <Button size="lg" variant="secondary" onClick={onBack}>
-              Cancel
-            </Button>
           </div>
         </div>
-      )}
+
+        {/* ---- Desktop sidebar: roster panel + actions ---- */}
+        <div className="hidden w-[420px] shrink-0 flex-col gap-4 lg:flex">
+          <TournamentRoster variant="panel" {...rosterProps} />
+          {showPrimary && (
+            <Button
+              size="lg"
+              fullWidth
+              disabled={primaryDisabled}
+              onClick={onPrimary}
+            >
+              {primaryLabel}
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" fullWidth onClick={onBackStep}>
+            ← {backLabel}
+            {step === "sixth" ? " · back to result" : step === "captain" ? " to sixth man" : " to captain"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
