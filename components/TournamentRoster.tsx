@@ -77,14 +77,14 @@ function RosterStrip({
         : "Your roster";
 
   const slotBase =
-    "flex flex-1 min-w-0 min-h-[74px] flex-col gap-1 p-1.5 text-left transition-transform";
+    "flex min-w-0 min-h-[66px] flex-col gap-1 p-2 text-left";
 
   return (
     <div className={`flex flex-col gap-2 ${className ?? ""}`}>
       <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink-muted)]">
         {label}
       </span>
-      <div className="flex items-stretch gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5">
         {starters.map((e, i) => {
           if (!e) return null;
           const isCap = captainSlot === i;
@@ -113,25 +113,25 @@ function RosterStrip({
             >
               {isCap ? (
                 <span className="flex items-center justify-between gap-0.5">
-                  <span className="font-cond text-[8px] font-bold uppercase tracking-[0.04em] text-[var(--md-ink)]">
+                  <span className="font-cond text-[9px] font-bold uppercase tracking-[0.04em] text-[var(--md-ink)]">
                     {kindLabel(kinds[i])}
                   </span>
                   <span className="text-[11px] leading-none text-[var(--md-ink)]">★</span>
                 </span>
               ) : (
-                <span className="self-start bg-[var(--md-yellow)] px-1 py-px font-cond text-[8px] font-bold uppercase tracking-[0.04em] text-[var(--md-ink)]">
+                <span className="self-start bg-[var(--md-yellow)] px-1 py-px font-cond text-[9px] font-bold uppercase tracking-[0.04em] text-[var(--md-ink)]">
                   {kindLabel(kinds[i])}
                 </span>
               )}
-              <span className="whitespace-nowrap font-archivo text-[11px] font-extrabold uppercase leading-[1.02] tracking-[-0.01em] text-[var(--md-ink)]" style={{ fontVariationSettings: '"wdth" 88' }}>
+              <span className="whitespace-nowrap overflow-hidden text-ellipsis font-archivo text-[13px] font-extrabold uppercase leading-[1.02] tracking-[-0.01em] text-[var(--md-ink)]" style={{ fontVariationSettings: '"wdth" 88' }}>
                 {last}
               </span>
               {isCap ? (
-                <span className="mt-auto font-mono text-[8px] font-bold uppercase tracking-[0.04em] text-[var(--md-ink)]">
+                <span className="mt-auto font-mono text-[9px] font-bold uppercase tracking-[0.04em] text-[var(--md-ink)]">
                   Captain
                 </span>
               ) : (
-                <span className="mt-auto font-mono text-[8px] text-[var(--md-coral-deep)]">
+                <span className="mt-auto font-mono text-[9px] text-[var(--md-coral-deep)]">
                   {teamYear(e)}
                 </span>
               )}
@@ -164,13 +164,13 @@ function SixthChip({
           boxShadow: "3px 3px 0 0 var(--md-coral)",
         }}
       >
-        <span className="self-start bg-[var(--md-coral)] px-1 py-px font-cond text-[8px] font-bold uppercase tracking-[0.04em] text-[var(--md-white)]">
+        <span className="self-start bg-[var(--md-coral)] px-1 py-px font-cond text-[9px] font-bold uppercase tracking-[0.04em] text-[var(--md-white)]">
           6th
         </span>
-        <span className="whitespace-nowrap font-archivo text-[11px] font-extrabold uppercase leading-[1.05] text-[var(--md-paper)]" style={{ fontVariationSettings: '"wdth" 88' }}>
+        <span className="whitespace-nowrap overflow-hidden text-ellipsis font-archivo text-[13px] font-extrabold uppercase leading-[1.05] text-[var(--md-paper)]" style={{ fontVariationSettings: '"wdth" 88' }}>
           Pick →
         </span>
-        <span className="mt-auto font-mono text-[8px] text-[var(--md-coral)]">drafting</span>
+        <span className="mt-auto font-mono text-[9px] text-[var(--md-coral)]">drafting</span>
       </div>
     );
   }
@@ -182,26 +182,26 @@ function SixthChip({
         className={base}
         style={{ background: "var(--md-paper-2)", border: "2px solid var(--md-paper-3)", opacity: 0.85 }}
       >
-        <span className="self-start bg-[var(--md-paper-3)] px-1 py-px font-cond text-[8px] font-bold uppercase tracking-[0.04em] text-[var(--md-ink-muted)]">
+        <span className="self-start bg-[var(--md-paper-3)] px-1 py-px font-cond text-[9px] font-bold uppercase tracking-[0.04em] text-[var(--md-ink-muted)]">
           6th
         </span>
-        <span className="whitespace-nowrap font-archivo text-[11px] font-extrabold uppercase leading-[1.02] text-[var(--md-ink-muted)]" style={{ fontVariationSettings: '"wdth" 88' }}>
+        <span className="whitespace-nowrap overflow-hidden text-ellipsis font-archivo text-[13px] font-extrabold uppercase leading-[1.02] text-[var(--md-ink-muted)]" style={{ fontVariationSettings: '"wdth" 88' }}>
           {last}
         </span>
-        <span className="mt-auto font-mono text-[8px] text-[var(--md-ink-muted)]">bench</span>
+        <span className="mt-auto font-mono text-[9px] text-[var(--md-ink-muted)]">bench</span>
       </div>
     );
   }
   // Submit step: a normal locked roster member.
   return (
     <div className={base} style={{ background: "var(--md-white)", border: "2px solid var(--md-ink)" }}>
-      <span className="self-start bg-[var(--md-coral)] px-1 py-px font-cond text-[8px] font-bold uppercase tracking-[0.04em] text-[var(--md-white)]">
+      <span className="self-start bg-[var(--md-coral)] px-1 py-px font-cond text-[9px] font-bold uppercase tracking-[0.04em] text-[var(--md-white)]">
         6th
       </span>
-      <span className="whitespace-nowrap font-archivo text-[11px] font-extrabold uppercase leading-[1.02] text-[var(--md-ink)]" style={{ fontVariationSettings: '"wdth" 88' }}>
+      <span className="whitespace-nowrap overflow-hidden text-ellipsis font-archivo text-[13px] font-extrabold uppercase leading-[1.02] text-[var(--md-ink)]" style={{ fontVariationSettings: '"wdth" 88' }}>
         {last}
       </span>
-      <span className="mt-auto font-mono text-[8px] text-[var(--md-coral-deep)]">{teamYear(sixth)}</span>
+      <span className="mt-auto font-mono text-[9px] text-[var(--md-coral-deep)]">{teamYear(sixth)}</span>
     </div>
   );
 }

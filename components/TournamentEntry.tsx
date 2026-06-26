@@ -470,26 +470,39 @@ export function TournamentEntry({
               <h2 className="font-cover text-[32px] uppercase leading-[0.92] tracking-[-0.01em] sm:text-[40px]">
                 Draft your sixth man
               </h2>
+              {/* Dark "cover" reel card — the reel must sit on ink (matches the
+                  in-draft RollCard) so the spinner animation doesn't fade against
+                  the light page background. */}
               {currentDecade !== null && (
-                <SlotMachine
-                  team={currentTeam}
-                  decade={currentDecade}
-                  teamPool={teamReelPool}
-                  decadePool={decadeReelPool.length > 0 ? decadeReelPool : decades}
-                  size="lg"
-                  onSettled={() => setBenchReelSettled(true)}
-                />
-              )}
-              {!benchIsFixed && (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={teamSkip}
-                    disabled={teamSkips <= 0 || rolling}
+                <div className="md-card--cover p-4 sm:p-6">
+                  <div
+                    className="flex items-end justify-between pb-3"
+                    style={{ borderBottom: "1px solid var(--md-paper)", boxShadow: "0 4px 0 -1px var(--md-paper)" }}
                   >
-                    ↻ Team skip ({teamSkips})
-                  </Button>
+                    <span className="font-cond text-[13px] font-semibold uppercase tracking-[0.18em] text-[var(--md-paper)]">
+                      Bench Roll · Team + Era
+                    </span>
+                  </div>
+                  <div className="mt-4 flex flex-col items-center gap-3 lg:mt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+                    <SlotMachine
+                      team={currentTeam}
+                      decade={currentDecade}
+                      teamPool={teamReelPool}
+                      decadePool={decadeReelPool.length > 0 ? decadeReelPool : decades}
+                      size="lg"
+                      onSettled={() => setBenchReelSettled(true)}
+                    />
+                    {!benchIsFixed && (
+                      <Button
+                        size="sm"
+                        variant="ink"
+                        onClick={teamSkip}
+                        disabled={teamSkips <= 0 || rolling}
+                      >
+                        ↻ Team skip ({teamSkips})
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
               {benchReelSettled && currentTeam && currentDecade !== null && !rolling ? (
