@@ -696,7 +696,7 @@ function FullCard({
               </table>
             </div>
             <p className="mt-2 font-mono text-[10px] leading-snug text-[var(--md-ink-muted)]">
-              Game Quality is era-aware: each game is scored only on the box categories the NBA tracked that season. 50 ≈ league average. Greyed seasons were played for another team.
+              Game Quality is era-aware: each game is scored only on the box categories the NBA tracked that season. Greyed seasons were played for another team.
             </p>
           </div>
         )}
