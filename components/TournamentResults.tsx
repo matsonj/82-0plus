@@ -359,7 +359,7 @@ export function TournamentResults({
 
   const share = async () => {
     if (!myTeam || !shareReady || !shareBlob) return;
-    const text = `daily82 Tournament · ${you.name}: ${reachedRoundSentence(you.reachedRound, isChampion)}\n${shareLink}`;
+    const text = `daily82 Playoffs · ${you.name}: ${reachedRoundSentence(you.reachedRound, isChampion)}\n${shareLink}`;
     const outcome = await presentShare({
       blob: shareBlob,
       filename: "daily82-tournament.png",
@@ -458,9 +458,9 @@ export function TournamentResults({
         timeZone: "UTC",
       }) + " Daily";
     }
-    if (mode === "hoopiq") return "Ranked Tournament";
-    if (mode === "daily") return "Daily Tournament";
-    return "Classic Tournament";
+    if (mode === "hoopiq") return "Ranked Playoffs";
+    if (mode === "daily") return "Daily Playoffs";
+    return "Classic Playoffs";
   })();
 
   // Fresh entry: play the SIMULATE reveal first. Dismissing it ("See full
@@ -481,7 +481,7 @@ export function TournamentResults({
         <ShareAssetDialog
           title="Share your run"
           imageUrl={shareUrl}
-          imageAlt="Your tournament result card"
+          imageAlt="Your playoff result card"
           downloadName="daily82-tournament.png"
           shareLink={shareLink}
           autoCopied={autoCopied}

@@ -358,7 +358,7 @@ export function TournamentEntry({
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setSubmitError(data?.error ?? "Couldn't enter the tournament.");
+        setSubmitError(data?.error ?? "Couldn't enter the playoffs.");
         return;
       }
       const data = (await res.json()) as TournamentRunResponse;
@@ -367,7 +367,7 @@ export function TournamentEntry({
       setResult(data);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
-      setSubmitError("Couldn't enter the tournament right now. Try again.");
+      setSubmitError("Couldn't enter the playoffs right now. Try again.");
     } finally {
       setSubmitting(false);
     }
@@ -399,7 +399,7 @@ export function TournamentEntry({
     return (
       <div className="md-card md-card--lift mx-auto max-w-md p-5 text-center">
         <p className="font-archivo font-bold leading-tight" style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}>
-          Couldn&rsquo;t start the tournament.
+          Couldn&rsquo;t start the playoffs.
         </p>
         <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">{loadError}</p>
         <Button size="sm" variant="secondary" className="mt-4" onClick={onBack}>
@@ -443,7 +443,7 @@ export function TournamentEntry({
                     : mode === "hoopiq"
                       ? "Ranked"
                     : "Classic"
-                } Tournament`}
+                } Playoffs`}
           </Capsule>
         </div>
         <LineupBoard
@@ -484,7 +484,7 @@ export function TournamentEntry({
             {isDaily
               ? "Draft your Sixth Man · today's bench slot"
               : benchIsFixed
-                ? "Draft your Sixth Man · tournament bench slot"
+                ? "Draft your Sixth Man · playoff bench slot"
                 : "Draft your Sixth Man · any position"}
           </div>
           {currentDecade !== null && (
@@ -691,7 +691,7 @@ export function TournamentEntry({
                     : "Running…"
                   : isPrivate
                     ? "Submit team"
-                    : "Enter the tournament"}
+                    : "Enter the playoffs"}
               </Button>
             )}
             <Button size="lg" variant="secondary" onClick={onBack}>

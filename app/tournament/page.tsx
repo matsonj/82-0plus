@@ -60,7 +60,7 @@ export default function TournamentPage({
               <Link href="/" className="font-bold text-[var(--md-blue)] underline">
                 Classic or Ranked
               </Link>{" "}
-              season, then hit <strong>Enter Tournament</strong> on your result.
+              season, then hit <strong>Enter Playoffs</strong> on your result.
             </>
           }
         />
@@ -99,7 +99,7 @@ export default function TournamentPage({
                 Earn your way in.
               </div>
               <p className="mt-2 text-[13px] leading-relaxed text-[var(--md-ink-muted)]">
-                Every Classic and Ranked season can be entered into a tournament.
+                Every Classic and Ranked season can be entered into the playoffs.
                 Finish a draft, then send your roster to a bracket.
               </p>
             </div>

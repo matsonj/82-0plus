@@ -1186,7 +1186,11 @@ export default function Home() {
             modeLabel={modeLabel}
             mode={mode}
             isDaily={gameType === "daily"}
-            onReset={backToMenu}
+            // Play Again restarts the SAME mode for free play (Classic→"classic",
+            // Ranked→"hoopiq" — `mode` holds that here). Daily is the exception:
+            // it's one-per-day and server-gated, so it can't be replayed — send
+            // the player back to the menu instead.
+            onReset={gameType === "daily" ? backToMenu : () => startGame(mode, "free")}
             onEnterTournament={
               gameType === "free" || (gameType === "daily" && dailyBench)
                 ? () => setPhase("tournament")

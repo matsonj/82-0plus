@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getSavedUser, subscribeSession } from "@/lib/tournamentSession";
+import { getSavedUser, subscribeSession, clearUser } from "@/lib/tournamentSession";
 import {
   privateModeLabel,
   formatPrivateEntryStatus,
@@ -70,6 +70,10 @@ export function GlobalHeader({
   // client-side only (localStorage) so the first render stays hydration-safe.
   const [user, setUser] = useState<{ username: string; pin: string } | null>(null);
   const [open, setOpen] = useState(false);
+  // Desktop signed-in dropdown (the username chip): My Teams + Log out. Mirrors
+  // the alerts panel's open/close + card styling, with click-outside/Escape.
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   // Mobile nav: the desktop link row is hidden below sm, so a hamburger exposes
   // My Teams / How to Play / Player Cards on small screens.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -157,6 +161,37 @@ export function GlobalHeader({
     setChangelogViewing(false);
   }, []);
 
+  // Close the username dropdown on outside-click or Escape (mirrors how a menu
+  // should dismiss; the alerts panel has its own ✕). Only wired while open.
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [userMenuOpen]);
+
+  // Shared logout: drop any open menus, clear the stored credential (which fires
+  // the session event + cross-tab `storage` event, flipping every tab's masthead
+  // to signed-out), then hard-nav home so THIS tab lands on a clean menu and any
+  // in-page game state is discarded.
+  const logOut = useCallback(() => {
+    setUserMenuOpen(false);
+    setMenuOpen(false);
+    clearUser();
+    window.location.assign("/");
+  }, []);
+
   const pending = notif?.pending ?? [];
   const completed = notif?.completedUnviewed ?? [];
   const count = pending.length + completed.length;
@@ -180,7 +215,7 @@ export function GlobalHeader({
     { label: "Player Cards", href: "/cards" },
     ...(!user
       ? [onSignIn ? { label: "Sign In", action: onSignIn } : { label: "Sign In", href: "/" }]
-      : []),
+      : [{ label: "Log out", action: logOut }]),
   ];
 
   return (
@@ -191,8 +226,12 @@ export function GlobalHeader({
       style={{ width: "100vw", marginLeft: "calc(50% - 50vw)" }}
     >
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6 sm:py-3.5">
-        {/* Wordmark lockup: DAILY (ink) + 82 (flame), cream box, flame offset. */}
-        <Link href="/" aria-label="daily82 home" className="flex shrink-0">
+        {/* Wordmark lockup: DAILY (ink) + 82 (flame), cream box, flame offset.
+            Plain <a> (full document navigation), NOT next/link: on the home page,
+            mid-game state lives entirely in Home's client state, and a same-route
+            SPA <Link> click is a no-op that wouldn't reset the in-page phase. A
+            hard nav remounts Home fresh so the logo always lands on the menu. */}
+        <a href="/" aria-label="daily82 home" className="flex shrink-0">
           <span
             className="flex border-[2.5px] border-[var(--md-paper)]"
             style={{ boxShadow: "5px 5px 0 0 var(--md-coral)" }}
@@ -214,7 +253,7 @@ export function GlobalHeader({
               </span>
             </span>
           </span>
-        </Link>
+        </a>
 
         <div className="flex items-center gap-3 sm:gap-6">
           <nav className="hidden items-center gap-6 sm:flex">
@@ -326,13 +365,47 @@ export function GlobalHeader({
           </div>
 
           {user ? (
-            <Link
-              href="/tournament"
-              title="Your teams"
-              className="hidden max-w-[140px] truncate border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-3 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)] sm:inline-block"
-            >
-              {user.username}
-            </Link>
+            // Desktop-only signed-in dropdown: the username chip becomes a menu
+            // trigger (My Teams + Log out), mirroring the alerts panel.
+            <div ref={userMenuRef} className="relative hidden sm:inline-block">
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                onClick={() => setUserMenuOpen((o) => !o)}
+                title="Your account"
+                style={{ cursor: "pointer" }}
+                className="max-w-[140px] truncate border-2 border-[var(--md-paper)] bg-[var(--md-paper)] px-3 py-2 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:border-[var(--md-coral)] hover:bg-[var(--md-coral)] hover:text-[var(--md-paper)]"
+              >
+                {user.username}
+              </button>
+
+              {userMenuOpen && (
+                <div
+                  role="menu"
+                  className="md-card md-card--lift absolute right-0 z-30 mt-2 w-44 p-2 text-left"
+                  style={{ background: "var(--md-white)" }}
+                >
+                  <Link
+                    href="/tournament"
+                    role="menuitem"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="block px-2 py-1.5 font-cond text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:text-[var(--md-coral)]"
+                  >
+                    My Teams
+                  </Link>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={logOut}
+                    style={{ cursor: "pointer" }}
+                    className="block w-full px-2 py-1.5 text-left font-cond text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink)] transition-colors hover:text-[var(--md-coral)]"
+                  >
+                    Log out
+                  </button>
+                </div>
+              )}
+            </div>
           ) : onSignIn ? (
             <button
               type="button"

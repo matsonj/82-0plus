@@ -99,7 +99,7 @@ function resultKicker(wins: number, netRating: number, perfect: boolean): string
   if (wins >= 60) return "Championship caliber.";
   if (wins >= 55) return "A playoff powerhouse.";
   if (wins >= 50) return "Playoff-bound roster.";
-  if (wins >= 40) return "Tournament-eligible.";
+  if (wins >= 40) return "Playoff-eligible.";
   if (netRating >= 0) return "A winning season.";
   return "Back to the draft board.";
 }
@@ -664,7 +664,7 @@ export function ResultsPanel({
   // interstitial uses "Back to lineup".
   resetLabel?: string;
   onEnterTournament?: () => void;
-  // Override the entry-CTA label (default: "Enter Tournament"). Private
+  // Override the entry-CTA label (default: "Enter Playoffs"). Private
   // tournaments reuse this screen as the draft interstitial with a
   // "Add sixth man & captain" button.
   entryCtaLabel?: string;
@@ -920,145 +920,101 @@ export function ResultsPanel({
             />
 
             {/* ---- CTAs ----
-                Two breakpoint-specific blocks because the mobile and desktop
-                action rows intentionally use different hierarchy. */}
+                ONE consistent layout at every tier / breakpoint:
+                  Row 1:  [ ENTER PLAYOFFS ]          full-width PRIMARY
+                  Row 2:  [ SHARE ]  [ PLAY AGAIN ]   two-up, equal width
+                Enter Playoffs is the dominant next action — the strongest
+                treatment in the system (bold flame fill + 3px ink border + 6px
+                ink pop shadow), winning by position (top) and weight. Share is
+                its inverse — ink fill with a coral trim + coral pop shadow — so
+                the two never read as competing solid-red fields; Play Again is
+                the lighter cream / ink-outline secondary.
+                When onEnterTournament is undefined (e.g. sparse Daily with no
+                bench) we OMIT row 1 entirely — never a dead/disabled button —
+                and row 2 alone carries Share + Play Again. */}
             {!entryOnly && (
-              <>
-                {/* Mobile (871-0): full-width flame share, tournament block, play again */}
-                <div className="flex flex-col gap-3 mb-1 lg:hidden">
+              <div className="flex flex-col gap-4 pt-2">
+                {/* Row 1 — ENTER PLAYOFFS (primary). Eligible: the dominant CTA.
+                    Ineligible: a quiet ledger note explaining the 40-win gate (NOT
+                    a button). Absent action: nothing renders here. */}
+                {onEnterTournament && isEligible && (
+                  <button
+                    type="button"
+                    onClick={onEnterTournament}
+                    className="inline-flex w-full items-center justify-center gap-3 font-cond font-bold uppercase transition-transform hover:-translate-y-0.5"
+                    style={{
+                      background: "var(--md-coral)",
+                      color: "var(--md-white)",
+                      border: "3px solid var(--md-ink)",
+                      boxShadow: "6px 6px 0 0 var(--md-ink)",
+                      fontSize: 17,
+                      letterSpacing: "0.12em",
+                      padding: "18px 24px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {entryCtaLabel ?? "Enter Playoffs"}
+                    <span style={{ fontSize: 18 }}>→</span>
+                  </button>
+                )}
+
+                {onEnterTournament && !isEligible && (
+                  <div className="border-2 border-[var(--md-paper-3)] px-4 py-3" style={{ background: "var(--md-paper-2)" }}>
+                    <div className="font-cond font-bold uppercase tracking-[0.1em]" style={{ fontSize: 12, color: "var(--md-ink-muted)" }}>
+                      Enter Playoffs
+                    </div>
+                    <div className="mt-0.5 font-mono" style={{ fontSize: 11, color: "var(--md-coral)" }}>
+                      Needs {MIN_ELIGIBLE_WINS}+ wins to be eligible
+                    </div>
+                  </div>
+                )}
+
+                {/* Row 2 — SHARE (ink fill, coral trim + coral pop shadow — the
+                    inverse of the coral primary, so two solid reds never sit
+                    adjacent) + PLAY AGAIN (cream / ink outline). Equal-width via
+                    flex-1 so they fill the same span as row 1. When there's no
+                    primary row above, Share leads here. */}
+                <div className="flex w-full items-stretch gap-3 lg:gap-4">
                   <button
                     type="button"
                     onClick={share}
                     disabled={!shareBlob || !shareReady}
-                    className="md-btn md-btn--lg w-full transition-opacity disabled:opacity-40"
-                    style={{ background: "var(--md-coral)", color: "var(--md-white)", borderColor: "var(--md-ink)" }}
+                    className="inline-flex flex-1 items-center justify-center gap-2.5 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
+                    style={{
+                      background: "var(--md-ink)",
+                      color: "var(--md-white)",
+                      border: "2px solid var(--md-coral)",
+                      boxShadow: "6px 6px 0 0 var(--md-coral)",
+                      fontSize: 16,
+                      letterSpacing: "0.12em",
+                      padding: "16px 22px",
+                      cursor: "pointer",
+                    }}
                   >
-                    <span style={{ fontSize: 14, marginRight: 6 }}>↑</span>
+                    <span style={{ fontSize: 15 }}>↑</span>
                     {shareBlob && shareReady ? "Share Result" : "Preparing…"}
                   </button>
 
-                  {onEnterTournament && isEligible && (
-                    <div className="border-2 border-[var(--md-ink)]" style={{ background: "var(--md-paper-2)" }}>
-                      <button
-                        className="flex w-full items-center justify-between px-5 py-4"
-                        onClick={onEnterTournament}
-                      >
-                        <div className="text-left">
-                          <div className="font-cond font-bold uppercase tracking-[0.1em]" style={{ fontSize: 14, color: "var(--md-ink)" }}>
-                            {entryCtaLabel ?? "Enter Tournament"}
-                          </div>
-                          <div className="font-cond font-semibold uppercase tracking-[0.12em] mt-0.5" style={{ fontSize: 10, color: "var(--md-teal)" }}>
-                            Eligible · {wins} wins ≥ 40
-                          </div>
-                        </div>
-                        <span className="font-mono font-bold text-[var(--md-coral)] shrink-0" style={{ fontSize: 20 }}>
-                          →
-                        </span>
-                      </button>
-                    </div>
-                  )}
-
-                  {onEnterTournament && !isEligible && (
-                    <div className="border-2 border-[var(--md-paper-3)] px-4 py-3" style={{ background: "var(--md-paper-2)" }}>
-                      <div className="font-cond font-bold uppercase tracking-[0.1em]" style={{ fontSize: 12, color: "var(--md-ink-muted)" }}>
-                        Enter Tournament
-                      </div>
-                      <div className="mt-0.5 font-mono" style={{ fontSize: 11, color: "var(--md-coral)" }}>
-                        Needs {MIN_ELIGIBLE_WINS}+ wins to be eligible
-                      </div>
-                    </div>
-                  )}
-
-                  <button className="md-btn md-btn--lg md-btn--secondary w-full" onClick={onReset}>
-                    <span style={{ marginRight: 6 }}>↺</span>
+                  <button
+                    type="button"
+                    onClick={onReset}
+                    className="inline-flex flex-1 items-center justify-center gap-2 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5"
+                    style={{
+                      background: "var(--md-paper)",
+                      color: "var(--md-ink)",
+                      border: "1.5px solid var(--md-ink)",
+                      boxShadow: "6px 6px 0 0 var(--md-ink)",
+                      fontSize: 15,
+                      letterSpacing: "0.1em",
+                      padding: "16px 22px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span>↺</span>
                     {resetLabel ?? "Play Again"}
                   </button>
                 </div>
-
-                {/* Desktop (872-0 / Action Row 8CD-0): three distinct tiers.
-                    ENTER TOURNAMENT (flame, full-width) on top; SHARE RESULT (solid
-                    ink) + PLAY AGAIN (cream outline) side-by-side below. Consistent
-                    ink 6px hard offset shadow across all three. */}
-                <div className="hidden lg:flex lg:flex-col lg:items-start lg:gap-4 lg:pt-2">
-                  {onEnterTournament && !isEligible && (
-                    <div className="self-start border-2 border-[var(--md-paper-3)] px-4 py-3" style={{ background: "var(--md-paper-2)" }}>
-                      <div className="font-cond font-bold uppercase tracking-[0.1em]" style={{ fontSize: 12, color: "var(--md-ink-muted)" }}>
-                        Enter Tournament
-                      </div>
-                      <div className="mt-0.5 font-mono" style={{ fontSize: 11, color: "var(--md-coral)" }}>
-                        Needs {MIN_ELIGIBLE_WINS}+ wins to be eligible
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tier 1 — ENTER TOURNAMENT: flame primary, full-width */}
-                  {onEnterTournament && isEligible && (
-                    <button
-                      type="button"
-                      onClick={onEnterTournament}
-                      className="inline-flex w-full items-center justify-center gap-3 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5"
-                      style={{
-                        background: "var(--md-coral)",
-                        color: "var(--md-white)",
-                        border: "3px solid var(--md-ink)",
-                        boxShadow: "6px 6px 0 0 var(--md-ink)",
-                        fontSize: 16,
-                        letterSpacing: "0.12em",
-                        padding: "16px 22px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {entryCtaLabel ?? "Enter Tournament"}
-                      <span style={{ fontSize: 18 }}>→</span>
-                    </button>
-                  )}
-
-                  {/* Tiers 2 + 3 — SHARE RESULT (ink) + PLAY AGAIN (cream outline).
-                      Full-width row; each button flex-1 so together they span the
-                      same width as the ENTER TOURNAMENT button above. */}
-                  <div className="flex w-full items-stretch gap-4">
-                    {/* Tier 2 — SHARE RESULT: solid ink button with upload glyph */}
-                    <button
-                      type="button"
-                      onClick={share}
-                      disabled={!shareBlob || !shareReady}
-                      className="inline-flex flex-1 items-center justify-center gap-2.5 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
-                      style={{
-                        background: "var(--md-ink)",
-                        color: "var(--md-paper)",
-                        boxShadow: "6px 6px 0 0 var(--md-ink)",
-                        fontSize: 16,
-                        letterSpacing: "0.12em",
-                        padding: "16px 22px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <span style={{ fontSize: 15 }}>↑</span>
-                      {shareBlob && shareReady ? "Share Result" : "Preparing…"}
-                    </button>
-
-                    {/* Tier 3 — PLAY AGAIN: cream + ink outline */}
-                    <button
-                      type="button"
-                      onClick={onReset}
-                      className="inline-flex flex-1 items-center justify-center gap-2 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5"
-                      style={{
-                        background: "var(--md-paper)",
-                        color: "var(--md-ink)",
-                        border: "1.5px solid var(--md-ink)",
-                        boxShadow: "6px 6px 0 0 var(--md-ink)",
-                        fontSize: 15,
-                        letterSpacing: "0.1em",
-                        padding: "16px 22px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <span>↺</span>
-                      {resetLabel ?? "Play Again"}
-                    </button>
-                  </div>
-                </div>
-              </>
+              </div>
             )}
 
             {/* entryOnly: just the entry CTA */}
@@ -1073,7 +1029,7 @@ export function ResultsPanel({
                 }}
                 onClick={onEnterTournament}
               >
-                {entryCtaLabel ?? "Enter Tournament"}
+                {entryCtaLabel ?? "Enter Playoffs"}
               </Button>
             )}
           </div>
