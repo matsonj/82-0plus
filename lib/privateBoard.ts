@@ -62,11 +62,15 @@ const MIN_PLAYERS_PER_COMBO = 10;
 
 /**
  * The deterministic BLIND board for a private tournament. Uses the shared
- * buildTeamDecadeBoard generator — byte-for-byte the same generation as the
- * daily board (decade usage decays 90% per use; teams never repeat; deterministic
- * tie-breaks) — the ONLY difference is the seed (keyed to the tournament UUID,
- * not a date) and requireFull: it always returns a full six (5 starters + bench),
+ * buildTeamDecadeBoard generator (decade usage decays 90% per use; teams never
+ * repeat; deterministic tie-breaks); the seed is keyed to the tournament UUID,
+ * and requireFull makes it always return a full six (5 starters + bench),
  * throwing if the data can't fill six distinct (team, decade) slots.
+ *
+ * Decade weighting is "byTeamCount" (eras in proportion to their team count) —
+ * this runs ONLY at creation, and the resulting board is frozen in
+ * private_tournaments.board_json. Every read path uses that stored board, so
+ * existing tournaments are unaffected; only newly created boards see this.
  */
 export async function computeBlindPrivateBoard(
   tournamentId: string,
@@ -76,6 +80,7 @@ export async function computeBlindPrivateBoard(
     seed: `private-board:${tournamentId}`,
     totalSlots: PRIVATE_TOTAL_SLOTS,
     requireFull: true,
+    decadeWeighting: "byTeamCount",
     options,
   });
 

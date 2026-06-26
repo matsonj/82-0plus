@@ -17,8 +17,31 @@ function foregroundFor(tier: TierInfo): string {
   return tier.key === "S" ? "var(--md-ink)" : "var(--md-white)";
 }
 
-export function TeamGradeBadge({ tier }: { tier: TierInfo }) {
+export function TeamGradeBadge({
+  tier,
+  stamp = false,
+}: {
+  tier: TierInfo;
+  // `stamp`: a compact, bordered + offset-shadowed pill meant to sit inline on a
+  // header line (vs. the full-width badge). Same spot-color field.
+  stamp?: boolean;
+}) {
   const fg = foregroundFor(tier);
+  if (stamp) {
+    return (
+      <span
+        className="inline-flex shrink-0 items-center gap-1.5 border-2 border-[var(--md-ink)] px-2 py-1"
+        style={{ background: tier.color, color: fg, boxShadow: "var(--md-shadow-sm)" }}
+      >
+        <span className="font-cond text-[8px] font-bold uppercase tracking-[0.12em] leading-none">
+          Grade
+        </span>
+        <span className="font-mono text-[15px] font-bold leading-none tabular-nums">
+          {tier.label}
+        </span>
+      </span>
+    );
+  }
   return (
     <div
       className="inline-flex items-center gap-2 px-3 py-2"

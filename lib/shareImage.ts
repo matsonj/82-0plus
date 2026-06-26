@@ -635,7 +635,18 @@ export async function buildTournamentShareImage(args: {
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = INK;
   ctx.letterSpacing = "-0.01em";
-  const nameSize = name.length > 14 ? 72 : 96;
+  // Shrink-to-fit: start at the natural size, then scale down if the name would
+  // run past the card's right edge. Team names can be up to 24 chars now, so a
+  // fixed size could overflow. measureText scales linearly with the font size,
+  // so a single measure of the natural size is enough to compute the fitted one.
+  const desiredNameSize = name.length > 14 ? 72 : 96;
+  const nameMaxW = CONTENT_R - CONTENT_L;
+  ctx.font = `400 ${desiredNameSize}px ${fam.cover}`;
+  const measuredNameW = ctx.measureText(name).width;
+  const nameSize =
+    measuredNameW > nameMaxW
+      ? Math.max(40, Math.floor((desiredNameSize * nameMaxW) / measuredNameW))
+      : desiredNameSize;
   ctx.font = `400 ${nameSize}px ${fam.cover}`;
   ctx.fillText(name, CONTENT_L, 290);
   ctx.restore();
