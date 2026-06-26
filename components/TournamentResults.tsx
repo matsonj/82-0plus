@@ -169,6 +169,7 @@ function YourTeamCard({
           >
             {you.name}
           </span>
+          {grade && <TeamGradeBadge tier={grade} stamp />}
         </div>
         {/* Record chips */}
         <div className="flex shrink-0 items-center gap-3 font-mono text-[13px] tabular-nums">
@@ -195,23 +196,6 @@ function YourTeamCard({
           )}
         </div>
       </div>
-
-      {/* Team Profile — GRADE ONLY. The tournament results payload carries no
-          Team Fit, so this page never shows a fit line (deliberate). Just the
-          QUALITY letter grade + a one-line tier subline. */}
-      {grade && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-[var(--md-ink)] px-4 py-3">
-          <div className="flex flex-col gap-1">
-            <span className="font-cond text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--md-ink-muted)]">
-              daily82 Score
-            </span>
-            <span className="font-mono text-[12px] text-[var(--md-ink-muted)]">
-              {reg.w}–{reg.l} season → {grade.label} tier
-            </span>
-          </div>
-          <TeamGradeBadge tier={grade} />
-        </div>
-      )}
 
       {/* Roster — the viewer's own team (never a spoiler to themselves);
           collapsed by default, expanded on tap. */}
