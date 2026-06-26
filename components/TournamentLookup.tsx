@@ -565,16 +565,6 @@ export function TournamentLookup({
   const pinOk = validatePin(pin);
   const canSubmit = nameCheck.ok && pinOk && !submitting;
 
-  const resetToForm = () => {
-    setLookup(null);
-    setRun(null);
-    setLoadingTeamId(null);
-    setListError(null);
-    setError(null);
-    setPage(0);
-    setView("form");
-  };
-
   const runLookup = useCallback(
     async (uname: string, upin: string, silent = false) => {
       setSubmitting(true);
@@ -670,14 +660,6 @@ export function TournamentLookup({
         : runLookup(saved.username, saved.pin, true);
     boot.finally(() => setBootingSession(false));
   }, [runLookup, loadPrivate, initialTab, initialDaily]);
-
-  const logOut = () => {
-    clearUser();
-    setName("");
-    setPin("");
-    setPrivateRows(null);
-    resetToForm();
-  };
 
   const submitPrivateLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -867,13 +849,6 @@ export function TournamentLookup({
               {lookup?.name ?? name} · {totalTeams} season{totalTeams !== 1 ? "s" : ""} logged
             </p>
           </div>
-          <button
-            type="button"
-            className="shrink-0 font-mono text-[11px] font-bold uppercase tracking-wide text-[var(--md-blue)] underline"
-            onClick={logOut}
-          >
-            Log out
-          </button>
         </div>
 
         {/* Tab bar */}
@@ -933,7 +908,7 @@ export function TournamentLookup({
           <EmptyState title="No teams yet">
             {tab === "daily"
               ? "Play a Daily Challenge to see it here."
-              : "Play a Classic or Ranked season and hit Enter Tournament."}
+              : "Play a Classic or Ranked season and hit Enter Playoffs."}
           </EmptyState>
         ) : (
           <>

@@ -299,7 +299,7 @@ export function DailyShareLanding({
                   className="font-archivo uppercase"
                   style={{ fontVariationSettings: '"wdth" 88', fontWeight: 800, fontSize: 15 }}
                 >
-                  Tournament Run
+                  Playoff Run
                 </span>
                 <span className="h-px flex-1 bg-[var(--md-paper-3)]" aria-hidden />
               </div>

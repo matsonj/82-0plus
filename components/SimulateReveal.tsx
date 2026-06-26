@@ -87,9 +87,9 @@ function reducedMotion(): boolean {
 }
 
 function kicker(mode?: TournamentMode): string {
-  if (mode === "daily") return "Daily Tournament";
-  if (mode === "hoopiq") return "Ranked Tournament";
-  return "Classic Tournament";
+  if (mode === "daily") return "Daily Playoffs";
+  if (mode === "hoopiq") return "Ranked Playoffs";
+  return "Classic Playoffs";
 }
 
 // ── shared bits ────────────────────────────────────────────────────────────
@@ -232,8 +232,8 @@ function OutcomeBar({
     );
   }
   return (
-    <div className="sim-drop-in flex items-center justify-center gap-2.5 py-3" style={{ background: "var(--md-teal)" }}>
-      <span className="font-cover text-[20px] uppercase tracking-[0.04em] text-[var(--md-paper)]">Round Won</span>
+    <div className="sim-drop-in flex items-center justify-center gap-2.5 py-3" style={{ background: "var(--md-ink-2)", boxShadow: "inset 0 0 0 2px var(--md-teal-bright)" }}>
+      <span className="font-cover text-[20px] uppercase tracking-[0.04em]" style={{ color: "var(--md-teal-bright)" }}>Round Won</span>
       <span className="font-mono text-[11px] font-bold text-[var(--md-paper)]">{round.seriesW}–{round.seriesL}</span>
     </div>
   );
