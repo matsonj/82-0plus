@@ -16,6 +16,39 @@ export const DAILY_STARTER_SLOTS = 5;
 // 5 starters + 1 bench (sixth man).
 const DAILY_TOTAL_SLOTS = DAILY_STARTER_SLOTS + 1;
 
+// Daily boards on/after this Pacific date weight the decade pick by each era's
+// playable-team count (boardGen "byTeamCount"); earlier dates keep the legacy
+// flat weighting.
+//
+// WHY IT MUST BE A NOT-YET-SERVED DATE: the daily board is re-derived on every
+// read — the submit route re-derives it to verify a day's picks — so if one
+// build serves date D under flat and a later build serves D under byTeamCount,
+// in-progress entries for D fail verification. The flat→byTeamCount switch is a
+// one-time transition at deploy, so the cutoff must be a Pacific calendar day the
+// OLD (flat) build never serves: strictly after this deploy goes live (the daily
+// resets at midnight America/Los_Angeles). Default 2026-06-28 is safe for a
+// deploy on/before 2026-06-27 PT; override via the BOARD_V2_FROM_DATE env to pick
+// a later day. A malformed env value (not YYYY-MM-DD) is ignored, so a garbage or
+// too-early cutoff can't silently re-roll already-played boards.
+const RAW_BOARD_V2_CUTOFF = process.env.BOARD_V2_FROM_DATE;
+export const BOARD_V2_FROM_DATE =
+  RAW_BOARD_V2_CUTOFF && /^\d{4}-\d{2}-\d{2}$/.test(RAW_BOARD_V2_CUTOFF)
+    ? RAW_BOARD_V2_CUTOFF
+    : "2026-06-28";
+
+/**
+ * Decade-weighting mode for a Pacific daily `date` (pure; no DB). Dates on/after
+ * the cutoff use team-count weighting; earlier dates stay flat so already-played
+ * boards reproduce byte-for-byte. "YYYY-MM-DD" strings sort lexicographically, so
+ * a plain string compare is correct.
+ */
+export function weightingForDailyDate(
+  date: string,
+  cutoff: string = BOARD_V2_FROM_DATE,
+): "flat" | "byTeamCount" {
+  return date >= cutoff ? "byTeamCount" : "flat";
+}
+
 export interface DailySlot {
   team: string;
   decade: number;
@@ -42,6 +75,8 @@ export async function computeDailyBoard(
     seed: `82-0+:${date}`,
     totalSlots: DAILY_TOTAL_SLOTS,
     requireFull: false,
+    // Future dates weight eras by team count; past dates stay flat (see above).
+    decadeWeighting: weightingForDailyDate(date),
     options,
   });
 
