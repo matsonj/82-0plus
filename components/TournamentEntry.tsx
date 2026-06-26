@@ -21,6 +21,7 @@ import {
   validateTeamName,
   validatePin,
   NAME_MAX_LEN,
+  TEAM_NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
 import { draftSourceKey, type DraftRosterMap } from "@/lib/draftSources";
@@ -617,7 +618,7 @@ export function TournamentEntry({
                 <input
                   className="md-input md-input--name"
                   value={teamName}
-                  maxLength={NAME_MAX_LEN}
+                  maxLength={TEAM_NAME_MAX_LEN}
                   autoCapitalize="characters"
                   onChange={(e) => {
                     setTeamNameTouched(true);
@@ -642,7 +643,7 @@ export function TournamentEntry({
                     ? teamNameCheck.reason
                     : !teamNameTouched
                       ? "We named it for you — don't love it? Tap to rename."
-                      : "Letters, spaces & ' · 16 max"}
+                      : "Letters, spaces & ' · 24 max"}
                 </span>
               </label>
 

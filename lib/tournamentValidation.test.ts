@@ -23,10 +23,11 @@ describe("validateTeamName — allows spaces & apostrophes", () => {
     expect(validateTeamName("CREW!").ok).toBe(false);
     expect(validateTeamName("A-TEAM").ok).toBe(false);
   });
-  it("must start with a letter and fit 16 chars", () => {
+  it("must start with a letter and fit 24 chars", () => {
     expect(validateTeamName("'CREW").ok).toBe(false); // leading apostrophe
     expect(validateTeamName(" CREW").ok).toBe(true); // leading space trimmed
-    expect(validateTeamName("A".repeat(17)).ok).toBe(false);
+    expect(validateTeamName("A".repeat(24)).ok).toBe(true); // roomier than the handle
+    expect(validateTeamName("A".repeat(25)).ok).toBe(false);
   });
   it("still rejects profanity", () => {
     expect(validateTeamName("SHIT KICKERS").ok).toBe(false);

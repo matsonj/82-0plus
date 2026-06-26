@@ -13,9 +13,13 @@ describe("suggestTeamName", () => {
     expect(suggestTeamName("30curry")).toBe("CURRY'S CREW"); // leading digits dropped
   });
 
-  it("falls back to the bare noun when the possessive exceeds 16 chars", () => {
-    // owner is 13 letters → "…'S DUNKERS" overflows 16 → just the noun.
-    expect(suggestTeamName("DESMONDDBANE")).toBe("DUNKERS");
+  it("uses the possessive when it fits the cap", () => {
+    expect(suggestTeamName("DESMONDDBANE")).toBe("DESMONDDBANE'S DUNKERS"); // 22 ≤ 24
+  });
+
+  it("falls back to the bare noun when the possessive exceeds the cap", () => {
+    // 16-letter handle + "'S " + "BALLERS" (7) = 26 > 24 → just the noun.
+    expect(suggestTeamName("BANNERSEASONXOXO")).toBe("BALLERS");
   });
 
   it("falls back to a neutral default with no usable letters", () => {

@@ -93,10 +93,14 @@ export function validateTournamentName(s: string): ValidationResult {
 // ── Team names ─────────────────────────────────────────────────────────────────
 
 // A team's (franchise) name is more expressive than the login handle: uppercase
-// A–Z plus SPACES and APOSTROPHES, e.g. "MJ'S CREW". Still no digits or other
-// symbols, still 16 max, still profanity-checked. It must START with a letter
-// (no leading space/apostrophe), and curly apostrophes fold to a straight one.
+// A–Z plus SPACES and APOSTROPHES, e.g. "MJ'S CREW". No digits or other symbols,
+// profanity-checked, and it must START with a letter (no leading space/
+// apostrophe); curly apostrophes fold to a straight one.
 export const TEAM_NAME_ALLOWED = /^[A-Z][A-Z ']*$/;
+
+// Team names get more room than the 16-char login handle (mirrors the private-
+// tournament name cap) so a possessive default like "JMONEY'S JOKERS" fits.
+export const TEAM_NAME_MAX_LEN = 24;
 
 /**
  * Canonical team-name form: fold curly/back apostrophes to a straight `'`, trim,
@@ -117,8 +121,8 @@ export function validateTeamName(s: string): ValidationResult {
   if (name.length === 0) {
     return { ok: false, reason: "please enter a team name" };
   }
-  if (name.length > NAME_MAX_LEN) {
-    return { ok: false, reason: "too long — 16 characters max" };
+  if (name.length > TEAM_NAME_MAX_LEN) {
+    return { ok: false, reason: "too long — 24 characters max" };
   }
   if (!TEAM_NAME_ALLOWED.test(name)) {
     return { ok: false, reason: "letters, spaces and apostrophes only" };

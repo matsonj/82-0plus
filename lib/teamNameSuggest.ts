@@ -4,9 +4,9 @@
 //
 // Pure + dependency-light (only the shared validator) so it runs identically in
 // the form and is unit-testable. Output always satisfies validateTeamName: the
-// possessive is used only when it fits the 16-char team-name cap; otherwise we
-// fall back to the bare noun, then to a neutral default. (We keep the 16-char
-// limit rather than widen it, so long handles degrade gracefully.)
+// possessive is used only when it fits the team-name cap (24); otherwise we fall
+// back to the bare noun, then to a neutral default, so long handles still get a
+// sensible name.
 
 import { validateTeamName } from "./tournamentValidation";
 
