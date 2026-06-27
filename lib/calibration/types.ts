@@ -163,6 +163,13 @@ export interface TournamentMetrics {
   tallStackChampShare: number;
   /** Champion rate by team-height bucket (all fields). */
   championRateByHeightBucket: BucketRate[];
+  // ── REAL-field tall-stack dominance (the previously-unmeasured failure mode) ──
+  /** Champion rate by # of ≥83" starters, HISTORICAL fields only. */
+  realChampRateByTallCount: BucketRate[];
+  /** Champ rate of historical teams with 3+ tall starters ÷ the overall historical
+   *  champ rate. 1 ≈ height-neutral; the live engine sits near 3. Drives the
+   *  real-field tall-dominance guardrail. 1 when there's too little history to judge. */
+  realTallChampLift: number;
 }
 
 export interface ModifierDecisive {

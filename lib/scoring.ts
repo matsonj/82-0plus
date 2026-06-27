@@ -105,6 +105,19 @@ export const SCORING_CONFIG = {
   SIZE_MAX_PEN: 2, // worst-case penalty for a far-too-short lineup (was 6)
   SIZE_TARGET_TOTAL: 393, // sum of 5 heights at/above which there's no penalty (~6'7" avg)
   SIZE_FLOOR_TOTAL: 373, // sum at/below which the full penalty applies (~6'2.6" avg)
+
+  // Excess-frontcourt-height penalty (the MIRROR of the too-short SIZE penalty).
+  // The seed only ever penalized being too SHORT; ranked data shows the real
+  // exploit is the opposite — tall, floor-spacing frontcourts (3+ starters ≥83"
+  // win titles at ~3× the field) that pay NO seed cost today. This taxes oversized
+  // lineups by SUMMED real height (All-Def effective inches are a defensive credit
+  // and are deliberately NOT counted here — tallness is tallness). Height-based on
+  // purpose: it catches tall "F-C" stretch stacks that the position label misses.
+  // Adopted in the height-aware retune (set 0 to disable; calibration `seed-oversize`
+  // is the single biggest lever against the modern-unicorn / 3-big stack).
+  OVERSIZE_MAX_PEN: 6, // worst-case net penalty for a far-too-tall five
+  OVERSIZE_FLOOR_TOTAL: 405, // sum of 5 real heights at/below which there's NO penalty
+  OVERSIZE_CAP_TOTAL: 420, // sum at/above which the full OVERSIZE_MAX_PEN applies
   DEF_HEIGHT_1ST: 1, // effective inches an All-Def 1st-teamer adds to team height (was 4)
   DEF_HEIGHT_2ND: 0.5, // … 2nd-teamer (was 2)
 
@@ -190,7 +203,7 @@ export function simulateRoster(
       usageFactor: 1, assistFactor: 1, nonShooters: 0,
       totalAst: 0, assistedPct: 0,
       usagePen: 0, outsidePen: 0, ballhogPen: 0, balancePen: 0, synergyBonus: 0,
-      sizePen: 0, defBuff: 0, avgHeight: 0, allDefCount: 0,
+      sizePen: 0, oversizePen: 0, defBuff: 0, avgHeight: 0, allDefCount: 0,
       roleCounts: { G: 0, W: 0, B: 0 },
       totalPoss: 0,
       teamBox: { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgPct: 0, ftPct: 0, tov: 0, fg3m: 0 },
@@ -292,6 +305,21 @@ export function simulateRoster(
       1,
     );
 
+  // Excess-frontcourt-height penalty: the mirror of sizePen, ramping from 0 at
+  // OVERSIZE_FLOOR_TOTAL up to OVERSIZE_MAX_PEN at OVERSIZE_CAP_TOTAL. Uses RAW
+  // summed height (not effectiveHeight) — All-Def inches are a defensive credit,
+  // not extra tallness to tax. Default OVERSIZE_MAX_PEN=0 ⇒ always 0 (no-op).
+  const oversizePen =
+    cfg.OVERSIZE_MAX_PEN > 0
+      ? cfg.OVERSIZE_MAX_PEN *
+        clamp(
+          (heightTotal - cfg.OVERSIZE_FLOOR_TOTAL) /
+            (cfg.OVERSIZE_CAP_TOTAL - cfg.OVERSIZE_FLOOR_TOTAL),
+          0,
+          1,
+        )
+      : 0;
+
   // Defense margin bonus: GQ undercounts defense, so All-Def selections buff net.
   const defBuff = Math.min(
     cfg.DEF_MARGIN_CAP,
@@ -307,8 +335,8 @@ export function simulateRoster(
       : 0;
 
   const rawNet =
-    baseNet - usagePen - outsidePen - ballhogPen - balancePen - sizePen +
-    defBuff + synergyBonus;
+    baseNet - usagePen - outsidePen - ballhogPen - balancePen - sizePen -
+    oversizePen + defBuff + synergyBonus;
 
   // Talent-scaled floor: only elite-talent rosters (baseNet above the 60-win net)
   // are rescued, and only up to the top of A tier — so penalties still cost the
@@ -392,6 +420,7 @@ export function simulateRoster(
     balancePen: round1(balancePen),
     synergyBonus: round1(synergyBonus),
     sizePen: round1(sizePen),
+    oversizePen: round1(oversizePen),
     defBuff: round1(defBuff),
     avgHeight: Math.round(heightTotal / n),
     allDefCount,

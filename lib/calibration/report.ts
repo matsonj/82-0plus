@@ -109,6 +109,9 @@ function candidateSection(m: CalibrationMetrics): string {
   lines.push(`- Fields replayed: ${t.fieldsReplayed}`);
   lines.push(`- Mean reached round: ${t.reachedRoundMean}`);
   lines.push(`- Tall-stack champion share: ${pct(t.tallStackChampShare)} (fair ≈ 25%)`);
+  lines.push(
+    `- **Real-field tall champ lift (3+ ≥83"): ${t.realTallChampLift}×** (height-neutral ≈ 1; live engine ≈ 3)`,
+  );
   lines.push("");
   if (t.archetypeConversion.length) {
     lines.push("Archetype conversion (champion rate desc):");
@@ -128,6 +131,13 @@ function candidateSection(m: CalibrationMetrics): string {
     lines.push("");
   }
   lines.push(bucketTable("Champion rate by team-height bucket", t.championRateByHeightBucket));
+  lines.push("");
+  lines.push(
+    bucketTable(
+      'Champion rate by # of ≥83" starters (real fields)',
+      t.realChampRateByTallCount,
+    ),
+  );
   lines.push("");
 
   // Game W/L.

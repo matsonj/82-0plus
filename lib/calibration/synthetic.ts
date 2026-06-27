@@ -101,6 +101,34 @@ const ARCHETYPES: ArchetypeSpec[] = [
     sixth: { filter: (p) => !isGuard(p), rank: byValue, count: 1 },
   },
   {
+    // The modern "unicorn" exploit: tall AND floor-spacing bigs (Wemby/Jokić/
+    // Porzingis/KAT). They dodge the seed's spacing penalty yet collect every
+    // bracket size buff — the single most-dominant real-ranked archetype. Tracked
+    // SEPARATELY from frontcourt-stack so its champ% is its own eyeball metric.
+    label: "unicorn-bigs",
+    slots: [
+      {
+        preferNames: ["Wembanyama", "Jokic", "Porzingis", "Towns", "Antetokounmpo", "Davis"],
+        filter: (p) => isBig(p) && shooter(p),
+        rank: byHeight,
+        count: 5,
+      },
+    ],
+    sixth: { filter: (p) => isBig(p) && shooter(p), rank: byHeight, count: 1 },
+  },
+  {
+    // The "must stay excellent" control: ONE elite big + a real backcourt/wing
+    // around him. A height-aware retune must NOT crater this (it's good basketball,
+    // not a stack) — it's the live counterweight to over-correcting on height.
+    label: "one-big-balanced",
+    slots: [
+      { preferNames: ["Jokic", "Olajuwon", "Duncan", "Abdul-Jabbar"], filter: isBig, rank: byValue, count: 1 },
+      { filter: isGuard, rank: byValue, count: 2 },
+      { filter: isWing, rank: byValue, count: 2 },
+    ],
+    sixth: { filter: isWing, rank: byValue, count: 1 },
+  },
+  {
     label: "perimeter-creators",
     slots: [
       {
@@ -154,11 +182,13 @@ const ARCHETYPES: ArchetypeSpec[] = [
 const FIELD_COMPOSITION: string[] = [
   "frontcourt-stack", "frontcourt-stack",
   "no-guard-bigs", "no-guard-bigs",
+  "unicorn-bigs", "unicorn-bigs",
+  "one-big-balanced",
   "perimeter-creators", "perimeter-creators",
-  "balanced-elite", "balanced-elite", "balanced-elite",
+  "balanced-elite", "balanced-elite",
   "wing-led", "wing-led",
-  "spacing-heavy", "spacing-heavy",
-  "defense-small-ball", "defense-small-ball", "defense-small-ball",
+  "spacing-heavy",
+  "defense-small-ball", "defense-small-ball",
 ];
 
 // ── player selection ─────────────────────────────────────────────────────────

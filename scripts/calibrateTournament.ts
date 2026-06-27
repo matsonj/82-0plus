@@ -33,7 +33,7 @@ import { join } from "node:path";
 
 import { resolveCandidates, allCandidateNames } from "../lib/calibration/configs";
 import { loadHistoricalFields, type QueryFn } from "../lib/calibration/historical";
-import { buildSyntheticFields } from "../lib/calibration/synthetic";
+import { buildSyntheticFields, archetypeLabels } from "../lib/calibration/synthetic";
 import { runCalibration } from "../lib/calibration/run";
 import { renderMarkdown, renderJson } from "../lib/calibration/report";
 import { fixturePlayerPool, fixtureStatNorms } from "../lib/calibration/fixture";
@@ -167,6 +167,27 @@ async function main(): Promise<void> {
         `(team ${m.subScores.teamRating}, tourney ${m.subScores.tournament}, game ${m.subScores.game}; guardrails ${g})`,
     );
   }
+  // ── prebaked-archetype scoreboard: per-archetype champion rate side by side
+  // across the candidates (run with --configs=current,<candidate> for a clean
+  // before/after diff). The real-field tall lift is the headline guardrail metric.
+  const col = 24, ccol = 16;
+  const cell = (s: string) => s.padStart(ccol);
+  console.log("\n========== PREBAKED ARCHETYPES — champion rate ==========");
+  console.log("archetype".padEnd(col) + ranked.map((m) => cell(m.candidate.slice(0, ccol - 1))).join(""));
+  for (const label of archetypeLabels()) {
+    const cells = ranked
+      .map((m) => {
+        const a = m.tournament.archetypeConversion.find((x) => x.archetype === label);
+        return cell(a ? `${Math.round(a.champRate * 100)}%` : "—");
+      })
+      .join("");
+    console.log(label.padEnd(col) + cells);
+  }
+  console.log(
+    'real tall lift (3+≥83")'.padEnd(col) +
+      ranked.map((m) => cell(`${m.tournament.realTallChampLift}×`)).join(""),
+  );
+
   console.log(`\n[calibrate] report:  ${mdPath}`);
   console.log(`[calibrate] metrics: ${jsonPath}`);
 }
