@@ -8,7 +8,7 @@
 //   3. per-game W/L behavior        (per-game adjusted-net outcomes)
 //
 // Nothing here mutates the DB, the schema, or the live engine. Candidate configs
-// override numeric constants only — they never rewrite formulas or change the
+// override config constants only — they never rewrite formulas or change the
 // player-index / Game-Quality derivation.
 // ============================================================================
 
@@ -19,7 +19,7 @@ import type { TournamentMode } from "../types";
 
 // ── Candidate configs ────────────────────────────────────────────────────────
 
-/** A named candidate: a set of numeric overrides off the live defaults. The
+/** A named candidate: a set of config overrides off the live defaults. The
  *  overrides are PARTIAL — only the knobs that differ from SCORING_CONFIG /
  *  TOURNAMENT_CONFIG are listed; everything else stays at its current value. */
 export interface CandidateConfig {
