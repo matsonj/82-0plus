@@ -1,9 +1,9 @@
 /**
  * rerankDailyLeaderboard.ts — READ-ONLY. Reconstructs the daily-challenge
  * leaderboard field for a date (the same `daily_results` rows the front-page
- * "Rank #N of TOTAL" ranks) and re-scores every entry under the CURRENT (live,
- * adopted combined-max) config vs the LEGACY (pre-calibration) config, reporting
- * the projected-win and rank impact per entry.
+ * "Rank #N of TOTAL" ranks) and re-scores every entry under the CURRENT
+ * (live, adopted height-aware) config vs the LEGACY (pre-calibration) config,
+ * reporting the projected-win and rank impact per entry.
  *
  * The leaderboard ranks daily_results by (wins DESC, margin DESC), where
  *   wins   = simulateRoster(roster).wins
