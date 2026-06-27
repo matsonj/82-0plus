@@ -308,10 +308,14 @@ async function main(): Promise<void> {
     );
   }
 
-  // Final summary so the field's strength spread is visible at a glance.
+  // Final summary so the field's strength spread is visible at a glance. Scoped to
+  // the STANDARD pool this script manages — daily ghosts (ghost_type='daily') are
+  // "Open" (no tier floor) and would otherwise drag the min below NET_FLOOR and
+  // trip a false floor-breach warning.
   const summary = await queryRW<{ n: number; min_net: number; max_net: number }>(
     `SELECT count(*) AS n, min(seed_net) AS min_net, max(seed_net) AS max_net
-       FROM ${TDB}.ghosts`,
+       FROM ${TDB}.ghosts
+      WHERE COALESCE(ghost_type, 'standard') <> 'daily'`,
   );
   const s = summary[0];
   const minNet = Number(s?.min_net);
