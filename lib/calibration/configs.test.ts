@@ -16,6 +16,11 @@ describe("candidate configs", () => {
       "seed-oversize",
       "height-aware-combined",
       "height-aware-v2",
+      "oversize-off",
+      "oversize-count-1",
+      "oversize-count-2",
+      "oversize-count-soft",
+      "oversize-count-hard",
     ]);
   });
 

@@ -167,6 +167,45 @@ export const CANDIDATES: CandidateConfig[] = [
       HEIGHT_CAP: 0.9,
     },
   },
+
+  // ── Count-based oversize strength sweep (diffs against the LIVE default, which is
+  // already the count-based v2 retune). Only the oversize knobs vary; all other
+  // height-aware levers stay on, so this isolates how hard to tax the 3rd+ big. ──
+  {
+    name: "oversize-off",
+    description:
+      "Bracket levers only (OVERSIZE_MAX_PEN 0) — the no-seed-penalty ceiling the oversize tax is tuned down from.",
+    scoringOverrides: { OVERSIZE_MAX_PEN: 0 },
+    tournamentOverrides: {},
+  },
+  {
+    name: "oversize-count-1",
+    description:
+      "Count-based oversize, very gentle: OVERSIZE_PER_TALL 1, MAX_PEN 3. A 3-big lineup pays 1 net.",
+    scoringOverrides: { OVERSIZE_PER_TALL: 1, OVERSIZE_MAX_PEN: 3 },
+    tournamentOverrides: {},
+  },
+  {
+    name: "oversize-count-2",
+    description:
+      "Count-based oversize, gentle: OVERSIZE_PER_TALL 2, MAX_PEN 5. A 3-big lineup pays 2 net.",
+    scoringOverrides: { OVERSIZE_PER_TALL: 2, OVERSIZE_MAX_PEN: 5 },
+    tournamentOverrides: {},
+  },
+  {
+    name: "oversize-count-soft",
+    description:
+      "Count-based oversize, softer: OVERSIZE_PER_TALL 5→3, MAX_PEN 12→9. A 3-big lineup pays 3 net.",
+    scoringOverrides: { OVERSIZE_PER_TALL: 3, OVERSIZE_MAX_PEN: 9 },
+    tournamentOverrides: {},
+  },
+  {
+    name: "oversize-count-hard",
+    description:
+      "Count-based oversize, harder: OVERSIZE_PER_TALL 5→7, MAX_PEN 12→15. A 3-big lineup pays 7 net.",
+    scoringOverrides: { OVERSIZE_PER_TALL: 7, OVERSIZE_MAX_PEN: 15 },
+    tournamentOverrides: {},
+  },
 ];
 
 /** Merge a candidate's partial overrides onto the live defaults. The defaults

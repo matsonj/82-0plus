@@ -106,18 +106,23 @@ export const SCORING_CONFIG = {
   SIZE_TARGET_TOTAL: 393, // sum of 5 heights at/above which there's no penalty (~6'7" avg)
   SIZE_FLOOR_TOTAL: 373, // sum at/below which the full penalty applies (~6'2.6" avg)
 
-  // Excess-frontcourt-height penalty (the MIRROR of the too-short SIZE penalty).
-  // The seed only ever penalized being too SHORT; ranked data shows the real
-  // exploit is the opposite — tall, floor-spacing frontcourts (3+ starters ≥83"
-  // win titles at ~3× the field) that pay NO seed cost today. This taxes oversized
-  // lineups by SUMMED real height (All-Def effective inches are a defensive credit
-  // and are deliberately NOT counted here — tallness is tallness). Height-based on
-  // purpose: it catches tall "F-C" stretch stacks that the position label misses.
-  // Adopted in the height-aware retune (set 0 to disable; calibration `seed-oversize`
-  // is the single biggest lever against the modern-unicorn / 3-big stack).
-  OVERSIZE_MAX_PEN: 6, // worst-case net penalty for a far-too-tall five
-  OVERSIZE_FLOOR_TOTAL: 405, // sum of 5 real heights at/below which there's NO penalty
-  OVERSIZE_CAP_TOTAL: 420, // sum at/above which the full OVERSIZE_MAX_PEN applies
+  // Excess-frontcourt penalty — COUNT-BASED. The seed only ever penalized being too
+  // SHORT; ranked data shows the real exploit is the opposite: lineups with 3+
+  // frontcourt-sized starters win titles at ~3× the field. The signal is the COUNT
+  // of ≥OVERSIZE_TALL_IN" starters, NOT summed height — a "3 bigs + 2 short guards"
+  // barbell sums to an average height and slipped the old summed-height floor
+  // entirely (~25% of real 3-tall teams, e.g. a 3-center #1 seed at 400" total). So
+  // we tax each frontcourt-sized starter BEYOND the free allowance, however short
+  // the guards are. Two are free (a twin-tower is fine); each one past that costs
+  // OVERSIZE_PER_TALL net, capped at OVERSIZE_MAX_PEN. Raw height — a tall All-Def
+  // stopper still occupies a frontcourt slot (the effective-height credit is only
+  // for the too-SHORT sizePen). Set OVERSIZE_MAX_PEN 0 to disable.
+  OVERSIZE_TALL_IN: 83, // a starter at/above this height (inches) is "frontcourt-sized"
+  OVERSIZE_FREE: 2, // this many tall starters are free (twin-tower OK)
+  OVERSIZE_PER_TALL: 1, // net penalty per tall starter beyond the free allowance —
+  //   calibrated on real hoopiq replays: even 1 net pulls the 3+-big champion lift
+  //   to ≈ field-average (0.92×) while elite balanced bigs stay excellent.
+  OVERSIZE_MAX_PEN: 3, // cap on the total oversize penalty (0 disables)
   DEF_HEIGHT_1ST: 1, // effective inches an All-Def 1st-teamer adds to team height (was 4)
   DEF_HEIGHT_2ND: 0.5, // … 2nd-teamer (was 2)
 
@@ -166,6 +171,17 @@ export const SCORING_CONFIG = {
   FG3_MIN_ATTEMPTS: 1.0, // 3PA/game needed before 3P% is judged (avoids era false-flags)
   FG3_SHOOTER_FT_FLOOR: 0.72, // FT% at/above this proves real shooting touch, so a cold
   //   low-volume 3P% doesn't brand a good shooter (Wilkins/Majerle) a non-shooter.
+
+  // ── Era-aware spacing (opt-in; default OFF reproduces the FT-touch model above) ──
+  // When on, a 3pt-era player must actually shoot threes to count as a floor-spacer;
+  // FT touch alone isn't enough (catches modern non-shooting bigs the touch proxy
+  // misses). Pre-3pt-era players keep the FT-touch proxy (era-neutral). See isNonShooter.
+  SPACING_REQUIRE_VOLUME: false as boolean, // master switch for the era-aware spacing test
+  SPACING_ERA_SEASON: 1980, // first season with a 3pt line (era cutoff)
+  SPACING_MIN_FG3A: 1.0, // 3PA/game needed to register as a floor-spacer in the 3pt era
+  SPACING_MIN_FG3PCT: 0.32, // …at this 3P% or better
+  SPACING_FT_TOUCH: 0.78, // pre-3pt-era touch proxy: FT% at/above this spaces the floor
+  SPACING_FT_ELITE: 0.85, // a knockdown FT shooter spaces in ANY era (touch overrides)
 } as const;
 
 // The runtime default above is `as const` (narrow literal types), but the
@@ -241,6 +257,21 @@ export function simulateRoster(
   // is fine; each one beyond the first taxes the team (paint gets clogged).
   const isNonShooter = (p: ScoringPlayer) => {
     const ftPct = p.fta >= 1 ? p.ftm / p.fta : 1; // assume touch when there's no FT data
+    // ERA-AWARE spacing (opt-in): FT touch alone no longer earns a pass. In the 3pt
+    // era a player must actually ATTEMPT (and hit) threes to count as a floor-spacer
+    // — this catches modern non-shooting bigs/forwards (Malone/Walton-type) that the
+    // FT-touch proxy misses. Pre-3pt-era players (no line existed) keep the FT-touch
+    // proxy, so they're never punished for a shot that wasn't part of their game —
+    // era-NEUTRAL by construction. A knockdown FT shooter spaces in any era.
+    if (cfg.SPACING_REQUIRE_VOLUME) {
+      if (ftPct >= cfg.SPACING_FT_ELITE) return false; // knockdown touch spaces anywhere
+      const spaces =
+        p.season >= cfg.SPACING_ERA_SEASON
+          ? p.fg3a >= cfg.SPACING_MIN_FG3A &&
+            p.fg3m / p.fg3a >= cfg.SPACING_MIN_FG3PCT
+          : ftPct >= cfg.SPACING_FT_TOUCH;
+      return !spaces;
+    }
     return (
       ftPct <= cfg.FT_LIABILITY_MAX ||
       // A genuine bad 3pt shooter — BUT a proven FT shooter has the touch to space
@@ -305,18 +336,20 @@ export function simulateRoster(
       1,
     );
 
-  // Excess-frontcourt-height penalty: the mirror of sizePen, ramping from 0 at
-  // OVERSIZE_FLOOR_TOTAL up to OVERSIZE_MAX_PEN at OVERSIZE_CAP_TOTAL. Uses RAW
-  // summed height (not effectiveHeight) — All-Def inches are a defensive credit,
-  // not extra tallness to tax. Default OVERSIZE_MAX_PEN=0 ⇒ always 0 (no-op).
+  // Excess-frontcourt penalty (COUNT-based): tax each frontcourt-sized starter
+  // (real height ≥ OVERSIZE_TALL_IN) BEYOND OVERSIZE_FREE, at OVERSIZE_PER_TALL net
+  // each, capped at OVERSIZE_MAX_PEN. Counting starters (not summed height) is what
+  // catches the "3 bigs + 2 short guards" barbell a summed threshold misses. Raw
+  // height — no All-Def credit (that's only for the too-short sizePen).
+  const tallStarters = roster.reduce(
+    (c, p) => c + (p.height_in >= cfg.OVERSIZE_TALL_IN ? 1 : 0),
+    0,
+  );
   const oversizePen =
     cfg.OVERSIZE_MAX_PEN > 0
-      ? cfg.OVERSIZE_MAX_PEN *
-        clamp(
-          (heightTotal - cfg.OVERSIZE_FLOOR_TOTAL) /
-            (cfg.OVERSIZE_CAP_TOTAL - cfg.OVERSIZE_FLOOR_TOTAL),
-          0,
-          1,
+      ? Math.min(
+          cfg.OVERSIZE_MAX_PEN,
+          cfg.OVERSIZE_PER_TALL * Math.max(0, tallStarters - cfg.OVERSIZE_FREE),
         )
       : 0;
 

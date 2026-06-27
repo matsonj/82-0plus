@@ -31,7 +31,10 @@ function team(starters: ScoringPlayer[], over: Partial<TournamentTeam> = {}): To
 // ── Live defaults reflect the adopted height-aware retune ────────────────────────
 describe("height-aware retune is live in the defaults", () => {
   it("seed + bracket knobs are at their adopted values", () => {
-    expect(C.OVERSIZE_MAX_PEN).toBe(6);
+    expect(C.OVERSIZE_PER_TALL).toBe(1);
+    expect(C.OVERSIZE_FREE).toBe(2);
+    expect(C.OVERSIZE_TALL_IN).toBe(83);
+    expect(C.OVERSIZE_MAX_PEN).toBe(3);
     expect(TC.PACE_ADJUST_GAMESCORE).toBe(true);
     expect(TC.GAMESCORE_CATEGORIES).toBe("rebalanced");
     expect(TC.HEIGHT_PER_INCH).toBe(0.045);
@@ -39,31 +42,33 @@ describe("height-aware retune is live in the defaults", () => {
   });
 });
 
-// ── Seed: excess-frontcourt-height penalty (oversizePen) ────────────────────────
-describe("oversize-height penalty (seed)", () => {
-  // A well-CONSTRUCTED but very tall five (sum 420): spaces, shares the ball, no
-  // role skew — so its seed sits above the talent floor and the oversize tax bites.
-  const tallBuilt: ScoringPlayer[] = [
-    p({ gq: 0.8, height_in: 84, ast: 8, stl: 1.5, fga: 12, fgm: 6, fta: 3, ftm: 2.5, tov: 2, fg3m: 2.5, reb: 3, blk: 0.2 }),
-    p({ gq: 0.8, height_in: 84, ast: 5, stl: 1.2, fga: 13, fgm: 6, fta: 3, ftm: 2.5, tov: 1.5, fg3m: 2.5, reb: 4, blk: 0.4 }),
-    p({ gq: 0.8, height_in: 84, ast: 4, stl: 1.0, fga: 12, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3m: 2.0, reb: 6, blk: 0.6 }),
-    p({ gq: 0.8, height_in: 84, ast: 3, stl: 0.8, fga: 12, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3m: 1.5, reb: 8, blk: 1.0 }),
-    p({ gq: 0.8, height_in: 84, ast: 2, stl: 0.6, fga: 11, fgm: 5, fta: 5, ftm: 4, tov: 1.5, fg3m: 1.0, reb: 11, blk: 1.8 }),
-  ];
-  const OFF = { ...C, OVERSIZE_MAX_PEN: 0 };
-  const ON = { ...C, OVERSIZE_MAX_PEN: 6 };
+// ── Seed: excess-frontcourt penalty (count-based oversizePen) ────────────────────
+describe("oversize penalty (seed) — count-based", () => {
+  // Vary only height; oversizePen is computed from the COUNT of ≥83" starters and
+  // returned regardless of the other penalties / the floor.
+  const mk = (heights: number[]) => heights.map((h) => p({ gq: 0.8, height_in: h }));
 
-  it("taxes a far-too-tall five and lowers its seed when enabled", () => {
-    const off = simulateRoster(tallBuilt, OFF);
-    const on = simulateRoster(tallBuilt, ON);
-    expect(off.oversizePen).toBe(0);
-    expect(on.oversizePen).toBeGreaterThan(0); // 420 ≥ OVERSIZE_CAP_TOTAL → full pen
-    expect(on.seedNet).toBeLessThan(off.seedNet);
+  it("counts ≥83\" starters beyond the free allowance (twin-tower is free)", () => {
+    expect(simulateRoster(mk([84, 84, 74, 74, 74])).oversizePen).toBe(0); // 2 tall → free
+    expect(simulateRoster(mk([84, 84, 84, 74, 74])).oversizePen).toBe(1); // 3 tall → 1×1
+    expect(simulateRoster(mk([84, 84, 84, 84, 74])).oversizePen).toBe(2); // 4 tall → 2×1
+    expect(simulateRoster(mk([84, 84, 84, 84, 84])).oversizePen).toBe(3); // 5 tall → 3×1, capped at 3
+    expect(simulateRoster(mk([78, 78, 78, 78, 78])).oversizePen).toBe(0); // no tall starters
   });
 
-  it("never triggers on a short lineup (height below the floor)", () => {
-    const short = tallBuilt.map((x) => ({ ...x, height_in: 78 })); // sum 390
-    expect(simulateRoster(short, ON).oversizePen).toBe(0);
+  it("catches the barbell a summed-height threshold misses (3 bigs + 2 short guards)", () => {
+    // Well-built (spaces, shares, balanced) so the seed sits above the talent floor
+    // and the tax is visible — 3 bigs + 2 short guards, summed height 400 (≈ field avg).
+    const guard = (h: number) =>
+      p({ gq: 0.8, height_in: h, ast: 7, stl: 1.5, fga: 12, fgm: 6, fta: 3, ftm: 2.5, tov: 1.8, fg3m: 2.2, reb: 3, blk: 0.3 });
+    const big = (h: number) =>
+      p({ gq: 0.8, height_in: h, ast: 3, stl: 0.8, fga: 11, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3m: 1, reb: 9, blk: 1.4 });
+    const barbell = [guard(74), guard(74), big(84), big(84), big(84)];
+    expect(barbell.reduce((s, x) => s + x.height_in, 0)).toBe(400);
+    const on = simulateRoster(barbell); // live default
+    const off = simulateRoster(barbell, { ...C, OVERSIZE_MAX_PEN: 0 });
+    expect(on.oversizePen).toBe(1); // taxed despite an average SUM (old sum-floor missed it)
+    expect(on.seedNet).toBeLessThan(off.seedNet);
   });
 });
 
