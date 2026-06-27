@@ -18,6 +18,7 @@
 // ============================================================================
 
 import { simulateRoster, type ScoringPlayer } from "./scoring";
+import { paceAdj } from "./pace";
 import type {
   BracketPlayer,
   BracketResult,
@@ -30,7 +31,21 @@ import type {
   StatKey,
   StatNorms,
 } from "./types";
-import { STAT_KEYS, NEGATIVE_STATS, FG_BASELINE, FT_BASELINE } from "./types";
+import { STAT_KEYS, NEGATIVE_STATS, FG_BASELINE, FT_BASELINE, FG3_BASELINE } from "./types";
+
+/** Game-score category set selector (a TOURNAMENT_CONFIG knob).
+ *  'legacy'      — the original 8 equal-weight categories (default; unchanged).
+ *  'rebalanced'  — folds reb+blk into one "size" worth (0.5 each) and adds a 3pt
+ *                  spacing category (fg3V), so a tall team can't sweep the
+ *                  comparison on rebounds + blocks with no perimeter counter. */
+export type GameScoreCategorySet = "legacy" | "rebalanced";
+
+/** A game-score category in the comparison: which value, and its vote weight. */
+export type GsKey = StatKey | "fg3V";
+interface GsCat {
+  key: GsKey;
+  weight: number;
+}
 
 /** Engine input. The five starters + the bench player, plus precomputed seeding
  *  strength. The app builds these from a submission; the engine treats them as
@@ -67,11 +82,12 @@ export const TOURNAMENT_CONFIG = {
 
   // Size edge: net per inch of summed-starter-height advantage vs the opponent,
   // capped both directions (zero-sum — what one team gains the other loses).
-  // Trimmed hard by the calibration harness (was 0.15 / 3.0): the per-game height
-  // edge was letting tall stacks convert ~88% of bracket titles; at 0.06 / 1.25
-  // it's ~31% (fair ≈ 25%) without dropping elite bigs below excellent.
-  HEIGHT_PER_INCH: 0.06,
-  HEIGHT_CAP: 1.25,
+  // Trimmed in two passes: the original 0.15 / 3.0 let tall stacks take ~88% of
+  // titles; the combined-max pass cut it to 0.06 / 1.25; the height-aware retune
+  // eased it again to 0.045 / 0.9 — the per-game height edge is now a small nudge,
+  // since the seed oversize penalty + the rebalanced game score carry the load.
+  HEIGHT_PER_INCH: 0.045,
+  HEIGHT_CAP: 0.9,
 
   // Game-score buff — the one reward for TEAM COMPOSITION, so it's the strongest
   // matchup buff and it SCALES with how decisively you win the 8-category pairwise
@@ -81,6 +97,17 @@ export const TOURNAMENT_CONFIG = {
   GAME_SCORE_BUFF_SWEEP: 4.5, // 7 or 8 of 8 categories
   GAME_SCORE_BUFF_STRONG: 3, // 6
   GAME_SCORE_BUFF_EDGE: 2.25, // 5
+
+  // Game-score category set. 'legacy' = the original 8 equal-weight categories.
+  // 'rebalanced' (adopted in the height-aware retune) folds reb+blk into ~one
+  // "size" category and adds a 3pt/spacing category so a tall team can't sweep the
+  // comparison on rebounds + blocks with no perimeter counter. See GameScoreCategorySet.
+  GAMESCORE_CATEGORIES: "rebalanced" as GameScoreCategorySet,
+  // Pace-adjust the per-36 game-score totals. The seed already pace-adjusts usage
+  // (lib/pace.ts); the bracket comparison did NOT, handing high-pace old eras a
+  // free edge in the category vote. ON since the height-aware retune (it removes a
+  // tall-old-era edge that the modern-stack levers don't touch).
+  PACE_ADJUST_GAMESCORE: true as boolean,
 
   // Captain effect: the captain's 2 highest-z categories get a ×(1+PCT) bump and
   // their single lowest-z gets ×(1-PCT), applied to EVERY player on the team
@@ -252,37 +279,75 @@ export function per36Totals(
   team: TournamentTeam,
   norms?: StatNorms,
   cfg: TournamentConfig = TOURNAMENT_CONFIG,
-): Record<StatKey, number> {
+): Record<GsKey, number> {
   const players = [...team.starters, team.sixthMan];
   const mult = norms
     ? captainMultipliers(team.starters[team.captainSlot], norms, cfg)
     : NO_CAPTAIN_MULT();
+  // Era pace factor (default 1 ⇒ legacy unchanged). When on, each player's per-36
+  // contribution scales by paceAdj(season): counting stats and shooting VOLUME come
+  // down for high-pace eras (rates are unchanged — pace cancels in makes/attempts).
+  const pace = (p: ScoringPlayer) =>
+    cfg.PACE_ADJUST_GAMESCORE ? paceAdj(p.season) : 1;
 
   // Aggregate per-36 makes/attempts so shooting rates can be recomputed.
-  let fgm36 = 0, fga36 = 0, ftm36 = 0, fta36 = 0;
+  let fgm36 = 0, fga36 = 0, ftm36 = 0, fta36 = 0, fg3m36 = 0, fg3a36 = 0;
   const counting: Record<StatKey, number> = {} as Record<StatKey, number>;
   for (const k of STAT_KEYS) counting[k] = 0;
 
   for (const p of players) {
+    const pf = pace(p);
     // Counting stats: sum per-36 with the per-category captain multiplier.
-    counting.pts += per36(p, p.pts) * mult.pts;
-    counting.reb += per36(p, p.reb) * mult.reb;
-    counting.ast += per36(p, p.ast) * mult.ast;
-    counting.stl += per36(p, p.stl) * mult.stl;
-    counting.blk += per36(p, p.blk) * mult.blk;
-    counting.tov += per36(p, p.tov) * mult.tov;
+    counting.pts += per36(p, p.pts) * mult.pts * pf;
+    counting.reb += per36(p, p.reb) * mult.reb * pf;
+    counting.ast += per36(p, p.ast) * mult.ast * pf;
+    counting.stl += per36(p, p.stl) * mult.stl * pf;
+    counting.blk += per36(p, p.blk) * mult.blk * pf;
+    counting.tov += per36(p, p.tov) * mult.tov * pf;
     // Shooting: aggregate makes (buffed) / attempts so the value moves with the buff.
-    fgm36 += per36(p, p.fgm) * mult.fgV;
-    fga36 += per36(p, p.fga);
-    ftm36 += per36(p, p.ftm) * mult.ftV;
-    fta36 += per36(p, p.fta);
+    fgm36 += per36(p, p.fgm) * mult.fgV * pf;
+    fga36 += per36(p, p.fga) * pf;
+    ftm36 += per36(p, p.ftm) * mult.ftV * pf;
+    fta36 += per36(p, p.fta) * pf;
+    // 3pt volume (for the optional fg3V spacing category; no captain multiplier).
+    fg3m36 += per36(p, p.fg3m) * pf;
+    fg3a36 += per36(p, p.fg3a) * pf;
   }
 
-  const totals = { ...counting };
+  const totals: Record<GsKey, number> = { ...counting, fgV: 0, ftV: 0, fg3V: 0 };
   // GQ-style shooting value: (rate − baseline) × volume. Higher is better.
   totals.fgV = fga36 > 0 ? (fgm36 / fga36 - FG_BASELINE) * fga36 : 0;
   totals.ftV = fta36 > 0 ? (ftm36 / fta36 - FT_BASELINE) * fta36 : 0;
+  // 3pt spacing value (only used by the 'rebalanced' set). Volume-guarded so the
+  // fabricated pre-1980 zero-attempt 3PM never contributes (fg3a36 = 0 ⇒ 0).
+  totals.fg3V = fg3a36 > 0 ? (fg3m36 / fg3a36 - FG3_BASELINE) * fg3a36 : 0;
   return totals;
+}
+
+// Category sets for the game-score comparison. LEGACY = the original 8 categories,
+// equal weight (total 8) → byte-identical to the pre-tuning engine. REBALANCED
+// folds reb+blk to 0.5 each (size ≈ one category) and adds fg3V (spacing), keeping
+// the total at 8 so the gameScoreBuff thresholds feel the same.
+const LEGACY_CATS: GsCat[] = STAT_KEYS.map((k) => ({ key: k, weight: 1 }));
+const REBALANCED_CATS: GsCat[] = [
+  { key: "pts", weight: 1 },
+  { key: "reb", weight: 0.5 },
+  { key: "blk", weight: 0.5 },
+  { key: "ast", weight: 1 },
+  { key: "stl", weight: 1 },
+  { key: "fgV", weight: 1 },
+  { key: "ftV", weight: 1 },
+  { key: "tov", weight: 1 },
+  { key: "fg3V", weight: 1 },
+];
+
+/** The active game-score category set + its total weight, from the config. */
+export function gameScoreSpec(
+  cfg: TournamentConfig = TOURNAMENT_CONFIG,
+): { cats: GsCat[]; total: number } {
+  const cats =
+    cfg.GAMESCORE_CATEGORIES === "rebalanced" ? REBALANCED_CATS : LEGACY_CATS;
+  return { cats, total: cats.reduce((s, c) => s + c.weight, 0) };
 }
 
 /**
@@ -292,16 +357,17 @@ export function per36Totals(
  * neither. The winner's category count feeds gameScoreBuff (caller).
  */
 export function gameScoreCompare(
-  aTotals: Record<StatKey, number>,
-  bTotals: Record<StatKey, number>,
+  aTotals: Record<GsKey, number>,
+  bTotals: Record<GsKey, number>,
+  cats: GsCat[] = LEGACY_CATS,
 ): { aWins: number; bWins: number } {
   let aWins = 0, bWins = 0;
-  for (const k of STAT_KEYS) {
-    const a = aTotals[k], b = bTotals[k];
+  for (const { key, weight } of cats) {
+    const a = aTotals[key] ?? 0, b = bTotals[key] ?? 0;
     if (a === b) continue; // tie → neither
-    const aBetter = NEGATIVE_STATS.has(k) ? a < b : a > b;
-    if (aBetter) aWins++;
-    else bWins++;
+    const aBetter = NEGATIVE_STATS.has(key as StatKey) ? a < b : a > b;
+    if (aBetter) aWins += weight;
+    else bWins += weight;
   }
   return { aWins, bWins };
 }
@@ -719,10 +785,17 @@ export function simulateBracket(
     // with how many categories it won (7-8 → +3, 6 → +2, 5 → +1.5, ≤4 → 0).
     const hiTot = per36Totals(hi, statNorms, cfg);
     const loTot = per36Totals(lo, statNorms, cfg);
-    const cmp = gameScoreCompare(hiTot, loTot);
+    const spec = gameScoreSpec(cfg);
+    const cmp = gameScoreCompare(hiTot, loTot, spec.cats);
     const gsBuff: Record<string, number> = { [hi.id]: 0, [lo.id]: 0 };
-    if (cmp.aWins > cmp.bWins) gsBuff[hi.id] = gameScoreBuff(cmp.aWins, cfg);
-    else if (cmp.bWins > cmp.aWins) gsBuff[lo.id] = gameScoreBuff(cmp.bWins, cfg);
+    if (cmp.aWins !== cmp.bWins) {
+      const winnerId = cmp.aWins > cmp.bWins ? hi.id : lo.id;
+      // Convert the winner's weighted category sum to an equivalent count "of 8" so
+      // the existing gameScoreBuff thresholds apply unchanged. Legacy (total 8,
+      // integer sums) maps 1:1 → byte-identical.
+      const effOf8 = Math.round((Math.max(cmp.aWins, cmp.bWins) / spec.total) * 8);
+      gsBuff[winnerId] = gameScoreBuff(effOf8, cfg);
+    }
 
     // Height: zero-sum, capped both directions, from the six-player height diff.
     const diff = teamHeight(hi) - teamHeight(lo);

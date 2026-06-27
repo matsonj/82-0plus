@@ -71,6 +71,7 @@ export interface SimResult {
   ballhogPen: number;
   balancePen: number;
   sizePen: number; // too-short penalty (total height, All-Def adds effective inches)
+  oversizePen: number; // too-TALL / stacked-frontcourt penalty (off by default; see SCORING_CONFIG.OVERSIZE_*)
   defBuff: number; // All-Defense margin bonus (GQ undercounts defense)
   synergyBonus: number;
   avgHeight: number; // team average height in inches (display)
@@ -130,6 +131,11 @@ export const STAT_KEYS: StatKey[] = [
 // rate. fg_v = (fg% − 0.47)·FGA, ft_v = (ft% − 0.80)·FTA.
 export const FG_BASELINE = 0.47;
 export const FT_BASELINE = 0.8;
+// 3PT baseline for the OPTIONAL volume-weighted spacing value (fg3V) used only by
+// the bracket's 'rebalanced' game-score category set (lib/tournament.ts). It is
+// NOT a member of STAT_KEYS (see the era caveat above — pre-1980 3PM is fabricated)
+// and never touches the seed, the captain z-scores, or the norms.
+export const FG3_BASELINE = 0.35;
 
 /** `tov` is the only category where a lower value is better. */
 export const NEGATIVE_STATS: ReadonlySet<StatKey> = new Set<StatKey>(["tov"]);

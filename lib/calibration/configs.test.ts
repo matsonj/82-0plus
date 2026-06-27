@@ -10,6 +10,12 @@ describe("candidate configs", () => {
       "legacy-pre-calibration",
       "height-edge-min",
       "combined-max-floor",
+      "pace-adj",
+      "gamescore-rebalanced",
+      "height-trim",
+      "seed-oversize",
+      "height-aware-combined",
+      "height-aware-v2",
     ]);
   });
 
@@ -39,9 +45,9 @@ describe("candidate configs", () => {
     resolveCandidates(allCandidateNames());
     expect(JSON.stringify(SCORING_CONFIG)).toBe(beforeScoring);
     expect(JSON.stringify(TOURNAMENT_CONFIG)).toBe(beforeTourney);
-    // and the canonical (adopted combined-max) defaults are exactly what we expect
-    expect(TOURNAMENT_CONFIG.HEIGHT_PER_INCH).toBe(0.06);
-    expect(TOURNAMENT_CONFIG.HEIGHT_CAP).toBe(1.25);
+    // and the canonical (adopted height-aware) defaults are exactly what we expect
+    expect(TOURNAMENT_CONFIG.HEIGHT_PER_INCH).toBe(0.045);
+    expect(TOURNAMENT_CONFIG.HEIGHT_CAP).toBe(0.9);
   });
 
   it("throws on an unknown candidate name", () => {

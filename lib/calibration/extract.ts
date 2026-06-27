@@ -34,10 +34,15 @@ export interface TeamRatingRow {
   teamFit: number;
   defBuff: number;
   avgHeight: number;
+  tallCount: number; // # of the five starters ≥ TALL_IN" (the ranked-dominance signal)
   blocks: number; // team per-game blocks (sum of the five)
   meanGQ: number;
   sizePen: number;
 }
+
+// Height (inches) at/above which a starter counts as "tall" for the tall-stack
+// dominance metric. 83" (6'11") is where ranked champ-rate inflects sharply.
+export const TALL_IN = 83;
 
 export interface GameRow {
   homeWon: boolean;
@@ -185,6 +190,7 @@ export function replayCandidate(
       teamFit: sim.teamFit,
       defBuff: sim.defBuff,
       avgHeight: sim.avgHeight,
+      tallCount: team.starters.filter((p) => p.height_in >= TALL_IN).length,
       blocks: sim.teamBox.blk,
       meanGQ: sim.meanGQ,
       sizePen: sim.sizePen,

@@ -95,7 +95,7 @@ describe("runCalibration + report rendering (fixture smoke)", () => {
     for (const c of report.candidates) {
       expect(c.score).toBeGreaterThanOrEqual(0);
       expect(c.score).toBeLessThanOrEqual(1);
-      expect(c.guardrails.length).toBe(4);
+      expect(c.guardrails.length).toBe(5);
       expect(c.tournament.fieldsReplayed).toBe(fields.length);
     }
   });

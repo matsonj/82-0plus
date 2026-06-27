@@ -209,12 +209,45 @@ function buildTournament(obs: CandidateObservations): TournamentMetrics {
   }));
   const championRateByHeightBucket = bucketRates(champHeightRows, TEAM_HEIGHT_EDGES);
 
+  // ── REAL-field tall-stack dominance (the previously-unmeasured failure mode) ──
+  // Replayed HISTORICAL fields only — synthetic fields are balanced by construction
+  // and don't reflect the tier-segmented, tall-skewed real pool. tallCount comes
+  // from the team-rating rows (# of ≥83" starters).
+  const tallById = new Map(obs.teamRatingRows.map((r) => [r.id, r.tallCount]));
+  const hist = rows.filter((r) => r.source === "historical");
+  const tcLabel = (tc: number) => (tc >= 3 ? "3+" : String(tc));
+  const byTc = new Map<string, { n: number; champ: number }>();
+  for (const lbl of ["0", "1", "2", "3+"]) byTc.set(lbl, { n: 0, champ: 0 });
+  for (const r of hist) {
+    const b = byTc.get(tcLabel(tallById.get(r.id) ?? 0))!;
+    b.n++;
+    if (r.isChampion) b.champ++;
+  }
+  const realChampRateByTallCount: BucketRate[] = [...byTc].map(([bucket, v]) => ({
+    bucket,
+    count: v.n,
+    rate: round(v.n ? v.champ / v.n : 0),
+  }));
+  const overallRate = hist.length
+    ? mean(hist.map((r) => (r.isChampion ? 1 : 0)))
+    : 0;
+  const tall = hist.filter((r) => (tallById.get(r.id) ?? 0) >= 3);
+  const tallRate = tall.length
+    ? mean(tall.map((r) => (r.isChampion ? 1 : 0)))
+    : 0;
+  // Need a real sample of 3+-tall teams AND a positive base rate to judge; else
+  // 1 (height-neutral) so a synthetic-only / thin run never penalizes spuriously.
+  const realTallChampLift =
+    tall.length >= 10 && overallRate > 0 ? round(tallRate / overallRate, 2) : 1;
+
   return {
     fieldsReplayed: obs.fieldsReplayed,
     reachedRoundMean: round(mean(rows.map((r) => r.reachedRound)), 2),
     archetypeConversion,
     tallStackChampShare,
     championRateByHeightBucket,
+    realChampRateByTallCount,
+    realTallChampLift,
   };
 }
 
@@ -258,6 +291,11 @@ const archWins = (tr: TeamRatingMetrics, label: string) =>
 const FAIR_TALL_SHARE = 0.25;
 const TALL_OVER_THRESHOLD = 0.45;
 const TALL_FLOOR = 0.1;
+
+// Real-field tall-stack champion lift (champ rate of 3+ ≥83" starters ÷ the field
+// rate, on replayed HISTORICAL brackets). 1 ≈ height-neutral; the live engine sits
+// near 3. Above this, height — not talent — is deciding the real bracket.
+const REAL_TALL_LIFT_MAX = 2.0;
 
 function buildGuardrails(
   tr: TeamRatingMetrics,
@@ -317,6 +355,20 @@ function buildGuardrails(
     penalty: underShare || underWins ? 0.2 : 0,
     passed: !(underShare || underWins),
     note: `tall-stack champ share ${round(t.tallStackChampShare)}, big mean wins ${bigWins}`,
+  });
+
+  // G5 — REAL-field tall stacks must not run the bracket beyond the field. This is
+  // the previously-unmeasured failure mode: tier-segmented replay of actual
+  // submitted teams, where 3+ ≥83" lineups win at ~3× the field on the live engine.
+  const g5v = t.realTallChampLift;
+  out.push({
+    key: "real-tall-dominance",
+    label: "Tall stacks don't dominate the real (replayed) field",
+    value: g5v,
+    threshold: REAL_TALL_LIFT_MAX,
+    penalty: round(clamp01(Math.max(0, g5v - REAL_TALL_LIFT_MAX) / 1.5) * 0.4, 3),
+    passed: g5v <= REAL_TALL_LIFT_MAX,
+    note: `3+ tall champ-rate lift ${g5v}× (height-neutral ≈ 1; live engine ≈ 3)`,
   });
 
   return out;

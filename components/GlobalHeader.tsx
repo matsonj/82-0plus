@@ -37,12 +37,12 @@ const POLL_MS = 60_000;
 // marks it seen) OR until it expires, whichever comes first. Bump `id` for the
 // next changelog; the old localStorage key is then naturally ignored.
 const CHANGELOG = {
-  id: "2026-06-22-team-codes",
-  label: "Changelog · 6/22/2026",
-  text: "Fixed historical team codes. Relocated franchises now show their era-correct team (e.g. Vancouver Grizzlies as VAN, Minneapolis Lakers as MNL, the original Charlotte Hornets as CHH).",
-  // 7 days after publish, at Pacific midnight (≈ 2026-06-29 07:00 UTC). After
+  id: "2026-06-26-big-stack-nerf",
+  label: "Changelog · 6/26/2026",
+  text: "Balance update: stacking 3+ bigs was winning too much — nerfed. Spacing and balance matter more now.",
+  // 7 days after publish, at Pacific midnight (≈ 2026-07-03 07:00 UTC). After
   // this it never shows again, even for someone who never opened the panel.
-  expires: Date.parse("2026-06-29T07:00:00Z"),
+  expires: Date.parse("2026-07-03T07:00:00Z"),
 } as const;
 const CHANGELOG_KEY = `changelog-seen:${CHANGELOG.id}`;
 

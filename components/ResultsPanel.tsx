@@ -29,7 +29,7 @@ import { RosterCard, ROSTER_CARD_ROW_HAIRLINE } from "@/components/RosterCard";
 // balancePen is itself a sum (no-guard 16 + skew 7/extra), so we re-derive which
 // half is biting from roleCounts rather than trusting the lumped magnitude.
 function fitNarrative(r: SimResult): string {
-  const { usagePen, outsidePen, ballhogPen, balancePen, sizePen } = r;
+  const { usagePen, outsidePen, ballhogPen, balancePen, sizePen, oversizePen } = r;
   const { G, W, B } = r.roleCounts;
 
   // Which single factor cost the most net? (All are positive magnitudes.)
@@ -39,6 +39,7 @@ function fitNarrative(r: SimResult): string {
     { key: "ballhog", pen: ballhogPen },
     { key: "balance", pen: balancePen },
     { key: "size", pen: sizePen },
+    { key: "oversize", pen: oversizePen },
   ];
   const worst = factors.reduce((a, b) => (b.pen > a.pen ? b : a));
 
@@ -85,6 +86,9 @@ function fitNarrative(r: SimResult): string {
     }
     case "size": {
       return "Undersized. This lineup gets bullied on the glass.";
+    }
+    case "oversize": {
+      return "Frontcourt-heavy. Too much size, not enough quickness.";
     }
     default:
       return "Construction issues. The pieces don't quite fit.";
