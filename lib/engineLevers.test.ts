@@ -35,6 +35,9 @@ describe("height-aware retune is live in the defaults", () => {
     expect(C.OVERSIZE_FREE).toBe(2);
     expect(C.OVERSIZE_TALL_IN).toBe(83);
     expect(C.OVERSIZE_MAX_PEN).toBe(3);
+    expect(C.SPACING_REQUIRE_VOLUME).toBe(true);
+    expect(C.OUTSIDE_PEN_2).toBe(2);
+    expect(C.OUTSIDE_PEN_3PLUS).toBe(4);
     expect(TC.PACE_ADJUST_GAMESCORE).toBe(true);
     expect(TC.GAMESCORE_CATEGORIES).toBe("rebalanced");
     expect(TC.HEIGHT_PER_INCH).toBe(0.045);
@@ -60,9 +63,9 @@ describe("oversize penalty (seed) — count-based", () => {
     // Well-built (spaces, shares, balanced) so the seed sits above the talent floor
     // and the tax is visible — 3 bigs + 2 short guards, summed height 400 (≈ field avg).
     const guard = (h: number) =>
-      p({ gq: 0.8, height_in: h, ast: 7, stl: 1.5, fga: 12, fgm: 6, fta: 3, ftm: 2.5, tov: 1.8, fg3m: 2.2, reb: 3, blk: 0.3 });
+      p({ gq: 0.8, height_in: h, ast: 7, stl: 1.5, fga: 12, fgm: 6, fta: 3, ftm: 2.5, tov: 1.8, fg3a: 5, fg3m: 2.2, reb: 3, blk: 0.3 });
     const big = (h: number) =>
-      p({ gq: 0.8, height_in: h, ast: 3, stl: 0.8, fga: 11, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3m: 1, reb: 9, blk: 1.4 });
+      p({ gq: 0.8, height_in: h, ast: 3, stl: 0.8, fga: 11, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3a: 3, fg3m: 1, reb: 9, blk: 1.4 });
     const barbell = [guard(74), guard(74), big(84), big(84), big(84)];
     expect(barbell.reduce((s, x) => s + x.height_in, 0)).toBe(400);
     const on = simulateRoster(barbell); // live default

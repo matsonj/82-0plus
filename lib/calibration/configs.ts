@@ -1,7 +1,7 @@
 // ============================================================================
 // Candidate config registry.
 //
-// Each candidate is a set of PARTIAL numeric overrides off the live defaults
+// Each candidate is a set of PARTIAL overrides off the live defaults
 // (SCORING_CONFIG / TOURNAMENT_CONFIG). `resolveCandidate` merges them onto the
 // defaults to produce a full config for simulateRoster / simulateBracket. The
 // live default objects are never mutated — a candidate is always a fresh spread.
@@ -11,7 +11,14 @@ import { SCORING_CONFIG } from "../scoring";
 import { TOURNAMENT_CONFIG } from "../tournament";
 import type { CandidateConfig, ResolvedCandidate } from "./types";
 
+const PRE_SPACING_SCORING: CandidateConfig["scoringOverrides"] = {
+  SPACING_REQUIRE_VOLUME: false,
+  OUTSIDE_PEN_2: 9,
+  OUTSIDE_PEN_3PLUS: 26,
+};
+
 const COMBINED_MAX_SCORING: CandidateConfig["scoringOverrides"] = {
+  ...PRE_SPACING_SCORING,
   OVERSIZE_MAX_PEN: 0,
 };
 
@@ -34,11 +41,14 @@ const COMBINED_MAX_TOURNAMENT: CandidateConfig["tournamentOverrides"] = {
  * That dropped tall frontcourt stacks from ~88% of bracket titles to ~31% (fair
  * ≈ 25%) while keeping elite bigs excellent (~66 projected wins).
  *
- * The HEIGHT-AWARE retune then adopted (now also live in the defaults): a seed
+ * The HEIGHT-AWARE retune then adopted: a seed
  * oversize-height penalty + a pace-adjusted, rebalanced bracket game score + a
  * gentler per-game height edge. On real ranked replays it cut the 3+-tall champion
  * lift from ~2.2× toward ~1.3× and the "unicorn" stack's title rate from ~12% to
- * ~2%, while the one-big-balanced control held/rose. `current` now equals that.
+ * ~2%, while the one-big-balanced control held/rose.
+ *
+ * The SIZE+SPACING retune now also lives in the defaults: count-based oversize
+ * plus era-aware spacing at a gentler 2/4 outside-penalty step.
  *
  * The remaining candidates are the comparison points worth keeping: a full revert
  * to the pre-calibration constants, the per-lever isolations + the combined sets
@@ -48,7 +58,7 @@ export const CANDIDATES: CandidateConfig[] = [
   {
     name: "current",
     description:
-      "Live defaults (the adopted height-aware v2 tuning) — the baseline every other candidate is judged against.",
+      "Live defaults (count-based oversize + era-aware spacing at the adopted 2/4 outside-penalty tuning) — the baseline every other candidate is judged against.",
     scoringOverrides: {},
     tournamentOverrides: {},
   },
@@ -73,6 +83,7 @@ export const CANDIDATES: CandidateConfig[] = [
       FLOOR_TALENT_SHARE: 0.5,
       MAX_FIT_PENALTY: 15,
       OVERSIZE_MAX_PEN: 0, // undo the height-aware seed oversize penalty
+      SPACING_REQUIRE_VOLUME: false, // undo the era-aware spacing lever
     },
     tournamentOverrides: {
       HEIGHT_PER_INCH: 0.15,
@@ -139,14 +150,14 @@ export const CANDIDATES: CandidateConfig[] = [
     name: "seed-oversize",
     description:
       "Seed lever: turn on the excess-frontcourt-height penalty (OVERSIZE_MAX_PEN 0→6). Seed-only — taxes oversized fives' seed.",
-    scoringOverrides: { OVERSIZE_MAX_PEN: 6 },
+    scoringOverrides: { ...PRE_SPACING_SCORING, OVERSIZE_MAX_PEN: 6 },
     tournamentOverrides: { ...COMBINED_MAX_TOURNAMENT },
   },
   {
     name: "height-aware-combined",
     description:
       "All height-aware levers together (A+B+F + seed oversize). The candidate to beat for the real tall-lift while keeping one-big-balanced / elite bigs excellent.",
-    scoringOverrides: { OVERSIZE_MAX_PEN: 6 },
+    scoringOverrides: { ...PRE_SPACING_SCORING, OVERSIZE_MAX_PEN: 6 },
     tournamentOverrides: {
       ...COMBINED_MAX_TOURNAMENT,
       PACE_ADJUST_GAMESCORE: true,
@@ -159,7 +170,7 @@ export const CANDIDATES: CandidateConfig[] = [
     name: "height-aware-v2",
     description:
       "Softer combined: keeps the workhorses (seed-oversize + pace-adj + rebalanced) but eases the blunt height-trim (HEIGHT_PER_INCH 0.045, HEIGHT_CAP 0.9) so a genuinely great tall team still gets a small edge — targets a real tall-lift of ~1.3–1.5× (not fully neutral) with the unicorn exploit still suppressed and one-big-balanced intact.",
-    scoringOverrides: { OVERSIZE_MAX_PEN: 6 },
+    scoringOverrides: { ...PRE_SPACING_SCORING, OVERSIZE_MAX_PEN: 6 },
     tournamentOverrides: {
       PACE_ADJUST_GAMESCORE: true,
       GAMESCORE_CATEGORIES: "rebalanced",
@@ -168,42 +179,87 @@ export const CANDIDATES: CandidateConfig[] = [
     },
   },
 
-  // ── Count-based oversize strength sweep (diffs against the LIVE default, which is
-  // already the count-based v2 retune). Only the oversize knobs vary; all other
-  // height-aware levers stay on, so this isolates how hard to tax the 3rd+ big. ──
+  // ── Count-based oversize strength sweep (anchored to the pre-spacing live
+  // default, which already had the count-based v2 retune). Only the oversize knobs
+  // vary; all other height-aware levers stay on, so this isolates how hard to tax
+  // the 3rd+ big. ──
   {
     name: "oversize-off",
     description:
       "Bracket levers only (OVERSIZE_MAX_PEN 0) — the no-seed-penalty ceiling the oversize tax is tuned down from.",
-    scoringOverrides: { OVERSIZE_MAX_PEN: 0 },
+    scoringOverrides: { ...PRE_SPACING_SCORING, OVERSIZE_MAX_PEN: 0 },
     tournamentOverrides: {},
   },
   {
     name: "oversize-count-1",
     description:
       "Count-based oversize, very gentle: OVERSIZE_PER_TALL 1, MAX_PEN 3. A 3-big lineup pays 1 net.",
-    scoringOverrides: { OVERSIZE_PER_TALL: 1, OVERSIZE_MAX_PEN: 3 },
+    scoringOverrides: {
+      ...PRE_SPACING_SCORING,
+      OVERSIZE_PER_TALL: 1,
+      OVERSIZE_MAX_PEN: 3,
+    },
     tournamentOverrides: {},
   },
   {
     name: "oversize-count-2",
     description:
       "Count-based oversize, gentle: OVERSIZE_PER_TALL 2, MAX_PEN 5. A 3-big lineup pays 2 net.",
-    scoringOverrides: { OVERSIZE_PER_TALL: 2, OVERSIZE_MAX_PEN: 5 },
+    scoringOverrides: {
+      ...PRE_SPACING_SCORING,
+      OVERSIZE_PER_TALL: 2,
+      OVERSIZE_MAX_PEN: 5,
+    },
     tournamentOverrides: {},
   },
   {
     name: "oversize-count-soft",
     description:
       "Count-based oversize, softer: OVERSIZE_PER_TALL 5→3, MAX_PEN 12→9. A 3-big lineup pays 3 net.",
-    scoringOverrides: { OVERSIZE_PER_TALL: 3, OVERSIZE_MAX_PEN: 9 },
+    scoringOverrides: {
+      ...PRE_SPACING_SCORING,
+      OVERSIZE_PER_TALL: 3,
+      OVERSIZE_MAX_PEN: 9,
+    },
     tournamentOverrides: {},
   },
   {
     name: "oversize-count-hard",
     description:
       "Count-based oversize, harder: OVERSIZE_PER_TALL 5→7, MAX_PEN 12→15. A 3-big lineup pays 7 net.",
-    scoringOverrides: { OVERSIZE_PER_TALL: 7, OVERSIZE_MAX_PEN: 15 },
+    scoringOverrides: {
+      ...PRE_SPACING_SCORING,
+      OVERSIZE_PER_TALL: 7,
+      OVERSIZE_MAX_PEN: 15,
+    },
+    tournamentOverrides: {},
+  },
+
+  // ── Era-aware spacing lever (diffs against the live count-based oversize
+  // baseline). `spacing-era-aware` is the raw switch-on diagnostic; it intentionally
+  // keeps the pre-spacing 9/26 outside penalties so calibration can show how much
+  // the broader non-shooter count over-bites. `size-and-spacing` is the locked ship
+  // candidate: count-based oversize plus the adopted 2/4 outside penalty set.
+  {
+    name: "spacing-era-aware",
+    description:
+      "Raw era-aware spacing switch: 3pt-era players must shoot enough threes to space; keeps the pre-spacing 9/26 outside penalties as an over-penalty diagnostic.",
+    scoringOverrides: {
+      SPACING_REQUIRE_VOLUME: true,
+      OUTSIDE_PEN_2: 9,
+      OUTSIDE_PEN_3PLUS: 26,
+    },
+    tournamentOverrides: {},
+  },
+  {
+    name: "size-and-spacing",
+    description:
+      "Ship bundle: live count-based oversize plus era-aware spacing with the adopted 2/4 outside-penalty tuning.",
+    scoringOverrides: {
+      SPACING_REQUIRE_VOLUME: true,
+      OUTSIDE_PEN_2: 2,
+      OUTSIDE_PEN_3PLUS: 4,
+    },
     tournamentOverrides: {},
   },
 ];

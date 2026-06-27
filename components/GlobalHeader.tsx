@@ -37,9 +37,9 @@ const POLL_MS = 60_000;
 // marks it seen) OR until it expires, whichever comes first. Bump `id` for the
 // next changelog; the old localStorage key is then naturally ignored.
 const CHANGELOG = {
-  id: "2026-06-26-big-stack-nerf",
+  id: "2026-06-26-size-spacing-retune",
   label: "Changelog · 6/26/2026",
-  text: "Balance update: stacking 3+ bigs was winning too much — nerfed. Spacing and balance matter more now.",
+  text: "Balance update: 3+ big stacks were toned down, and modern lineups now need real 3-point volume to count as spaced.",
   // 7 days after publish, at Pacific midnight (≈ 2026-07-03 07:00 UTC). After
   // this it never shows again, even for someone who never opened the panel.
   expires: Date.parse("2026-07-03T07:00:00Z"),

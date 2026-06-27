@@ -40,12 +40,12 @@ export interface ScoringPlayer {
  *                    fixed (~100) budget, and the penalty is CONVEX in how far the
  *                    lineup runs over it, so each extra shot-hungry star costs more
  *                    net than the last — stacking shooters can't be cruised through.
- *     • outside    — floor spacing by shooting QUALITY, not era-sensitive volume:
- *                    a "non-shooter" is FT% ≤ 65% (era-neutral touch tell) OR a
- *                    genuine bad 3pt shooter (shoots 3s and hits < 30%) who ALSO
- *                    lacks FT touch — a proven FT shooter spaces the floor, so a
- *                    cold low-volume 3P stretch doesn't flag him. One is fine;
- *                    each beyond the first taxes the team (clogged paint).
+ *     • outside    — floor spacing by era-aware shooting volume: in the 3pt era,
+ *                    a player must actually take and make enough threes to count
+ *                    as a spacer, with elite FT touch as the override. Pre-line
+ *                    players keep the FT-touch proxy so they are not punished for
+ *                    a shot that did not exist. One non-spacer is fine; each
+ *                    beyond the first taxes the team (clogged paint).
  *     • ball-hog   — winning basketball moves the ball: if too few of the team's
  *                    made shots are assisted (assisted-FG% below target), a tax
  *                    hits iso-heavy stat accumulators.
@@ -92,9 +92,11 @@ export const SCORING_CONFIG = {
   // Fit penalties, in net-rating points subtracted at their worst.
   USAGE_MAX_PEN: 20, // shot-overlap: stars must sacrifice usage to fit together
   BALLHOG_MAX_PEN: 18, // iso-heavy, low assisted-FG% (was 11 — reward ball movement)
-  // Outside shooting (stepped): 0–1 non-shooters is fine, 2 hurts, 3+ is brutal.
-  OUTSIDE_PEN_2: 9, // exactly two non-shooters (was 5)
-  OUTSIDE_PEN_3PLUS: 26, // three or more — the paint is hopelessly clogged (was 15)
+  // Outside shooting (stepped): 0–1 non-shooters is fine; era-aware spacing
+  // broadens the non-shooter count, so the net penalty is intentionally gentler
+  // than the old FT-touch-only count.
+  OUTSIDE_PEN_2: 2, // exactly two non-shooters (pre-spacing retune: 9; legacy: 5)
+  OUTSIDE_PEN_3PLUS: 4, // three or more (pre-spacing retune: 26; legacy: 15)
 
   // Archetype-balance penalties (by REAL position).
   NO_GUARD_PEN: 16, // no true ball-handler / perimeter defender (was 9)
@@ -172,11 +174,11 @@ export const SCORING_CONFIG = {
   FG3_SHOOTER_FT_FLOOR: 0.72, // FT% at/above this proves real shooting touch, so a cold
   //   low-volume 3P% doesn't brand a good shooter (Wilkins/Majerle) a non-shooter.
 
-  // ── Era-aware spacing (opt-in; default OFF reproduces the FT-touch model above) ──
+  // ── Era-aware spacing (live) ────────────────────────────────────────────────
   // When on, a 3pt-era player must actually shoot threes to count as a floor-spacer;
   // FT touch alone isn't enough (catches modern non-shooting bigs the touch proxy
   // misses). Pre-3pt-era players keep the FT-touch proxy (era-neutral). See isNonShooter.
-  SPACING_REQUIRE_VOLUME: false as boolean, // master switch for the era-aware spacing test
+  SPACING_REQUIRE_VOLUME: true as boolean, // master switch for the era-aware spacing test
   SPACING_ERA_SEASON: 1980, // first season with a 3pt line (era cutoff)
   SPACING_MIN_FG3A: 1.0, // 3PA/game needed to register as a floor-spacer in the 3pt era
   SPACING_MIN_FG3PCT: 0.32, // …at this 3P% or better
@@ -251,13 +253,13 @@ export function simulateRoster(
   // scoring up to fill the spare possessions, <1 discounts an overloaded one.
   const usageScale = clamp(usageRatio, cfg.USAGE_BOX_MIN, cfg.USAGE_BOX_MAX);
 
-  // Outside shooting: count "non-shooters" by quality. FT% ≤ threshold is the
-  // era-neutral touch tell; a bad 3P% only counts if the player actually shoots
-  // 3s (so old-era players with 0 attempts aren't false-flagged). One non-shooter
-  // is fine; each one beyond the first taxes the team (paint gets clogged).
+  // Outside shooting: count "non-shooters" by the live era-aware volume rule.
+  // One non-shooter is fine; each one beyond the first taxes the team (paint gets
+  // clogged). The fallback branch is kept for calibration candidates that need to
+  // compare against the previous FT-touch-only model.
   const isNonShooter = (p: ScoringPlayer) => {
     const ftPct = p.fta >= 1 ? p.ftm / p.fta : 1; // assume touch when there's no FT data
-    // ERA-AWARE spacing (opt-in): FT touch alone no longer earns a pass. In the 3pt
+    // ERA-AWARE spacing: FT touch alone no longer earns a pass. In the 3pt
     // era a player must actually ATTEMPT (and hit) threes to count as a floor-spacer
     // — this catches modern non-shooting bigs/forwards (Malone/Walton-type) that the
     // FT-touch proxy misses. Pre-3pt-era players (no line existed) keep the FT-touch

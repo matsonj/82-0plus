@@ -1,5 +1,15 @@
 # Handoff — bundle: count-based oversize + era-aware spacing lever
 
+> **Codex follow-up (2026-06-26):** implementation/calibration is complete on this
+> branch. Live defaults now bundle count-based oversize with era-aware spacing
+> (`SPACING_REQUIRE_VOLUME: true`, `OUTSIDE_PEN_2: 2`, `OUTSIDE_PEN_3PLUS: 4`).
+> The real-82-0 hoopiq watch-set is wired into the calibration harness. Final
+> hoopiq run: `/tmp/82-0plus-calibration/calib-20260626-183219/report.md`
+> (`current`: real-82-0 mean wins 67.8, champ rate 9.6%, real tall lift 1.39x).
+> Verified with `npx vitest run`, `npx tsc --noEmit`, `npm run build`, and fixture
+> calibration smoke. Remaining ship steps, if not already done: PR/merge, prod
+> deploy, and ghost reseed.
+
 **Branch:** `spacing-lever-wip` (base: `main` @ `cf52fde`). **Status:** WIP, not shipped.
 **Owner action wanted:** finish the spacing lever, recalibrate size + spacing **together** on real hoopiq replays, ship **one** combined deploy, regenerate ghosts.
 

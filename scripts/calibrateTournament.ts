@@ -34,6 +34,10 @@ import { join } from "node:path";
 import { resolveCandidates, allCandidateNames } from "../lib/calibration/configs";
 import { loadHistoricalFields, type QueryFn } from "../lib/calibration/historical";
 import { buildSyntheticFields, archetypeLabels } from "../lib/calibration/synthetic";
+import {
+  buildSuperteamFields,
+  REAL_82_0_ARCHETYPE,
+} from "../lib/calibration/superteams";
 import { runCalibration } from "../lib/calibration/run";
 import { renderMarkdown, renderJson } from "../lib/calibration/report";
 import { fixturePlayerPool, fixtureStatNorms } from "../lib/calibration/fixture";
@@ -131,8 +135,13 @@ async function main(): Promise<void> {
   }
 
   console.log(`[calibrate] building ${options.syntheticCount} synthetic fields…`);
-  const syntheticFields = buildSyntheticFields(pool, options.syntheticCount, seed);
-  console.log(`[calibrate] synthetic: ${syntheticFields.length} fields`);
+  const archetypeFields = buildSyntheticFields(pool, options.syntheticCount, seed);
+  const superteamFields = buildSuperteamFields(pool, options.syntheticCount, seed);
+  const syntheticFields = [...archetypeFields, ...superteamFields];
+  console.log(
+    `[calibrate] synthetic: ${syntheticFields.length} fields ` +
+      `(${archetypeFields.length} archetype + ${superteamFields.length} real-82-0 watch)`,
+  );
 
   if (historicalFields.length === 0 && syntheticFields.length === 0) {
     throw new Error(
@@ -174,7 +183,8 @@ async function main(): Promise<void> {
   const cell = (s: string) => s.padStart(ccol);
   console.log("\n========== PREBAKED ARCHETYPES — champion rate ==========");
   console.log("archetype".padEnd(col) + ranked.map((m) => cell(m.candidate.slice(0, ccol - 1))).join(""));
-  for (const label of archetypeLabels()) {
+  const scoreboardLabels = [...archetypeLabels(), REAL_82_0_ARCHETYPE];
+  for (const label of scoreboardLabels) {
     const cells = ranked
       .map((m) => {
         const a = m.tournament.archetypeConversion.find((x) => x.archetype === label);

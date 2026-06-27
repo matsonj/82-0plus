@@ -20,11 +20,11 @@ function p(over: Partial<ScoringPlayer>): ScoringPlayer {
 // ball (assisted-FG% well above target) and fits the possession budget.
 function balancedRoster(gq: number): ScoringPlayer[] {
   return [
-    p({ gq, ast: 8, stl: 1.5, fga: 12, fgm: 6, fta: 3, ftm: 2, tov: 2, fg3m: 2.5, reb: 3, blk: 0.2 }),
-    p({ gq, ast: 5, stl: 1.2, fga: 13, fgm: 6, fta: 3, ftm: 2, tov: 1.5, fg3m: 2.5, reb: 4, blk: 0.4 }),
-    p({ gq, ast: 4, stl: 1.0, fga: 12, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3m: 2.0, reb: 6, blk: 0.6 }),
-    p({ gq, ast: 3, stl: 0.8, fga: 12, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3m: 1.5, reb: 8, blk: 1.0 }),
-    p({ gq, ast: 2, stl: 0.6, fga: 11, fgm: 5, fta: 5, ftm: 4, tov: 1.5, fg3m: 1.0, reb: 11, blk: 1.8 }),
+    p({ gq, ast: 8, stl: 1.5, fga: 12, fgm: 6, fta: 3, ftm: 2, tov: 2, fg3a: 6, fg3m: 2.5, reb: 3, blk: 0.2 }),
+    p({ gq, ast: 5, stl: 1.2, fga: 13, fgm: 6, fta: 3, ftm: 2, tov: 1.5, fg3a: 6, fg3m: 2.5, reb: 4, blk: 0.4 }),
+    p({ gq, ast: 4, stl: 1.0, fga: 12, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3a: 5, fg3m: 2.0, reb: 6, blk: 0.6 }),
+    p({ gq, ast: 3, stl: 0.8, fga: 12, fgm: 6, fta: 4, ftm: 3, tov: 1.5, fg3a: 4, fg3m: 1.5, reb: 8, blk: 1.0 }),
+    p({ gq, ast: 2, stl: 0.6, fga: 11, fgm: 5, fta: 5, ftm: 4, tov: 1.5, fg3a: 3, fg3m: 1.0, reb: 11, blk: 1.8 }),
   ];
 }
 
@@ -107,22 +107,50 @@ describe("simulateRoster", () => {
 
   it("a proven FT shooter with a cold low-volume 3P% is NOT a non-shooter", () => {
     // The Wilkins/Majerle case: real FT touch (≥ FG3_SHOOTER_FT_FLOOR) but a poor
-    // 3P% on few attempts. FT touch spaces the floor, so the 3pt flag is exempt.
+    // 3P% on few attempts. Under the legacy FT-touch model, that touch spaced the
+    // floor; the live era-aware model now requires enough made-volume in the 3pt era.
     const shooter = p({ gq: 0.7, fta: 6, ftm: 5, fg3a: 3, fg3m: 0.7, fga: 16, fgm: 8, ast: 3, reb: 6 }); // FT .833, 3P .233
     const five = Array.from({ length: 5 }, () => shooter);
-    expect(simulateRoster(five).nonShooters).toBe(0);
-    expect(simulateRoster(five).outsidePen).toBe(0);
+    expect(simulateRoster(five, { ...C, SPACING_REQUIRE_VOLUME: false }).nonShooters).toBe(0);
+    expect(simulateRoster(five).nonShooters).toBe(5);
     // …but a poor 3pt shooter who ALSO lacks FT touch is still a non-shooter.
     const brickBadFt = p({ gq: 0.7, fta: 6, ftm: 3.5, fg3a: 3, fg3m: 0.7, fga: 16, fgm: 8 }); // FT .583
     expect(simulateRoster(Array.from({ length: 5 }, () => brickBadFt)).nonShooters).toBe(5);
   });
 
-  it("a great FT shooter who never shoots threes is NOT a non-shooter (era-fair)", () => {
+  it("a pre-line great FT shooter who never shoots threes is NOT a non-shooter (era-fair)", () => {
     // 0 three-point attempts (e.g. pre-1980), strong FT% → not flagged.
     const oldStars = Array.from({ length: 5 }, () =>
-      p({ gq: 0.7, ast: 4, reb: 6, blk: 0.5, fga: 14, fgm: 7, fta: 6, ftm: 5, fg3a: 0, fg3m: 0, tov: 2 }),
+      p({ gq: 0.7, season: 1976, ast: 4, reb: 6, blk: 0.5, fga: 14, fgm: 7, fta: 6, ftm: 5, fg3a: 0, fg3m: 0, tov: 2 }),
     );
     expect(simulateRoster(oldStars).nonShooters).toBe(0);
+  });
+
+  it("era-aware spacing requires 3pt-era volume while preserving old-era FT touch", () => {
+    const legacy = { ...C, SPACING_REQUIRE_VOLUME: false };
+    const modernFtTouchNoVolume = p({
+      gq: 0.7,
+      season: 1990,
+      fta: 10,
+      ftm: 8,
+      fg3a: 0,
+      fg3m: 0,
+      fga: 14,
+      fgm: 7,
+    });
+    const preLineFtTouch = { ...modernFtTouchNoVolume, season: 1976 };
+    const modernEliteFt = { ...modernFtTouchNoVolume, ftm: 9 };
+    const modernVolumeShooter = {
+      ...modernFtTouchNoVolume,
+      fg3a: 2,
+      fg3m: 0.7,
+    };
+
+    expect(simulateRoster([modernFtTouchNoVolume], legacy).nonShooters).toBe(0);
+    expect(simulateRoster([modernFtTouchNoVolume]).nonShooters).toBe(1);
+    expect(simulateRoster([preLineFtTouch]).nonShooters).toBe(0);
+    expect(simulateRoster([modernEliteFt]).nonShooters).toBe(0);
+    expect(simulateRoster([modernVolumeShooter]).nonShooters).toBe(0);
   });
 
   it("no true guard is penalized hard and earns no synergy", () => {
