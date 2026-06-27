@@ -69,6 +69,21 @@ describe("real 82-0 superteam watch fields", () => {
     expect(buildSuperteamFields(fixturePlayerPool(), 2, "seed")).toEqual([]);
   });
 
+  it("throws when only part of the real watch set hydrates", () => {
+    const missingOne = superteamPool().filter(
+      (p) =>
+        !(
+          p.entity_id === REAL_82_0_HOOPIQ[0].picks[0][0] &&
+          p.team === REAL_82_0_HOOPIQ[0].picks[0][1] &&
+          p.decade === REAL_82_0_HOOPIQ[0].picks[0][2]
+        ),
+    );
+
+    expect(() =>
+      buildSuperteamFields([...fixturePlayerPool(), ...missingOne], 2, "seed"),
+    ).toThrow(/real-82-0 watch set partially hydrated/);
+  });
+
   it("hydrates the eight real watch teams and replaces the first teams in each field", () => {
     const pool = [...fixturePlayerPool(), ...superteamPool()];
     const fields = buildSuperteamFields(pool, 2, "seed");

@@ -139,6 +139,10 @@ describe("simulateRoster", () => {
       fgm: 7,
     });
     const preLineFtTouch = { ...modernFtTouchNoVolume, season: 1976 };
+    const firstThreePointSeasonNoVolume = {
+      ...modernFtTouchNoVolume,
+      season: 1979,
+    };
     const modernEliteFt = { ...modernFtTouchNoVolume, ftm: 9 };
     const modernVolumeShooter = {
       ...modernFtTouchNoVolume,
@@ -149,6 +153,7 @@ describe("simulateRoster", () => {
     expect(simulateRoster([modernFtTouchNoVolume], legacy).nonShooters).toBe(0);
     expect(simulateRoster([modernFtTouchNoVolume]).nonShooters).toBe(1);
     expect(simulateRoster([preLineFtTouch]).nonShooters).toBe(0);
+    expect(simulateRoster([firstThreePointSeasonNoVolume]).nonShooters).toBe(1);
     expect(simulateRoster([modernEliteFt]).nonShooters).toBe(0);
     expect(simulateRoster([modernVolumeShooter]).nonShooters).toBe(0);
   });

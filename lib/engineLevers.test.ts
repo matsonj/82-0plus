@@ -31,6 +31,7 @@ function team(starters: ScoringPlayer[], over: Partial<TournamentTeam> = {}): To
 // ── Live defaults reflect the adopted height-aware retune ────────────────────────
 describe("height-aware retune is live in the defaults", () => {
   it("seed + bracket knobs are at their adopted values", () => {
+    expect(C.NET_PER_GQ).toBe(42.5);
     expect(C.OVERSIZE_PER_TALL).toBe(1);
     expect(C.OVERSIZE_FREE).toBe(2);
     expect(C.OVERSIZE_TALL_IN).toBe(83);
@@ -38,6 +39,7 @@ describe("height-aware retune is live in the defaults", () => {
     expect(C.SPACING_REQUIRE_VOLUME).toBe(true);
     expect(C.OUTSIDE_PEN_2).toBe(2);
     expect(C.OUTSIDE_PEN_3PLUS).toBe(4);
+    expect(C.SPACING_ERA_SEASON).toBe(1979);
     expect(TC.PACE_ADJUST_GAMESCORE).toBe(true);
     expect(TC.GAMESCORE_CATEGORIES).toBe("rebalanced");
     expect(TC.HEIGHT_PER_INCH).toBe(0.045);

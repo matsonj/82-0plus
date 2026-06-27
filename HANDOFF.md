@@ -1,11 +1,15 @@
-# Handoff — bundle: count-based oversize + era-aware spacing lever
+# Handoff — bundle: count-based oversize + era-aware spacing + micro-buff
 
 > **Codex follow-up (2026-06-26):** implementation/calibration is complete on this
 > branch. Live defaults now bundle count-based oversize with era-aware spacing
-> (`SPACING_REQUIRE_VOLUME: true`, `OUTSIDE_PEN_2: 2`, `OUTSIDE_PEN_3PLUS: 4`).
+> (`SPACING_REQUIRE_VOLUME: true`, `SPACING_ERA_SEASON: 1979`,
+> `OUTSIDE_PEN_2: 2`, `OUTSIDE_PEN_3PLUS: 4`) plus the top-end micro-buff
+> (`NET_PER_GQ: 42.5`, legacy pinned to `40` for before/after calibration).
 > The real-82-0 hoopiq watch-set is wired into the calibration harness. Final
-> hoopiq run: `/tmp/82-0plus-calibration/calib-20260626-183219/report.md`
-> (`current`: real-82-0 mean wins 67.8, champ rate 9.6%, real tall lift 1.39x).
+> hoopiq run: `/tmp/82-0plus-calibration/microbuff-final-20260626/report.md`
+> (`current`: real-82-0 mean wins 70.0, champ rate 11%, real tall lift 1.17x).
+> Roster-level sweep targeting ~150 unique 82-0 teams landed at 148-149 with
+> `NET_PER_GQ: 42.5`; the eight watch-set teams stayed at 66-76 wins.
 > Verified with `npx vitest run`, `npx tsc --noEmit`, `npm run build`, and fixture
 > calibration smoke. Remaining ship steps, if not already done: PR/merge, prod
 > deploy, and ghost reseed.
@@ -18,10 +22,11 @@
 ## TL;DR
 
 - **Prod (`main`)** runs the shipped *height-aware retune* with the **sum-based** oversize penalty (PR #90/#91).
-- **This branch** has two bundled changes that are **NOT shipped**:
+- **This branch** has three bundled changes that are **NOT shipped**:
   1. **Count-based oversize** — ✅ done + calibrated (`OVERSIZE_PER_TALL: 1`). Replaces the sum-based version.
-  2. **Era-aware spacing lever** — 🟡 prototype scaffolding only, **default OFF**. Needs candidates, recalibration, tests, and the superteam watch-fixture.
-- Everything here is **default-off / byte-identical** to prod until the new knobs are turned on by a candidate (and ultimately the live defaults). `npx tsc --noEmit` + `npx vitest run` are green.
+  2. **Era-aware spacing lever** — ✅ done + calibrated, default on.
+  3. **Top-end micro-buff** — ✅ done + calibrated (`NET_PER_GQ: 42.5`) to keep clean superteams capable of 82-0.
+- Everything here is **not shipped to prod yet** until the PR merges/deploys. `npx tsc --noEmit` + `npx vitest run` are green.
 
 ---
 
@@ -44,13 +49,13 @@ Tall stacks over-won ranked; we shipped the height-aware retune. Two follow-up f
 - **Calibrated** on real hoopiq (sample 150): per-tall **1 → real 3+-tall champ lift ≈ 0.92×** (neutral), unicorn ≈5%, one-big-balanced control ≈15–17%. (per-tall 2 → 0.76×; 5 → 0.59× over-corrected.)
 - Tests updated: `lib/engineLevers.test.ts` (count math + barbell). Candidates added in `configs.ts`: `oversize-off`, `oversize-count-1/2/soft/hard`.
 
-### 2. Era-aware spacing lever — `lib/scoring.ts` (PROTOTYPE, default OFF)
-- `SCORING_CONFIG`: `SPACING_REQUIRE_VOLUME: false` (master switch), `SPACING_ERA_SEASON: 1980`, `SPACING_MIN_FG3A: 1.0`, `SPACING_MIN_FG3PCT: 0.32`, `SPACING_FT_TOUCH: 0.78`, `SPACING_FT_ELITE: 0.85`.
-- `isNonShooter`: when on, a **3pt-era** player must shoot ≥`MIN_FG3A` at ≥`MIN_FG3PCT` to count as a floor-spacer (knockdown FT ≥`FT_ELITE` always spaces). **Pre-1980 players keep the FT-touch proxy** (FT ≥ `FT_TOUCH`) — era-neutral by construction (no penalty for a shot that didn't exist). Default off = legacy.
+### 2. Era-aware spacing lever — `lib/scoring.ts` (LIVE on this branch)
+- `SCORING_CONFIG`: `SPACING_REQUIRE_VOLUME: true` (master switch), `SPACING_ERA_SEASON: 1979`, `SPACING_MIN_FG3A: 1.0`, `SPACING_MIN_FG3PCT: 0.32`, `SPACING_FT_TOUCH: 0.78`, `SPACING_FT_ELITE: 0.85`, `OUTSIDE_PEN_2: 2`, `OUTSIDE_PEN_3PLUS: 4`.
+- `isNonShooter`: when on, a **3pt-era** player must shoot ≥`MIN_FG3A` at ≥`MIN_FG3PCT` to count as a floor-spacer (knockdown FT ≥`FT_ELITE` always spaces). **Pre-1979 players keep the FT-touch proxy** (FT ≥ `FT_TOUCH`) — era-neutral by construction (no penalty for a shot that didn't exist). The legacy candidate disables this for before/after comparison.
 
 ---
 
-## TODO (to finish + ship)
+## Original TODO (completed; retained for context)
 
 1. **Candidates** (`lib/calibration/configs.ts`, + names in `configs.test.ts` `allCandidateNames()`):
    - `spacing-era-aware`: `{ SPACING_REQUIRE_VOLUME: true }` (+ likely retuned `OUTSIDE_PEN_*`, see #2).

@@ -34,10 +34,11 @@ describe("candidate configs", () => {
     expect(r.tournament.HEIGHT_PER_INCH).toBe(0.15);
     expect(r.tournament.HEIGHT_CAP).toBe(3.0);
     expect(r.scoring.SIZE_MAX_PEN).toBe(6);
+    expect(r.scoring.NET_PER_GQ).toBe(40);
     // an un-overridden tournament knob keeps its (live) default
     expect(r.tournament.HOME_BUFF).toBe(TOURNAMENT_CONFIG.HOME_BUFF);
     // an un-overridden scoring knob keeps its (live) default
-    expect(r.scoring.NET_PER_GQ).toBe(SCORING_CONFIG.NET_PER_GQ);
+    expect(r.scoring.GAMES).toBe(SCORING_CONFIG.GAMES);
   });
 
   it("current candidate equals the live defaults", () => {
@@ -107,6 +108,8 @@ describe("candidate configs", () => {
     expect(TOURNAMENT_CONFIG.HEIGHT_PER_INCH).toBe(0.045);
     expect(TOURNAMENT_CONFIG.HEIGHT_CAP).toBe(0.9);
     expect(SCORING_CONFIG.SPACING_REQUIRE_VOLUME).toBe(true);
+    expect(SCORING_CONFIG.SPACING_ERA_SEASON).toBe(1979);
+    expect(SCORING_CONFIG.NET_PER_GQ).toBe(42.5);
     expect(SCORING_CONFIG.OUTSIDE_PEN_2).toBe(2);
     expect(SCORING_CONFIG.OUTSIDE_PEN_3PLUS).toBe(4);
   });

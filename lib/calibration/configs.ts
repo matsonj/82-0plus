@@ -48,7 +48,9 @@ const COMBINED_MAX_TOURNAMENT: CandidateConfig["tournamentOverrides"] = {
  * ~2%, while the one-big-balanced control held/rose.
  *
  * The SIZE+SPACING retune now also lives in the defaults: count-based oversize
- * plus era-aware spacing at a gentler 2/4 outside-penalty step.
+ * plus era-aware spacing at a gentler 2/4 outside-penalty step. The top-end
+ * micro-buff nudges NET_PER_GQ 40→42.5 so clean superteams can still hit 82-0
+ * without restoring the cramped-watch-set shortcut.
  *
  * The remaining candidates are the comparison points worth keeping: a full revert
  * to the pre-calibration constants, the per-lever isolations + the combined sets
@@ -58,7 +60,7 @@ export const CANDIDATES: CandidateConfig[] = [
   {
     name: "current",
     description:
-      "Live defaults (count-based oversize + era-aware spacing at the adopted 2/4 outside-penalty tuning) — the baseline every other candidate is judged against.",
+      "Live defaults (count-based oversize + era-aware spacing at the adopted 2/4 outside-penalty tuning + NET_PER_GQ 42.5 micro-buff) — the baseline every other candidate is judged against.",
     scoringOverrides: {},
     tournamentOverrides: {},
   },
@@ -78,6 +80,7 @@ export const CANDIDATES: CandidateConfig[] = [
       DEF_MARGIN_1ST: 1.5,
       DEF_MARGIN_2ND: 0.75,
       DEF_MARGIN_CAP: 5,
+      NET_PER_GQ: 40,
       SYNERGY_FRAC: 0.12,
       ASSIST_RATE_TARGET: 0.55,
       FLOOR_TALENT_SHARE: 0.5,

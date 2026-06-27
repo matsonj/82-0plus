@@ -155,10 +155,14 @@ function toStoredRow(
   };
 }
 
-function hydrateReal82Refs(pool: IndexedPlayer[]): ReplayTeamRef[] {
+function hydrateReal82Refs(pool: IndexedPlayer[]): {
+  refs: ReplayTeamRef[];
+  missing: string[];
+} {
   const playerMap = buildPlayerMap(pool);
   const debutMap = buildDebutMap(pool);
   const refs: ReplayTeamRef[] = [];
+  const missing: string[] = [];
 
   for (const spec of REAL_82_0_HOOPIQ) {
     const row = toStoredRow(spec, playerMap);
@@ -170,9 +174,10 @@ function hydrateReal82Refs(pool: IndexedPlayer[]): ReplayTeamRef[] {
       debutMap,
     );
     if (team) refs.push({ team, archetype: REAL_82_0_ARCHETYPE });
+    else missing.push(spec.name);
   }
 
-  return refs;
+  return { refs, missing };
 }
 
 /**
@@ -185,8 +190,15 @@ export function buildSuperteamFields(
   count: number,
   seed: string,
 ): ReplayField[] {
-  const watchRefs = hydrateReal82Refs(pool);
+  const { refs: watchRefs, missing } = hydrateReal82Refs(pool);
   if (watchRefs.length === 0) return [];
+  if (missing.length > 0) {
+    throw new Error(
+      `real-82-0 watch set partially hydrated: ` +
+        `${watchRefs.length}/${REAL_82_0_HOOPIQ.length} teams present; ` +
+        `missing ${missing.join(", ")}`,
+    );
+  }
 
   const baseFields = buildSyntheticFields(pool, count, `${seed}-real-82-0`);
   return baseFields.map((field, i) => {

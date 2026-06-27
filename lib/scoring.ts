@@ -77,7 +77,7 @@ export interface ScoringPlayer {
 export const SCORING_CONFIG = {
   GAMES: 82,
   AVG_GQ: 0.5,
-  NET_PER_GQ: 40, // GQ→net slope (talent weight)
+  NET_PER_GQ: 42.5, // GQ→net slope (talent weight; micro-buffed from 40)
   WINS_PER_NET: 2.7,
   BASE_WINS: 41,
 
@@ -179,7 +179,7 @@ export const SCORING_CONFIG = {
   // FT touch alone isn't enough (catches modern non-shooting bigs the touch proxy
   // misses). Pre-3pt-era players keep the FT-touch proxy (era-neutral). See isNonShooter.
   SPACING_REQUIRE_VOLUME: true as boolean, // master switch for the era-aware spacing test
-  SPACING_ERA_SEASON: 1980, // first season with a 3pt line (era cutoff)
+  SPACING_ERA_SEASON: 1979, // first season with a 3pt line (1979-80)
   SPACING_MIN_FG3A: 1.0, // 3PA/game needed to register as a floor-spacer in the 3pt era
   SPACING_MIN_FG3PCT: 0.32, // …at this 3P% or better
   SPACING_FT_TOUCH: 0.78, // pre-3pt-era touch proxy: FT% at/above this spaces the floor
