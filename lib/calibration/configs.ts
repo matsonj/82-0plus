@@ -11,6 +11,17 @@ import { SCORING_CONFIG } from "../scoring";
 import { TOURNAMENT_CONFIG } from "../tournament";
 import type { CandidateConfig, ResolvedCandidate } from "./types";
 
+const COMBINED_MAX_SCORING: CandidateConfig["scoringOverrides"] = {
+  OVERSIZE_MAX_PEN: 0,
+};
+
+const COMBINED_MAX_TOURNAMENT: CandidateConfig["tournamentOverrides"] = {
+  HEIGHT_PER_INCH: 0.06,
+  HEIGHT_CAP: 1.25,
+  GAMESCORE_CATEGORIES: "legacy",
+  PACE_ADJUST_GAMESCORE: false,
+};
+
 /**
  * Candidates are PARTIAL diffs against the LIVE defaults. The calibration adopted
  * the "combined-max" tuning as the live baseline (see SCORING_CONFIG /
@@ -37,7 +48,7 @@ export const CANDIDATES: CandidateConfig[] = [
   {
     name: "current",
     description:
-      "Live defaults (the adopted combined-max tuning) — the baseline every other candidate is judged against.",
+      "Live defaults (the adopted height-aware v2 tuning) — the baseline every other candidate is judged against.",
     scoringOverrides: {},
     tournamentOverrides: {},
   },
@@ -75,47 +86,61 @@ export const CANDIDATES: CandidateConfig[] = [
     name: "height-edge-min",
     description:
       "Forward stress test: tighten the tournament height cap further than the adopted tuning (HEIGHT_CAP 1.25→1.0).",
-    scoringOverrides: {},
-    tournamentOverrides: { HEIGHT_CAP: 1.0 },
+    scoringOverrides: { ...COMBINED_MAX_SCORING },
+    tournamentOverrides: { ...COMBINED_MAX_TOURNAMENT, HEIGHT_CAP: 1.0 },
   },
   {
     name: "combined-max-floor",
     description:
       "Forward stress test: push the penalty floor lower than the adopted tuning (FLOOR_TALENT_SHARE 0.3→0.25, MAX_FIT_PENALTY 24→30) so stacks lose even more seed. Watches the realism floor (bigs must stay excellent).",
-    scoringOverrides: { FLOOR_TALENT_SHARE: 0.25, MAX_FIT_PENALTY: 30 },
-    tournamentOverrides: {},
+    scoringOverrides: {
+      ...COMBINED_MAX_SCORING,
+      FLOOR_TALENT_SHARE: 0.25,
+      MAX_FIT_PENALTY: 30,
+    },
+    tournamentOverrides: { ...COMBINED_MAX_TOURNAMENT },
   },
 
   // ── Height-aware levers (each isolates ONE knob so its effect is legible). All
-  // values are STARTING points for Phase-2 tuning, not final — adjust against the
-  // real tall-lift + prebaked scoreboard before any default is flipped. ──
+  // are anchored to the pre-height-aware combined-max baseline above; otherwise
+  // the adopted live defaults would turn these candidates into no-ops. ──
   {
     name: "pace-adj",
     description:
       "Lever F: pace-adjust the bracket game-score totals (removes the high-pace old-era free edge). Bracket-only.",
-    scoringOverrides: {},
-    tournamentOverrides: { PACE_ADJUST_GAMESCORE: true },
+    scoringOverrides: { ...COMBINED_MAX_SCORING },
+    tournamentOverrides: {
+      ...COMBINED_MAX_TOURNAMENT,
+      PACE_ADJUST_GAMESCORE: true,
+    },
   },
   {
     name: "gamescore-rebalanced",
     description:
       "Lever A: rebalanced game-score categories — folds reb+blk to ~one 'size' category and adds a 3pt/spacing category so size can't sweep. Bracket-only.",
-    scoringOverrides: {},
-    tournamentOverrides: { GAMESCORE_CATEGORIES: "rebalanced" },
+    scoringOverrides: { ...COMBINED_MAX_SCORING },
+    tournamentOverrides: {
+      ...COMBINED_MAX_TOURNAMENT,
+      GAMESCORE_CATEGORIES: "rebalanced",
+    },
   },
   {
     name: "height-trim",
     description:
       "Lever B: halve the per-game height edge (HEIGHT_PER_INCH 0.06→0.03, HEIGHT_CAP 1.25→0.6). Bracket-only.",
-    scoringOverrides: {},
-    tournamentOverrides: { HEIGHT_PER_INCH: 0.03, HEIGHT_CAP: 0.6 },
+    scoringOverrides: { ...COMBINED_MAX_SCORING },
+    tournamentOverrides: {
+      ...COMBINED_MAX_TOURNAMENT,
+      HEIGHT_PER_INCH: 0.03,
+      HEIGHT_CAP: 0.6,
+    },
   },
   {
     name: "seed-oversize",
     description:
       "Seed lever: turn on the excess-frontcourt-height penalty (OVERSIZE_MAX_PEN 0→6). Seed-only — taxes oversized fives' seed.",
     scoringOverrides: { OVERSIZE_MAX_PEN: 6 },
-    tournamentOverrides: {},
+    tournamentOverrides: { ...COMBINED_MAX_TOURNAMENT },
   },
   {
     name: "height-aware-combined",
@@ -123,6 +148,7 @@ export const CANDIDATES: CandidateConfig[] = [
       "All height-aware levers together (A+B+F + seed oversize). The candidate to beat for the real tall-lift while keeping one-big-balanced / elite bigs excellent.",
     scoringOverrides: { OVERSIZE_MAX_PEN: 6 },
     tournamentOverrides: {
+      ...COMBINED_MAX_TOURNAMENT,
       PACE_ADJUST_GAMESCORE: true,
       GAMESCORE_CATEGORIES: "rebalanced",
       HEIGHT_PER_INCH: 0.03,

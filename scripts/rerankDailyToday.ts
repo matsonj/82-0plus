@@ -1,7 +1,8 @@
 /**
  * rerankDailyToday.ts — READ-ONLY. Re-scores the daily-challenge teams submitted
- * on a given day under the LEGACY (pre-calibration) config vs the CURRENT (live,
- * adopted combined-max) config, and reports the projected-win impact per team.
+ * on a given day under the LEGACY (pre-calibration) config vs the CURRENT
+ * (live, adopted height-aware) config, and reports the projected-win impact per
+ * team.
  *
  * Writes nothing. Reads teams from nba_tournament.main.teams and the cached
  * player index, re-hydrates each roster, and runs simulateRoster under both

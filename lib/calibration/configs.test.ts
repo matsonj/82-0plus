@@ -39,6 +39,32 @@ describe("candidate configs", () => {
     expect(r.tournament).toEqual(TOURNAMENT_CONFIG);
   });
 
+  it("anchors height-aware lever candidates to the pre-height-aware baseline", () => {
+    const byName = (name: string) =>
+      resolveCandidate(CANDIDATES.find((c) => c.name === name)!);
+
+    const paceAdj = byName("pace-adj");
+    expect(paceAdj.scoring.OVERSIZE_MAX_PEN).toBe(0);
+    expect(paceAdj.tournament.HEIGHT_PER_INCH).toBe(0.06);
+    expect(paceAdj.tournament.HEIGHT_CAP).toBe(1.25);
+    expect(paceAdj.tournament.GAMESCORE_CATEGORIES).toBe("legacy");
+    expect(paceAdj.tournament.PACE_ADJUST_GAMESCORE).toBe(true);
+
+    const rebalanced = byName("gamescore-rebalanced");
+    expect(rebalanced.scoring.OVERSIZE_MAX_PEN).toBe(0);
+    expect(rebalanced.tournament.HEIGHT_PER_INCH).toBe(0.06);
+    expect(rebalanced.tournament.HEIGHT_CAP).toBe(1.25);
+    expect(rebalanced.tournament.GAMESCORE_CATEGORIES).toBe("rebalanced");
+    expect(rebalanced.tournament.PACE_ADJUST_GAMESCORE).toBe(false);
+
+    const seedOversize = byName("seed-oversize");
+    expect(seedOversize.scoring.OVERSIZE_MAX_PEN).toBe(6);
+    expect(seedOversize.tournament.HEIGHT_PER_INCH).toBe(0.06);
+    expect(seedOversize.tournament.HEIGHT_CAP).toBe(1.25);
+    expect(seedOversize.tournament.GAMESCORE_CATEGORIES).toBe("legacy");
+    expect(seedOversize.tournament.PACE_ADJUST_GAMESCORE).toBe(false);
+  });
+
   it("leaves the live default objects unmutated after resolving every candidate", () => {
     const beforeScoring = JSON.stringify(SCORING_CONFIG);
     const beforeTourney = JSON.stringify(TOURNAMENT_CONFIG);
