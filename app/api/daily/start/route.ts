@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import { computeDailyBoard } from "@/lib/daily";
-import { authenticate, getDailyResult } from "@/lib/dailyResults";
+import { authenticate, getDailyResult, getDailyTeamId } from "@/lib/dailyResults";
 import { getDraftRosters } from "@/lib/draftSourceRosters";
 
 export const runtime = "nodejs";
@@ -35,10 +35,14 @@ export async function POST(req: NextRequest) {
 
     const result = await getDailyResult(auth.userId, date);
     if (result) {
+      // Return the daily team id so "Review your team" deep-links straight to that
+      // bracket, skipping the all-teams lookup hop.
+      const teamId = await getDailyTeamId(auth.userId, date);
       return jsonWithSessionHint(sessionHint, {
         status: "played",
         date,
         result,
+        teamId,
       });
     }
 

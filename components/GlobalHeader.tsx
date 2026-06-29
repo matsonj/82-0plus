@@ -9,6 +9,7 @@ import {
   formatPrivateEntryStatus,
 } from "@/lib/tournamentLabels";
 import type { PrivateMode } from "@/lib/privateTournament";
+import { fetchHomeBootstrap } from "@/lib/homeBootstrap";
 
 // One private-tournament summary as returned by /api/private-tournament/notifications.
 interface NotifSummary {
@@ -95,14 +96,10 @@ export function GlobalHeader({
     if (inFlight.current) return;
     inFlight.current = true;
     try {
-      const res = await fetch("/api/private-tournament/notifications", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: user.username, pin: user.pin }),
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as NotifResponse;
-      setNotif(data);
+      // Shared, deduped with the home page's hydration fetch (lib/homeBootstrap):
+      // on home mount the two collapse into a single authenticated round trip.
+      const { notifications } = await fetchHomeBootstrap(user.username, user.pin);
+      setNotif(notifications);
     } catch {
       /* a missed poll is harmless — the next one self-heals */
     } finally {

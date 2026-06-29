@@ -13,12 +13,15 @@ import { PageShell } from "@/components/layout/PageShell";
 export default function TournamentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; daily?: string }>;
+  searchParams: Promise<{ tab?: string; daily?: string; team?: string }>;
 }) {
-  const { tab, daily } = use(searchParams);
+  const { tab, daily, team } = use(searchParams);
   const initialTab = tab === "private" ? ("private" as const) : undefined;
   // `?daily=YYYY-MM-DD` (from a home-calendar click) auto-opens that day's bracket.
   const initialDaily = /^\d{4}-\d{2}-\d{2}$/.test(daily ?? "") ? daily : undefined;
+  // `?team=<uuid>` (from "Review your team") opens that one bracket directly,
+  // skipping the all-teams lookup; `daily` carries the date for the result chrome.
+  const initialTeam = /^[0-9a-fA-F-]{36}$/.test(team ?? "") ? team : undefined;
 
   // The logged-out lookup landing ("lookup") is the only state that shows the
   // "HOW FAR DID YOU GET?" masthead + "earn your way in" sidebar (two-column).
@@ -81,6 +84,7 @@ export default function TournamentPage({
           onBack={undefined}
           initialTab={initialTab}
           initialDaily={initialDaily}
+          initialTeam={initialTeam}
           onChrome={handleChrome}
         />
 

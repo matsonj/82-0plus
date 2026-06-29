@@ -5,3 +5,6 @@ export const SITE_URL =
 
 // MotherDuck homepage, UTM-tagged so referrals from this app are attributable.
 export const MOTHERDUCK_URL = "https://motherduck.com/?utm_source=82-0plus";
+
+// PlanetScale homepage, same UTM tag — the transactional store runs on PlanetScale.
+export const PLANETSCALE_URL = "https://planetscale.com/?utm_source=82-0plus";

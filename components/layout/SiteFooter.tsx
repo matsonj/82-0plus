@@ -1,4 +1,4 @@
-import { MOTHERDUCK_URL } from "@/lib/site";
+import { MOTHERDUCK_URL, PLANETSCALE_URL } from "@/lib/site";
 import { cx } from "@/components/ui/classNames";
 
 export function SiteFooter({
@@ -50,6 +50,15 @@ function FooterCopy({ split = false }: { split?: boolean }) {
           className="underline hover:text-[var(--md-ink)]"
         >
           MotherDuck
+        </a>{" "}
+        and{" "}
+        <a
+          href={PLANETSCALE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-[var(--md-ink)]"
+        >
+          PlanetScale
         </a>{" "}
         · <span className="font-mono">nba_box_scores_v2</span>
       </p>

@@ -33,6 +33,7 @@ import { Countdown } from "@/components/Countdown";
 import { track } from "@vercel/analytics";
 import { encodeShare } from "@/lib/shareCode";
 import { SITE_URL } from "@/lib/site";
+import { fetchHomeBootstrap } from "@/lib/homeBootstrap";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import {
   setPendingDaily,
@@ -406,9 +407,15 @@ export default function Home() {
           // The server owns the gate now, so drop any stale same-device lock.
           clearPendingDaily(date, u);
           setDailyChecking(false);
-          // Open THAT day's tournament in-app (your bracket, your result) — the
-          // /d/ share page is only for links shared between players.
-          window.location.assign(`/tournament?daily=${date}`);
+          // Open THAT day's bracket in-app. The server hands back the daily team id
+          // so we deep-link straight to it (skipping the all-teams lookup); fall
+          // back to the date-only path if it's somehow missing.
+          const teamId = (data as { teamId?: string | null }).teamId;
+          window.location.assign(
+            teamId
+              ? `/tournament?team=${encodeURIComponent(teamId)}&daily=${date}`
+              : `/tournament?daily=${date}`,
+          );
           return;
         }
         // No server record. If THIS account has an unconfirmed completion for the
@@ -460,19 +467,10 @@ export default function Home() {
       return;
     }
     try {
-      const res = await fetch("/api/daily/results", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: u.username, pin: u.pin }),
-      });
-      if (!res.ok) return;
-      const { results, todayRank } = (await res.json()) as {
-        results: {
-          date: string; wins: number; losses: number; margin: number;
-          perfect: boolean; champion: boolean; top10: boolean;
-        }[];
-        todayRank: { rank: number; total: number } | null;
-      };
+      // One consolidated, authenticate-once call — deduped with the header's
+      // alerts fetch so the home mount makes a single round trip (lib/homeBootstrap).
+      const { dailyResults } = await fetchHomeBootstrap(u.username, u.pin);
+      const { results, todayRank } = dailyResults;
       const map: DailyDoneMap = {};
       for (const r of results) {
         map[r.date] = {

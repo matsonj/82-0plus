@@ -50,7 +50,7 @@ Pacific day).
 
 ```bash
 npm install
-cp .env.example .env.local   # then add your MotherDuck token
+cp .env.example .env.local   # then add your MotherDuck token (+ PlanetScale DATABASE_URL)
 npm run dev                  # http://localhost:3000
 ```
 
@@ -72,11 +72,19 @@ single-elimination bracket that's simulated instantly and stored so you can retu
 NAME+PIN to watch your run. This is the app's only **write** path, so it needs a
 read-write token:
 
-`MOTHERDUCK_RW_TOKEN` — required for the tournament. Writes go to a separate
-`nba_tournament` database via the same PostgreSQL endpoint, on an isolated connection
-pool so the RW token never touches the read path. Tables are created lazily on the
-write paths (`lib/tournamentDb.ts` → `ensureSchema()`); public read paths
-(`/api/tournament/{bracket,team,lookup}`) never run DDL.
+The transactional tables (`users`, `teams`, `daily_results`, `ghosts`, `private_*`)
+live in **PlanetScale Postgres**. Set `DATABASE_URL` to the **pooled** connection
+string (PgBouncer, port **6432**) so serverless fan-out doesn't exhaust connections;
+the direct **5432** endpoint is for migrations/DDL/admin only. Tables are created
+lazily by `lib/oltpDb.ts` → `ensureSchema()` — the `tournament` schema must already
+exist (the app role is least-privilege, so an admin runs once:
+`CREATE SCHEMA tournament; GRANT USAGE, CREATE ON SCHEMA tournament TO <app_role>;`).
+Public read paths (`/api/tournament/{bracket,team,lookup}`) go through
+`lib/oltpReadDb.ts`.
+
+`MOTHERDUCK_RW_TOKEN` — now used only to build the derived `app_cache` rollups
+(`lib/appCache.ts`, reading `nba_box_scores_v2`); it no longer touches the
+transactional tables.
 
 `TOURNAMENT_SECRET` — **required in production.** It's the HMAC key for signed roll
 receipts and daily share tokens. It is intentionally NOT derived from a database
@@ -84,27 +92,15 @@ token (signing must not be backed by a DB credential). In production the app thr
 if it's unset; dev/test fall back to a fixed placeholder. Rotating it invalidates
 outstanding roll receipts and daily share links.
 
-The public read paths (`/api/tournament/{bracket,team,lookup}`) read `nba_tournament`
-through a read-only pool, so attach a **read-only copy** of `nba_tournament` to the
-read token's instance (e.g. via a MotherDuck share):
+`DATABASE_URL_RO` (optional) — a dedicated **SELECT-only** PlanetScale role for the
+public read paths, so a leak of the public read connection stays away from the
+`users` PIN auth table (smaller blast radius). If unset, those reads fall back to
+`DATABASE_URL`. Point it at the pooled (6432) endpoint of a role granted only
+`USAGE` on the `tournament` schema + `SELECT` on its tables.
 
-```sql
--- on the RW account (owns nba_tournament):
-CREATE SHARE nba_tournament_share FROM nba_tournament (ACCESS ORGANIZATION, UPDATE AUTOMATIC);
--- on the read token's instance, once:
-ATTACH 'md:_share/nba_tournament/<token-from-create-share>' AS nba_tournament;
-```
-
-Auto-update lags writes by ~1 min (fine for share-link / returning-player reads).
-
-`MOTHERDUCK_TOURNAMENT_RO_TOKEN` (optional) — a dedicated read-only token for those
-read paths. If unset they use `MOTHERDUCK_TOKEN`. Setting a separate token keeps a
-leak of the app-wide read token away from the `users` PIN auth table (smaller blast
-radius) — a nice-to-have, not required. Attach the read-only copy to whichever
-token's instance is used.
-
-`TOURNAMENT_RO_DB` (optional, default `nba_tournament`) — the database name the
-public read paths SELECT from. Set it if you ATTACH the share under a different alias.
+> The tournament tables previously lived in a MotherDuck `nba_tournament` database;
+> that database is now a stale backup (no longer written) and can be retired once
+> the PlanetScale cutover has proven out.
 
 Tokens for these scripts load from `.env.local` (the same file `next dev` uses) —
 don't paste them inline on the command line, where they leak into shell history.

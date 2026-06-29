@@ -178,6 +178,29 @@ export async function getDailyResult(
   return rows[0] ? toResult(rows[0]) : null;
 }
 
+/**
+ * The team_id of the (most recent) daily tournament team a user entered for a date,
+ * or null. Lets the daily "Review your team" flow deep-link straight to that bracket
+ * (`/api/tournament/team?id=`) instead of fetching the user's whole team list to
+ * find it. Newest-first matches the team list's ordering, so it opens the same team
+ * the all-teams lookup would have.
+ */
+export async function getDailyTeamId(
+  userId: string,
+  date: string,
+): Promise<string | null> {
+  await ensureSchema();
+  const rows = await queryRW<{ team_id: string }>(
+    `SELECT CAST(team_id AS text) AS team_id
+       FROM ${TDB}.teams
+      WHERE user_id = $1 AND daily_date = $2 AND mode = 'daily'
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [userId, date],
+  );
+  return rows[0]?.team_id ?? null;
+}
+
 /** A lightweight completion row for the menu (no box/roster JSON). */
 export interface DailyResultLite {
   date: string;
