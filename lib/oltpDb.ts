@@ -242,7 +242,7 @@ const CACHE_DDL: string[] = [
      decade integer, team text, weight integer)`,
 
   `CREATE TABLE IF NOT EXISTS ${TDB}.cache_meta (
-     cache_key text, built_at timestamptz, source_fp text, status text)`,
+     cache_key text PRIMARY KEY, built_at timestamptz, source_fp text, status text)`,
 ];
 
 /**

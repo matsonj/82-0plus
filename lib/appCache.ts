@@ -303,6 +303,12 @@ const PG_PUSH: { src: string; dst: string; cols: string[] }[] = [
 // Postgres caps a statement at 65535 bind params; keep (rows × cols) under it.
 const INSERT_CHUNK = 1000;
 
+// Arbitrary fixed key for the transaction-level advisory lock that serializes the
+// cache swap across all instances/processes (see pushCacheToPostgres). The literal
+// is > int4 max so Postgres reads it unambiguously as the bigint pg_advisory_xact_lock
+// overload.
+const CACHE_SWAP_LOCK_KEY = 8204820482;
+
 /** Multi-row INSERT in chunks, on a transaction's client. */
 async function bulkInsert(
   client: PoolClient,
@@ -345,16 +351,43 @@ export async function pushCacheToPostgres(fp?: string): Promise<number> {
       ),
     ),
   );
-  const builtFp = fp ?? (await sourceFingerprint());
+  // Provenance fingerprint of the data we're about to serve:
+  //  • buildAll passes the fp it just computed from the CURRENT source — authoritative.
+  //  • copy-only seed (no fp): stamp the fp the EXISTING app_cache build recorded, NOT
+  //    today's source. Otherwise copying a STALE app_cache while stamping the current
+  //    source fp would make the cron see a match and skip the rebuild it actually needs.
+  //    If app_cache carries no usable provenance, stamp a sentinel that can never equal
+  //    a real source fp, forcing the next cron to rebuild.
+  let builtFp: string;
+  if (fp !== undefined) {
+    builtFp = fp;
+  } else {
+    const md = await readCache<{ source_fp: string }>(
+      `SELECT source_fp FROM ${ACDB}.cache_meta WHERE cache_key = 'global' AND status = 'ready' LIMIT 1`,
+    );
+    builtFp = md[0]?.source_fp ?? "seed-copy-unprovenanced";
+  }
   return withTx(async (client) => {
+    // Serialize the whole swap across instances/processes: two concurrent
+    // DELETE-all + INSERT-all transactions on these (constraint-free) tables could
+    // otherwise interleave into duplicated rows. A transaction-level advisory lock
+    // (auto-released on COMMIT/ROLLBACK; PgBouncer-safe because withTx pins one
+    // backend for the txn) makes a second swap wait, then cleanly delete the first
+    // swap's committed rows before reinserting.
+    await client.query(`SELECT pg_advisory_xact_lock(${CACHE_SWAP_LOCK_KEY})`);
     for (let i = 0; i < PG_PUSH.length; i++) {
       await client.query(`DELETE FROM ${PGC}.${PG_PUSH[i].dst}`);
       await bulkInsert(client, PG_PUSH[i].dst, PG_PUSH[i].cols, data[i]);
     }
-    await client.query(`DELETE FROM ${PGC}.cache_meta WHERE cache_key = 'global'`);
+    // Upsert the single meta row (cache_key is the PK) — idempotent even if two
+    // swaps somehow reach here, no DELETE+INSERT window that could leave 0 or 2 rows.
     await client.query(
       `INSERT INTO ${PGC}.cache_meta (cache_key, built_at, source_fp, status)
-         VALUES ('global', now(), $1, 'ready')`,
+         VALUES ('global', now(), $1, 'ready')
+       ON CONFLICT (cache_key) DO UPDATE
+         SET built_at = EXCLUDED.built_at,
+             source_fp = EXCLUDED.source_fp,
+             status = EXCLUDED.status`,
       [builtFp],
     );
     const res = await client.query<{ built_at: Date }>(

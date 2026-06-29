@@ -18,12 +18,14 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
+  // Fail CLOSED: an unset CRON_SECRET must never leave this expensive,
+  // MotherDuck-waking endpoint publicly triggerable. Require the secret to be
+  // configured AND the bearer token to match. Vercel auto-attaches
+  // `Authorization: Bearer $CRON_SECRET` to scheduled invocations.
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+  const auth = req.headers.get("authorization");
+  if (!secret || auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
     const started = Date.now();
