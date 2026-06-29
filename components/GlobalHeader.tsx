@@ -66,6 +66,11 @@ export function GlobalHeader({
   // better than a link that vanishes when you land there) — just flagged as the
   // current page for a11y.
   const onMyTeams = pathname === "/tournament";
+  // On the home page the daily card hydrates via the same /api/home/bootstrap call,
+  // so the alerts poll shares it (deduped → one authenticated round trip). On every
+  // other page the header only needs the alerts feed, so it uses the lighter
+  // notifications endpoint rather than over-fetching daily results/rank.
+  const onHome = pathname === "/";
   const [notif, setNotif] = useState<NotifResponse | null>(null);
   // The signed-in identity drives the masthead's Sign In vs. name chip. Read
   // client-side only (localStorage) so the first render stays hydration-safe.
@@ -96,16 +101,26 @@ export function GlobalHeader({
     if (inFlight.current) return;
     inFlight.current = true;
     try {
-      // Shared, deduped with the home page's hydration fetch (lib/homeBootstrap):
-      // on home mount the two collapse into a single authenticated round trip.
-      const { notifications } = await fetchHomeBootstrap(user.username, user.pin);
-      setNotif(notifications);
+      if (onHome) {
+        // Share the home page's bootstrap call (deduped) — one auth round trip.
+        const { notifications } = await fetchHomeBootstrap(user.username, user.pin);
+        setNotif(notifications);
+      } else {
+        // Alerts-only elsewhere: don't pull daily results/rank the header won't use.
+        const res = await fetch("/api/private-tournament/notifications", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: user.username, pin: user.pin }),
+        });
+        if (!res.ok) return;
+        setNotif((await res.json()) as NotifResponse);
+      }
     } catch {
       /* a missed poll is harmless — the next one self-heals */
     } finally {
       inFlight.current = false;
     }
-  }, []);
+  }, [onHome]);
 
   // Poll on mount, when the tab becomes visible again, and on a light interval.
   useEffect(() => {
