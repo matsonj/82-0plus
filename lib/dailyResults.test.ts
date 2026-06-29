@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // The DAL is mocked: authenticate()'s create-or-match logic and its concurrency
-// guard are what we're exercising, not MotherDuck. getUsersByName always returns
+// guard are what we're exercising, not the database. getUsersByName always returns
 // [] (simulating the race window where neither concurrent caller sees the other's
 // freshly inserted row), so a missing guard would INSERT once per call.
-vi.mock("./tournamentDb", () => ({
+// dailyResults now reads the Postgres pool (lib/oltpDb), so mock THAT — otherwise
+// ensureSchema() hits a real connection and the suite needs DATABASE_URL.
+vi.mock("./oltpDb", () => ({
   queryRW: vi.fn(async () => []),
   ensureSchema: vi.fn(async () => {}),
 }));

@@ -1,0 +1,68 @@
+// Client helper for the consolidated home hydration call. Both the home page
+// (daily completions + rank) and the global header (private-tournament alerts)
+// need signed-in data on mount — they used to fire two separate authenticated
+// POSTs. This dedupes COINCIDENT calls: the first caller starts the request and
+// any caller with the same credentials while it's in flight shares that promise,
+// so the mount pair collapses to a single network round trip (and one server-side
+// name+PIN verification). Independent later calls (the header's 60s poll, a
+// visibility refresh) each make their own request, as intended.
+
+export interface DailyResultLite {
+  date: string;
+  wins: number;
+  losses: number;
+  margin: number;
+  perfect: boolean;
+  champion: boolean;
+  top10: boolean;
+}
+
+export interface NotifSummary {
+  tournamentId: string;
+  tournamentName: string;
+  status: string;
+  mode: string;
+  size: number;
+  expiresAt: string;
+  entryStatus: string;
+  championName: string | null;
+}
+
+export interface HomeBootstrapData {
+  dailyResults: {
+    results: DailyResultLite[];
+    todayRank: { rank: number; total: number } | null;
+  };
+  notifications: {
+    pending: NotifSummary[];
+    completedUnviewed: NotifSummary[];
+    any: boolean;
+  };
+}
+
+const inFlight = new Map<string, Promise<HomeBootstrapData>>();
+
+export function fetchHomeBootstrap(
+  name: string,
+  pin: string,
+): Promise<HomeBootstrapData> {
+  // Key on the raw credentials (client memory only, ephemeral) so concurrent
+  // callers for the same account share one request. JSON.stringify keeps the two
+  // fields unambiguously separated (no delimiter collisions).
+  const key = JSON.stringify([name, pin]);
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+  const promise = (async () => {
+    const res = await fetch("/api/home/bootstrap", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, pin }),
+    });
+    if (!res.ok) throw new Error(`bootstrap ${res.status}`);
+    return (await res.json()) as HomeBootstrapData;
+  })().finally(() => {
+    inFlight.delete(key);
+  });
+  inFlight.set(key, promise);
+  return promise;
+}

@@ -184,22 +184,31 @@ export interface RegisterPrivateEntryArgs {
 }
 
 /**
- * Insert a freshly-registered entry (no roster yet) and return its entry_id.
- * The UUID is generated in app code (deterministic for the caller). The dedup
- * guard is the caller's responsibility — call getPrivateEntry first.
+ * Register an entry (no roster yet) and return its entry_id. Idempotent on the
+ * one-entry-per-account rule: the UNIQUE (tournament_id, user_id) constraint means a
+ * concurrent duplicate that slips past the caller's getPrivateEntry pre-check hits
+ * ON CONFLICT DO NOTHING, and we return the EXISTING entry's id rather than letting
+ * a 23505 surface as a 500. The UUID is app-generated (deterministic for the caller
+ * on a fresh insert).
  */
 export async function registerPrivateEntry(
   args: RegisterPrivateEntryArgs,
 ): Promise<string> {
   await ensureSchema();
   const entryId = randomUUID();
-  await queryRW(
+  const inserted = await queryRW(
     `INSERT INTO ${TDB}.private_entries
        (entry_id, tournament_id, user_id, user_name, status)
-     VALUES ($1, $2, $3, $4, 'registered')`,
+     VALUES ($1, $2, $3, $4, 'registered')
+     ON CONFLICT (tournament_id, user_id) DO NOTHING
+     RETURNING entry_id`,
     [entryId, args.tournamentId, args.userId, args.userName],
   );
-  return entryId;
+  if (inserted.length > 0) return entryId;
+  // Lost a registration race — the (tournament, user) row already exists; return
+  // its id so the caller stays idempotent.
+  const existing = await getPrivateEntry(args.tournamentId, args.userId);
+  return existing?.entryId ?? entryId;
 }
 
 export interface SavePrivatePartialArgs {

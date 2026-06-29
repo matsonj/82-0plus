@@ -514,6 +514,7 @@ export function TournamentLookup({
   onBack,
   initialTab,
   initialDaily,
+  initialTeam,
   onChrome,
 }: {
   onBack?: () => void;
@@ -521,6 +522,9 @@ export function TournamentLookup({
   // Auto-open the team for this daily date (YYYY-MM-DD) once the list loads — used
   // when arriving from a home-calendar date click (/tournament?daily=…).
   initialDaily?: string;
+  // Open this exact team id directly (/tournament?team=…), skipping the all-teams
+  // lookup — used by daily "Review your team". `initialDaily` supplies the chrome.
+  initialTeam?: string;
   // Reports which page chrome to render (see LookupChrome). The parent page uses
   // this to show the logged-out hero + sidebar only in the "lookup" state and go
   // full-width for the logged-in list and bracket-result views.
@@ -554,7 +558,7 @@ export function TournamentLookup({
   // List + detail state.
   const [lookup, setLookup] = useState<TournamentLookupResponse | null>(null);
   const [run, setRun] = useState<TournamentRunResponse | null>(null);
-  const [openSummary, setOpenSummary] = useState<TournamentTeamSummary | null>(null);
+  const [openSummary, setOpenSummary] = useState<Partial<TournamentTeamSummary> | null>(null);
   const [loadingTeamId, setLoadingTeamId] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [page, setPage] = useState(0); // teams-list page (10 per page)
@@ -641,6 +645,11 @@ export function TournamentLookup({
     setName(saved.username);
     setPin(saved.pin);
 
+    // Direct deep-link to one team (/tournament?team=…): skip the all-teams lookup
+    // — the team-open effect opens it. Leave bootingSession true so the chrome stays
+    // "list" (no login-form flash) until openTeam resolves.
+    if (initialTeam) return;
+
     const cachedLookup =
       initialTab === "private" || initialDaily
         ? null
@@ -659,7 +668,7 @@ export function TournamentLookup({
         ? loadPrivate(saved.username, saved.pin, true)
         : runLookup(saved.username, saved.pin, true);
     boot.finally(() => setBootingSession(false));
-  }, [runLookup, loadPrivate, initialTab, initialDaily]);
+  }, [runLookup, loadPrivate, initialTab, initialDaily, initialTeam]);
 
   const submitPrivateLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -759,7 +768,10 @@ export function TournamentLookup({
     onChrome?.(mode);
   }, [view, bootingSession, onChrome]);
 
-  const openTeam = async (teamId: string) => {
+  const openTeam = async (
+    teamId: string,
+    fallbackSummary?: Partial<TournamentTeamSummary> | null,
+  ) => {
     if (loadingTeamId) return;
     // Synthesized daily-completion rows ('daily:<date>') have no stored bracket —
     // send the click to that day's page instead of the (404-ing) bracket viewer.
@@ -780,7 +792,7 @@ export function TournamentLookup({
       const data = (await res.json()) as TournamentRunResponse;
       setRun(data);
       setOpenSummary(
-        lookup?.teams.find((t) => t.teamId === teamId) ?? null,
+        lookup?.teams.find((t) => t.teamId === teamId) ?? fallbackSummary ?? null,
       );
       setView("team");
     } catch {
@@ -802,6 +814,20 @@ export function TournamentLookup({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lookup, initialDaily]);
+
+  // Direct deep-link to a single team (/tournament?team=…): open it immediately,
+  // with no all-teams lookup. The daily date (when present) supplies the result
+  // chrome (mode + date) the team list would otherwise carry.
+  const autoOpenedTeam = useRef(false);
+  useEffect(() => {
+    if (autoOpenedTeam.current || !initialTeam) return;
+    autoOpenedTeam.current = true;
+    void openTeam(
+      initialTeam,
+      initialDaily ? { mode: "daily", dailyDate: initialDaily } : undefined,
+    ).finally(() => setBootingSession(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTeam, initialDaily]);
 
   // ---- Team detail view ----
   if (view === "team" && run) {
