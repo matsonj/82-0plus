@@ -17,7 +17,7 @@
 import "./_env";
 import { writeFileSync } from "node:fs";
 import { getPlayerIndex, type IndexedPlayer } from "../lib/queries";
-import { queryRW } from "../lib/tournamentDb";
+import { queryRW } from "../lib/oltpDb";
 import { simulateRoster, type ScoringPlayer } from "../lib/scoring";
 import { CANDIDATES, resolveCandidate } from "../lib/calibration/configs";
 
@@ -75,8 +75,8 @@ async function main() {
   console.log(`[rerank] daily_results for ${date}…`);
   const rows = await queryRW<ResultRow>(
     `SELECT d.user_id, u.name, d.wins, d.margin, d.roster_json
-       FROM nba_tournament.main.daily_results d
-       JOIN nba_tournament.main.users u ON u.user_id = d.user_id
+       FROM tournament.daily_results d
+       JOIN tournament.users u ON u.user_id = d.user_id
       WHERE d.daily_date = $1`,
     [date],
   );

@@ -29,7 +29,7 @@ import {
   type StoredTeamRow,
 } from "./hydrate";
 
-/** Injected query fn (the CLI passes lib/tournamentDb.queryRW). */
+/** Injected query fn (the CLI passes lib/oltpDb.queryRW (the Postgres pool)). */
 export type QueryFn = <T = Record<string, unknown>>(
   sql: string,
   params?: unknown[],
@@ -113,8 +113,8 @@ export async function fetchHistoricalAnchors(
     const limit = perMode[mode] ?? 0;
     if (limit <= 0) continue;
     const rows = await queryFn<AnchorRow>(
-      `SELECT CAST(team_id AS VARCHAR) AS team_id, mode, bracket_json
-         FROM nba_tournament.main.teams
+      `SELECT team_id::text AS team_id, mode, bracket_json
+         FROM tournament.teams
         WHERE mode = $1 AND bracket_json IS NOT NULL
         ORDER BY created_at DESC
         LIMIT ${Math.floor(limit)}`,
@@ -161,10 +161,10 @@ async function fetchHydratedTeams(
     if (ids.length === 0) continue;
     const ph = ids.map((_, i) => `$${i + 1}`).join(",");
     const rows = await queryFn<StoredTeamRow>(
-      `SELECT CAST(team_id AS VARCHAR) AS team_id, team_name AS name,
+      `SELECT team_id::text AS team_id, team_name AS name,
               roster_json, sixth_json, captain_slot, seed_net
-         FROM nba_tournament.main.teams
-        WHERE CAST(team_id AS VARCHAR) IN (${ph})`,
+         FROM tournament.teams
+        WHERE team_id::text IN (${ph})`,
       ids,
     );
     for (const row of rows) {
@@ -179,10 +179,10 @@ async function fetchHydratedTeams(
     if (ids.length === 0) continue;
     const ph = ids.map((_, i) => `$${i + 1}`).join(",");
     const rows = await queryFn<StoredTeamRow>(
-      `SELECT CAST(ghost_id AS VARCHAR) AS ghost_id, name,
+      `SELECT ghost_id::text AS ghost_id, name,
               roster_json, sixth_json, seed_net
-         FROM nba_tournament.main.ghosts
-        WHERE CAST(ghost_id AS VARCHAR) IN (${ph})`,
+         FROM tournament.ghosts
+        WHERE ghost_id::text IN (${ph})`,
       ids,
     );
     for (const row of rows) {

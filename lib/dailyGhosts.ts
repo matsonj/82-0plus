@@ -4,7 +4,7 @@
 // decade) and is eligible for the slot's lineup position, and the sixth man comes
 // from the bench slot — exactly the constraints a human faces that day. They're
 // generated LAZILY the first time a date's daily tournament is played and stored
-// in nba_tournament.main.ghosts tagged ghost_type='daily' + ghost_date.
+// in the ghosts table (Postgres tournament schema) tagged ghost_type='daily' + ghost_date.
 //
 // Because the daily board never repeats a team across its six slots, each ghost's
 // six players come from six distinct teams — so the six are automatically distinct
@@ -15,7 +15,7 @@ import { canPlay, type SlotKind } from "./positions";
 import { getPlayerIndex, type IndexedPlayer } from "./queries";
 import { simulateRoster, type ScoringPlayer } from "./scoring";
 import { hashSeed, mulberry32 } from "./tournament";
-import { queryRW, TDB } from "./tournamentDb";
+import { queryRW, TDB } from "./oltpDb";
 import type { DailyBoard } from "./daily";
 import type { SimPick } from "./types";
 

@@ -1,7 +1,7 @@
 import "server-only";
 import { track } from "@vercel/analytics/server";
 import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
-import { queryRW, ensureSchema } from "./tournamentDb";
+import { queryRW, ensureSchema } from "./oltpDb";
 import { getUsersByName, insertUser } from "./tournamentQueries";
 import { normalizeName, validateName, validatePin } from "./tournamentValidation";
 
@@ -10,7 +10,7 @@ import { normalizeName, validateName, validatePin } from "./tournamentValidation
 // account (and therefore shared across a player's devices), powering the one-per-
 // day lock, the head-to-head share compare, and "review my picks".
 
-const TDB = "nba_tournament.main";
+const TDB = "tournament";
 
 /** The 9 team category stats shown on the daily share card. */
 export interface DailyBox {
@@ -220,13 +220,13 @@ export async function listDailyResults(
   since?: string,
 ): Promise<DailyResultLite[]> {
   await ensureSchema();
-  // Build a starter-set signature from a JSON roster array at `path` — sorted
-  // "name|team|season" keys, so two rosters compare equal regardless of slot order.
-  const rosterSig = (col: string, path: string) =>
-    `list_sort([json_extract_string(e, '$.name') || '|' ||
-                json_extract_string(e, '$.team') || '|' ||
-                json_extract_string(e, '$.season')
-                FOR e IN json_extract(${col}, '${path}')])`;
+  // Order-independent signature of a roster's starters: a sorted, comma-joined
+  // "name|team|season" key per element, so two rosters compare equal regardless of
+  // slot order. `arr` is a jsonb expression yielding the player array.
+  const rosterSig = (arr: string) =>
+    `(SELECT string_agg((e->>'name') || '|' || (e->>'team') || '|' || (e->>'season'), ','
+              ORDER BY (e->>'name') || '|' || (e->>'team') || '|' || (e->>'season'))
+        FROM jsonb_array_elements(COALESCE(${arr}, '[]'::jsonb)) AS e)`;
   const rows = await queryRW<{
     daily_date: string; wins: number; losses: number; margin: number;
     perfect: boolean; champion: boolean; top10: boolean;
@@ -248,8 +248,8 @@ export async function listDailyResults(
                WHERE t.user_id = r.user_id
                  AND t.daily_date = r.daily_date
                  AND t.mode = 'daily'
-                 AND ${rosterSig("t.roster_display", "$.roster[*]")}
-                   = ${rosterSig("r.roster_json", "$[*]")}
+                 AND ${rosterSig("t.roster_display -> 'roster'")}
+                   = ${rosterSig("r.roster_json")}
                ORDER BY t.created_at
                LIMIT 1
             ), FALSE) AS champion,
@@ -408,15 +408,16 @@ export interface RecordDailyArgs {
 }
 
 /**
- * Record a daily completion (first attempt wins — the PK + INSERT OR IGNORE make
- * this idempotent and enforce one-per-day). Returns the canonical stored result.
+ * Record a daily completion (first attempt wins — the PK + ON CONFLICT DO NOTHING
+ * make this idempotent and enforce one-per-day). Returns the canonical stored result.
  */
 export async function recordDailyResult(args: RecordDailyArgs): Promise<DailyResult> {
   await ensureSchema();
   await queryRW(
-    `INSERT OR IGNORE INTO ${TDB}.daily_results
+    `INSERT INTO ${TDB}.daily_results
        (user_id, daily_date, wins, losses, margin, perfect, box_json, roster_json)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (user_id, daily_date) DO NOTHING`,
     [
       args.userId,
       args.date,

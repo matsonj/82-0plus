@@ -20,7 +20,7 @@ import {
   type PrivateTournamentRow,
   type TournamentDbRow,
 } from "./privateTournamentRows";
-import { ensureSchema, queryRW } from "./tournamentDb";
+import { ensureSchema, queryRW } from "./oltpDb";
 
 // Private (invite-only) tournament WRITE helpers. Mirror tournamentQueries.ts:
 // ensureSchema() is awaited before every write; UUIDs are generated in app code
@@ -43,7 +43,7 @@ export type {
   PrivateTournamentRow,
 };
 
-const TDB = "nba_tournament.main";
+const TDB = "tournament";
 
 // ── Tournament create / read ──────────────────────────────────────────────────
 
@@ -155,8 +155,9 @@ export async function listPrivateEntries(
 
 /**
  * One entrant's row in a tournament (the one-entry-per-account guard + the
- * "already registered" path). MotherDuck won't enforce a UNIQUE on the pair, so
- * this SELECT is the dedup check; LIMIT 1 returns the first if a dup ever slips.
+ * "already registered" path). Postgres now enforces UNIQUE (tournament_id,
+ * user_id), so this SELECT backs the "already registered" UX; LIMIT 1 stays
+ * defensive for any legacy dup copied over from MotherDuck.
  */
 export async function getPrivateEntry(
   tournamentId: string,
