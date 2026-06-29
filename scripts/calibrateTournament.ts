@@ -113,7 +113,7 @@ async function main(): Promise<void> {
   } else {
     const { getPlayerIndex } = await import("../lib/queries");
     const { getStatNorms } = await import("../lib/tournamentQueries");
-    const { queryRW } = await import("../lib/tournamentDb");
+    const { queryRW } = await import("../lib/oltpDb");
 
     console.log("[calibrate] loading player index + stat norms…");
     pool = await getPlayerIndex();

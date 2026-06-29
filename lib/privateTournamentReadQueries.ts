@@ -13,14 +13,13 @@ import {
   type PrivateTournamentRow,
   type TournamentDbRow,
 } from "./privateTournamentRows";
-import { queryTournamentRO } from "./tournamentReadDb";
+import { queryTournamentRO } from "./oltpReadDb";
 
 // READ-ONLY private-tournament queries for the PUBLIC share path (no PIN needed
 // to VIEW a tournament). Deliberate read-pool TWINS of the queryRW versions in
-// lib/privateTournamentQueries.ts — but on the dedicated low-privilege
-// tournament RO token/pool (lib/tournamentReadDb). They never run DDL; the
-// tables are exposed via the `nba_tournament` MotherDuck share. An auto-updating
-// share lags writes by ~1 min, acceptable for share-link reads.
+// lib/privateTournamentQueries.ts — but on the read-only Postgres pool
+// (lib/oltpReadDb, DATABASE_URL_RO). They never run DDL and hit the same always-on
+// database as the writers (no replication lag).
 //
 // The row shapes, mapped types, SELECT column lists, and row→object mappers all
 // come from lib/privateTournamentRows.ts — the SAME source the RW file imports —
@@ -28,7 +27,7 @@ import { queryTournamentRO } from "./tournamentReadDb";
 // difference here is the executor (queryTournamentRO) and the RO DB name; there
 // is no ensureSchema() (RO never runs DDL).
 
-const RO_DB = `${process.env.TOURNAMENT_RO_DB ?? "nba_tournament"}.main`;
+const RO_DB = "tournament";
 
 // ── Public read paths ─────────────────────────────────────────────────────────
 

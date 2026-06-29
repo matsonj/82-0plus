@@ -18,7 +18,7 @@
 import "./_env";
 import { getPlayerIndex } from "../lib/queries";
 import { getStatNorms } from "../lib/tournamentQueries";
-import { queryRW } from "../lib/tournamentDb";
+import { queryRW } from "../lib/oltpDb";
 import { simulateRoster } from "../lib/scoring";
 import {
   simulateBracket,
@@ -82,9 +82,9 @@ async function main() {
 
   const start = `${date} 00:00:00`, end = `${nextDay(date)} 00:00:00`;
   const anchors = await queryRW<AnchorRow>(
-    `SELECT CAST(team_id AS VARCHAR) AS team_id, mode, bracket_json,
+    `SELECT team_id::text AS team_id, mode, bracket_json,
             record_w, record_l, reached_round, champion_name, realized_margin
-       FROM nba_tournament.main.teams
+       FROM tournament.teams
       WHERE (created_at AT TIME ZONE 'UTC') AT TIME ZONE 'America/Los_Angeles' >= $1
         AND (created_at AT TIME ZONE 'UTC') AT TIME ZONE 'America/Los_Angeles' <  $2`,
     [start, end],
@@ -110,10 +110,10 @@ async function main() {
       if (!part.length) continue;
       const ph = part.map((_, i) => `$${i + 1}`).join(",");
       const sql = table === "teams"
-        ? `SELECT CAST(team_id AS VARCHAR) AS team_id, team_name AS name, roster_json, sixth_json, captain_slot, seed_net
-             FROM nba_tournament.main.teams WHERE CAST(team_id AS VARCHAR) IN (${ph})`
-        : `SELECT CAST(ghost_id AS VARCHAR) AS ghost_id, name, roster_json, sixth_json, seed_net
-             FROM nba_tournament.main.ghosts WHERE CAST(ghost_id AS VARCHAR) IN (${ph})`;
+        ? `SELECT team_id::text AS team_id, team_name AS name, roster_json, sixth_json, captain_slot, seed_net
+             FROM tournament.teams WHERE team_id::text IN (${ph})`
+        : `SELECT ghost_id::text AS ghost_id, name, roster_json, sixth_json, seed_net
+             FROM tournament.ghosts WHERE ghost_id::text IN (${ph})`;
       const rows = await queryRW<StoredTeamRow & { team_id?: string; ghost_id?: string }>(sql, part);
       for (const row of rows) {
         const bare = table === "teams" ? row.team_id! : String(row.ghost_id);
@@ -155,9 +155,9 @@ async function main() {
   let n = 0;
   for (const u of updates) {
     await queryRW(
-      `UPDATE nba_tournament.main.teams
+      `UPDATE tournament.teams
           SET record_w=$1, record_l=$2, realized_margin=$3, reached_round=$4, champion_name=$5, bracket_json=$6
-        WHERE CAST(team_id AS VARCHAR)=$7`,
+        WHERE team_id::text=$7`,
       [u.rw, u.rl, u.rm, u.rr, u.champ, JSON.stringify(u.bracket), u.id],
     );
     if (++n % 100 === 0) console.log(`  …${n}/${updates.length}`);

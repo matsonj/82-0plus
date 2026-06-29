@@ -12,7 +12,7 @@ import {
   normalizeName,
   normalizeTeamName,
 } from "@/lib/tournamentValidation";
-import { ensureSchema } from "@/lib/tournamentDb";
+import { ensureSchema } from "@/lib/oltpDb";
 import {
   hydrateTournamentRoster,
   getStatNorms,

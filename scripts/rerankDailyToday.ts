@@ -4,7 +4,7 @@
  * (live, adopted height-aware) config, and reports the projected-win impact per
  * team.
  *
- * Writes nothing. Reads teams from nba_tournament.main.teams and the cached
+ * Writes nothing. Reads teams from tournament.teams and the cached
  * player index, re-hydrates each roster, and runs simulateRoster under both
  * configs. "Projected wins" mirrors the app's reg-season record:
  *   wins = regWinsFromSeedNet(seedNet), seedNet = simulateRoster(roster, cfg).seedNet
@@ -16,7 +16,7 @@
 import "./_env";
 import { writeFileSync } from "node:fs";
 import { getPlayerIndex } from "../lib/queries";
-import { queryRW } from "../lib/tournamentDb";
+import { queryRW } from "../lib/oltpDb";
 import { simulateRoster } from "../lib/scoring";
 import { regWinsFromSeedNet } from "../lib/tier";
 import { CANDIDATES, resolveCandidate } from "../lib/calibration/configs";
@@ -59,9 +59,9 @@ async function main() {
 
   console.log(`[rerank] daily teams where ${dateCol} = ${date}…`);
   const rows = await queryRW<Row>(
-    `SELECT CAST(team_id AS VARCHAR) AS team_id, team_name,
+    `SELECT team_id::text AS team_id, team_name,
             roster_json, sixth_json, captain_slot, seed_net
-       FROM nba_tournament.main.teams
+       FROM tournament.teams
       WHERE mode = 'daily' AND ${dateCol} = $1
       ORDER BY created_at`,
     [date],

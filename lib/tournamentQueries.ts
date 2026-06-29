@@ -3,7 +3,7 @@ import { query, type QueryOptions } from "./motherduck";
 import { getPlayerIndex, hydrateRoster, type IndexedPlayer } from "./queries";
 import { simulateRoster, type ScoringPlayer } from "./scoring";
 import { tierForSeedNet } from "./tier";
-import { queryRW } from "./tournamentDb";
+import { queryRW } from "./oltpDb";
 import {
   STAT_KEYS,
   FG_BASELINE,
@@ -364,8 +364,8 @@ export async function drawOpponents(
     `SELECT t.team_id AS team_id, t.team_name AS name,
             t.roster_json AS roster_json, t.sixth_json AS sixth_json,
             t.captain_slot AS captain_slot, t.seed_net AS seed_net
-       FROM nba_tournament.main.teams t
-       JOIN nba_tournament.main.users u ON u.user_id = t.user_id`;
+       FROM tournament.teams t
+       JOIN tournament.users u ON u.user_id = t.user_id`;
 
   if (isDaily) {
     // Daily is partitioned by date — that day's entries are the human field.
@@ -382,7 +382,7 @@ export async function drawOpponents(
     // only if that's too thin to fill the field. Recent-first means a change to
     // team methodology transitions seamlessly — new-methodology teams dominate
     // the pool within an hour, and stale older teams only backfill a shortfall.
-    const WINDOWS = ["INTERVAL 1 HOUR", "INTERVAL 24 HOUR", null] as const;
+    const WINDOWS = ["INTERVAL '1 hour'", "INTERVAL '24 hours'", null] as const;
     for (const w of WINDOWS) {
       if (teams.length >= FIELD) break;
       const timeClause = w === null ? "" : `AND t.created_at >= now() - ${w}`;
@@ -405,7 +405,7 @@ export async function drawOpponents(
     const ghosts = isDaily
       ? await queryRW<StoredTeamRow>(
           `SELECT ghost_id, name, roster_json, sixth_json, seed_net
-             FROM nba_tournament.main.ghosts
+             FROM tournament.ghosts
             WHERE ghost_type = 'daily' AND ghost_date = $1
             ORDER BY random()
             LIMIT 200`,
@@ -413,7 +413,7 @@ export async function drawOpponents(
         )
       : await queryRW<StoredTeamRow>(
           `SELECT ghost_id, name, roster_json, sixth_json, seed_net
-             FROM nba_tournament.main.ghosts
+             FROM tournament.ghosts
             WHERE COALESCE(ghost_type, 'standard') <> 'daily'
             ORDER BY random()
             LIMIT 200`,
@@ -455,7 +455,7 @@ export async function getUsersByName(
 ): Promise<UserAuthRow[]> {
   return queryRW<UserAuthRow>(
     `SELECT user_id, pin_hash, pin_salt
-       FROM nba_tournament.main.users
+       FROM tournament.users
       WHERE name_norm = $1
       ORDER BY created_at ASC`,
     [nameNorm],
@@ -478,7 +478,7 @@ export interface InsertUserArgs {
 export async function insertUser(args: InsertUserArgs): Promise<string> {
   const userId = randomUUID();
   await queryRW(
-    `INSERT INTO nba_tournament.main.users
+    `INSERT INTO tournament.users
        (user_id, name, name_norm, pin_hash, pin_salt)
      VALUES ($1, $2, $3, $4, $5)`,
     [userId, args.name, args.nameNorm, args.pinHash, args.pinSalt],
@@ -513,7 +513,7 @@ export interface InsertTeamArgs {
  */
 export async function insertTeam(args: InsertTeamArgs): Promise<void> {
   await queryRW(
-    `INSERT INTO nba_tournament.main.teams
+    `INSERT INTO tournament.teams
        (team_id, user_id, team_name, mode, daily_date, roster_json, sixth_json, roster_display,
         captain_slot, seed_net,
         record_w, record_l, realized_margin, reached_round, champion_name, bracket_json, team_box_json)
@@ -574,8 +574,8 @@ export async function getUserTeams(
     `SELECT t.team_id, t.team_name, t.mode, t.record_w, t.record_l, t.realized_margin,
             t.reached_round, t.champion_name, t.seed_net, t.daily_date, t.created_at,
             t.roster_display, dr.wins AS season_w, dr.losses AS season_l
-       FROM nba_tournament.main.teams t
-       LEFT JOIN nba_tournament.main.daily_results dr
+       FROM tournament.teams t
+       LEFT JOIN tournament.daily_results dr
          ON dr.user_id = t.user_id AND dr.daily_date = t.daily_date
       WHERE t.user_id = $1
       ORDER BY t.created_at DESC`,
@@ -615,7 +615,7 @@ export async function getTeamBracket(
 ): Promise<{ bracketJson: unknown; teamBox: unknown; realizedMargin: number } | null> {
   const rows = await queryRW<{ bracket_json: unknown; team_box_json: unknown; realized_margin: number }>(
     `SELECT bracket_json, team_box_json, realized_margin
-       FROM nba_tournament.main.teams
+       FROM tournament.teams
       WHERE team_id = $1
       LIMIT 1`,
     [teamId],

@@ -15,7 +15,7 @@
  */
 import "./_env";
 import { getPlayerIndex, type IndexedPlayer } from "../lib/queries";
-import { queryRW } from "../lib/tournamentDb";
+import { queryRW } from "../lib/oltpDb";
 import { simulateRoster, type ScoringPlayer } from "../lib/scoring";
 import { pacificDate } from "../lib/dailyDate";
 
@@ -62,7 +62,7 @@ async function main() {
 
   const rows = await queryRW<ResultRow>(
     `SELECT user_id, wins, losses, margin, perfect, roster_json
-       FROM nba_tournament.main.daily_results
+       FROM tournament.daily_results
       WHERE daily_date = $1`,
     [date],
   );
@@ -115,7 +115,7 @@ async function main() {
   let n = 0;
   for (const u of changed) {
     await queryRW(
-      `UPDATE nba_tournament.main.daily_results
+      `UPDATE tournament.daily_results
           SET wins=$1, losses=$2, margin=$3, perfect=$4, box_json=$5
         WHERE user_id=$6 AND daily_date=$7`,
       [u.wins, u.losses, u.margin, u.perfect, JSON.stringify(u.box), u.user_id, date],

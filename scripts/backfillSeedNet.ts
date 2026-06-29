@@ -22,7 +22,7 @@
  */
 import "./_env";
 import { getPlayerIndex } from "../lib/queries";
-import { queryRW } from "../lib/tournamentDb";
+import { queryRW } from "../lib/oltpDb";
 import { simulateRoster } from "../lib/scoring";
 import { regWinsFromSeedNet } from "../lib/tier";
 import { pacificDate } from "../lib/dailyDate";
@@ -82,9 +82,9 @@ async function main() {
 
   // ── teams (Pacific-day window on created_at, all modes) ──
   const teamRows = await queryRW<StoredTeamRow & { team_id: string; name: string }>(
-    `SELECT CAST(team_id AS VARCHAR) AS team_id, team_name AS name,
+    `SELECT team_id::text AS team_id, team_name AS name,
             roster_json, sixth_json, captain_slot, seed_net
-       FROM nba_tournament.main.teams
+       FROM tournament.teams
       WHERE (created_at AT TIME ZONE 'UTC') AT TIME ZONE 'America/Los_Angeles' >= $1
         AND (created_at AT TIME ZONE 'UTC') AT TIME ZONE 'America/Los_Angeles' <  $2`,
     [start, end],
@@ -144,8 +144,8 @@ async function main() {
   let ghostMoved: Recompute[] = [];
   if (includeGhosts) {
     const ghostRows = await queryRW<StoredTeamRow & { ghost_id: string; name: string }>(
-      `SELECT CAST(ghost_id AS VARCHAR) AS ghost_id, name, roster_json, sixth_json, seed_net
-         FROM nba_tournament.main.ghosts
+      `SELECT ghost_id::text AS ghost_id, name, roster_json, sixth_json, seed_net
+         FROM tournament.ghosts
         WHERE ghost_type = 'daily' AND ghost_date = $1`,
       [date],
     );
@@ -167,7 +167,7 @@ async function main() {
   let n = 0;
   for (const c of teamMoved) {
     await queryRW(
-      `UPDATE nba_tournament.main.teams SET seed_net = $1 WHERE CAST(team_id AS VARCHAR) = $2`,
+      `UPDATE tournament.teams SET seed_net = $1 WHERE team_id::text = $2`,
       [c.newSeed, c.id],
     );
     if (++n % 100 === 0) console.log(`  …${n}/${teamMoved.length}`);
@@ -179,7 +179,7 @@ async function main() {
     let g = 0;
     for (const c of ghostMoved) {
       await queryRW(
-        `UPDATE nba_tournament.main.ghosts SET seed_net = $1 WHERE CAST(ghost_id AS VARCHAR) = $2`,
+        `UPDATE tournament.ghosts SET seed_net = $1 WHERE ghost_id::text = $2`,
         [c.newSeed, c.id],
       );
       g++;

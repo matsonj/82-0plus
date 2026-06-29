@@ -1,6 +1,6 @@
 /**
  * seedGhosts.ts — generate ~60 reproducible "ghost" filler teams and (re)seed
- * them into `nba_tournament.main.ghosts`.
+ * them into `tournament.ghosts`.
  *
  * One-off local dev script. NOT part of the request path or the build.
  *
@@ -34,7 +34,7 @@ import { canPlay } from "../lib/positions";
 import { getPlayerIndex, type IndexedPlayer } from "../lib/queries";
 import { simulateRoster, type ScoringPlayer } from "../lib/scoring";
 import { hashSeed, mulberry32 } from "../lib/tournament";
-import { ensureSchema, queryRW, TDB } from "../lib/tournamentDb";
+import { ensureSchema, queryRW, TDB } from "../lib/oltpDb";
 import type { SimPick } from "../lib/types";
 
 // The fixed lineup board: 5 starters in slot order [G, FLEX, W, FLEX, B].

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     // among any accounts sharing this name. timingSafeEqual throws on mismatched
     // lengths, so length-guard first. Same generic 404 on any miss (no enum).
     // Public, no-PIN-gated table access goes through the dedicated read-only
-    // tournament pool (no DDL, low-privilege token — see lib/tournamentReadDb).
+    // Postgres pool (no DDL, low-privilege DATABASE_URL_RO — see lib/oltpReadDb).
     const matchingUserIds: string[] = [];
     for (const u of await getUsersByNameRO(nameNorm)) {
       const candidate = scryptSync(pin, u.pin_salt, 32);
