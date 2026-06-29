@@ -1,33 +1,63 @@
 import { after } from "next/server";
+import type { PoolClient } from "pg";
 import { queryRW, type QueryParam } from "./tournamentDb";
+import {
+  ensureCacheSchema,
+  withTx,
+  queryRW as pgQueryRW,
+  type QueryParam as PgParam,
+} from "./oltpDb";
 
-// ── Self-managed derived-data cache (`app_cache` database) ───────────────────
+// ── Self-managed derived-data cache ──────────────────────────────────────────
 //
 // The hot read queries used to recompute the expensive `game_quality` VIEW on
 // every call (a within-week round-robin self-join over ~1.46M box-score rows).
 // The player card alone ran that ~39k times/month at ~265ms each. The source is
 // append-only NBA history that changes at most once/day, so we MATERIALIZE what
-// those queries need into a separate `app_cache` database the app owns (via the
-// RW token — the read token can't write) and refresh it lazily: a gated,
-// background stale-while-revalidate check rebuilds it when the source changes.
+// those queries need.
+//
+// TWO-TIER cache:
+//   • MotherDuck `app_cache` (this file's BUILD_* SQL) — the analytical staging
+//     area. The heavy aggregations run here, against the NBA source on MotherDuck.
+//   • Postgres `tournament.cache_*` (lib/oltpDb) — the SERVING copy. The request
+//     path reads the three small tables from here (always-warm Postgres) so it
+//     never touches MotherDuck. A rebuild recomputes on MotherDuck, then pushes
+//     the small tables across (pushCacheToPostgres). This is what lets the
+//     MotherDuck duckling sleep: it bills wall-clock awake time, and serving point
+//     lookups from it kept it awake ~24/7. The rebuild is driven by a daily cron
+//     (app/api/cron/rebuild-cache), not per request.
 //
 // `app_cache` is owned by MOTHERDUCK_RW_TOKEN, so reads of it go through the RW
-// pool (lib/tournamentDb), same as the tournament tables. The lookups are now a
-// trivial indexed scan (sub-ms), so the lack of read-pool session-hint sharding
-// on this path doesn't matter.
+// pool (lib/tournamentDb). Those reads now happen only during a rebuild.
 
-/** Fully-qualified cache schema. Tables are referenced as `ACDB.<table>`. */
+/** Fully-qualified MotherDuck cache schema. Tables are referenced as `ACDB.<table>`. */
 export const ACDB = "app_cache.main";
+
+/** Postgres serving-cache schema/qualifier (tables are `tournament.cache_*`). */
+export const PGC = "tournament";
 
 /** Source (read-only) NBA tables the cache is derived from. */
 const SRC = "nba_box_scores_v2.main";
 
-/** Read a cached table through the RW pool (the RW token owns `app_cache`). */
+/** Read a cached table through the MotherDuck RW pool (the RW token owns `app_cache`).
+ *  Used only by the rebuild path now — the request path reads Postgres (readPgCache). */
 export function readCache<T = Record<string, unknown>>(
   sql: string,
   params: QueryParam[] = [],
 ): Promise<T[]> {
   return queryRW<T>(sql, params);
+}
+
+/** Read the serving copy from the always-warm Postgres (the request hot path).
+ *  Goes through the oltpDb pool (not oltpReadDb): these tables are non-sensitive
+ *  public derived data, so they don't need the dedicated low-privilege auth-read
+ *  role — and oltpReadDb's `server-only` guard would break the build/seed scripts
+ *  that import this module. */
+export function readPgCache<T = Record<string, unknown>>(
+  sql: string,
+  params: PgParam[] = [],
+): Promise<T[]> {
+  return pgQueryRW<T>(sql, params);
 }
 
 declare global {
@@ -46,8 +76,8 @@ declare global {
 export async function isCacheReady(): Promise<boolean> {
   if (globalThis.__app_cache_ready__) return true;
   try {
-    const rows = await queryRW(
-      `SELECT 1 FROM ${ACDB}.cache_meta WHERE cache_key = 'global' AND status = 'ready' LIMIT 1`,
+    const rows = await pgQueryRW(
+      `SELECT 1 FROM ${PGC}.cache_meta WHERE cache_key = 'global' AND status = 'ready' LIMIT 1`,
     );
     if (rows.length > 0) {
       globalThis.__app_cache_ready__ = true;
@@ -55,7 +85,7 @@ export async function isCacheReady(): Promise<boolean> {
     }
     return false;
   } catch {
-    return false; // cache_meta / app_cache missing → not built
+    return false; // cache_meta missing / Postgres unreachable → treat as not built
   }
 }
 
@@ -239,6 +269,108 @@ async function sourceFingerprint(): Promise<string> {
   return `v${CACHE_SCHEMA_VERSION}|${rows[0]?.fp ?? ""}`;
 }
 
+// ── Push MotherDuck app_cache → Postgres serving cache ───────────────────────
+//
+// Each MotherDuck `app_cache` table → its Postgres `tournament.cache_*` mirror,
+// with an explicit column list so physical order on either side is irrelevant.
+// None of these columns are jsonb (unlike the OLTP migration), so the copy is a
+// plain value bind.
+const PG_PUSH: { src: string; dst: string; cols: string[] }[] = [
+  {
+    src: "player_index",
+    dst: "cache_player_index",
+    cols: [
+      "entity_id", "player_name", "team", "decade", "best_season", "value",
+      "gp", "mpg", "pts", "reb", "ast", "fga", "fg3a", "fta", "stl", "blk",
+      "tov", "fg3m", "fgm", "ftm", "tsplus", "height_in", "pos", "all_def", "debut",
+    ],
+  },
+  {
+    src: "player_season_stats",
+    dst: "cache_player_season_stats",
+    cols: [
+      "entity_id", "season", "team", "gq", "usg", "gp", "pts", "reb", "ast",
+      "stl", "blk", "fg_pct", "ft_pct", "tov", "fg3m", "all_def",
+    ],
+  },
+  {
+    src: "team_decade_weights",
+    dst: "cache_team_decade_weights",
+    cols: ["decade", "team", "weight"],
+  },
+];
+
+// Postgres caps a statement at 65535 bind params; keep (rows × cols) under it.
+const INSERT_CHUNK = 1000;
+
+/** Multi-row INSERT in chunks, on a transaction's client. */
+async function bulkInsert(
+  client: PoolClient,
+  table: string,
+  cols: string[],
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    const slice = rows.slice(i, i + INSERT_CHUNK);
+    const params: unknown[] = [];
+    const tuples = slice.map((row, r) => {
+      const ph = cols.map((c, ci) => {
+        params.push(row[c] ?? null);
+        return `$${r * cols.length + ci + 1}`;
+      });
+      return `(${ph.join(", ")})`;
+    });
+    await client.query(
+      `INSERT INTO ${PGC}.${table} (${cols.join(", ")}) VALUES ${tuples.join(", ")}`,
+      params,
+    );
+  }
+}
+
+/**
+ * Copy the three small derived tables from the MotherDuck `app_cache` staging area
+ * into the Postgres serving cache, atomically. The SELECTs run on MotherDuck (the
+ * only time this data leaves the duckling); the Postgres side runs in ONE
+ * transaction — DELETE + reinsert each table, then stamp cache_meta — so readers
+ * see either the whole old cache or the whole new one, never a half-swapped state.
+ * DELETE (not TRUNCATE) so concurrent readers keep seeing the old rows via MVCC
+ * until COMMIT, with no exclusive lock. Returns the total row count pushed.
+ */
+export async function pushCacheToPostgres(fp?: string): Promise<number> {
+  await ensureCacheSchema();
+  const data = await Promise.all(
+    PG_PUSH.map((t) =>
+      readCache<Record<string, unknown>>(
+        `SELECT ${t.cols.join(", ")} FROM ${ACDB}.${t.src}`,
+      ),
+    ),
+  );
+  const builtFp = fp ?? (await sourceFingerprint());
+  return withTx(async (client) => {
+    for (let i = 0; i < PG_PUSH.length; i++) {
+      await client.query(`DELETE FROM ${PGC}.${PG_PUSH[i].dst}`);
+      await bulkInsert(client, PG_PUSH[i].dst, PG_PUSH[i].cols, data[i]);
+    }
+    await client.query(`DELETE FROM ${PGC}.cache_meta WHERE cache_key = 'global'`);
+    await client.query(
+      `INSERT INTO ${PGC}.cache_meta (cache_key, built_at, source_fp, status)
+         VALUES ('global', now(), $1, 'ready')`,
+      [builtFp],
+    );
+    const res = await client.query<{ built_at: Date }>(
+      `SELECT built_at FROM ${PGC}.cache_meta WHERE cache_key = 'global' LIMIT 1`,
+    );
+    const builtAt = res.rows[0]?.built_at;
+    // Record the exact build our warm globals are now consistent with (read back so
+    // it equals what reconcileWarmCachesIfDue will read — a local clock wouldn't).
+    globalThis.__app_cache_seen_built_at__ = builtAt
+      ? new Date(builtAt).getTime()
+      : undefined;
+    globalThis.__app_cache_ready__ = true;
+    return data.reduce((n, rows) => n + rows.length, 0);
+  });
+}
+
 /**
  * Drop the in-process warm caches that are derived from the cache tables, so they
  * reload from the freshly-rebuilt data on next access. (These globals are declared
@@ -271,16 +403,12 @@ async function buildAll(): Promise<void> {
        VALUES ('global', now(), $1, 'ready')`,
     [fp],
   );
-  // Drop this process's now-stale warm caches and record the EXACT build we wrote
-  // (read it back so it equals what the freshness check will read — a local clock
-  // wouldn't match the DB's now()). That equality stops the next check from
-  // re-invalidating for our own build.
-  const [meta] = await queryRW<{ built_at: Date }>(
-    `SELECT built_at FROM ${ACDB}.cache_meta WHERE cache_key = 'global' LIMIT 1`,
-  );
-  globalThis.__app_cache_seen_built_at__ = meta
-    ? new Date(meta.built_at).getTime()
-    : undefined;
+  // Push the freshly-built small tables to the Postgres serving cache (the request
+  // path reads them there, never MotherDuck). This also stamps the Postgres
+  // cache_meta and records __app_cache_seen_built_at__ for warm-cache reconcile.
+  const pushed = await pushCacheToPostgres(fp);
+  console.log(`[app_cache] pushed ${pushed.toLocaleString()} rows to Postgres`);
+  // Drop this process's now-stale warm caches so they reload from the new data.
   invalidateWarmCaches();
 }
 
@@ -318,81 +446,112 @@ export function rebuildCache(): Promise<void> {
   return runBuild();
 }
 
-// Don't re-check freshness more than this often per process (avoids a fingerprint
-// round-trip on every request).
-const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1h
-// Consider the cache stale after this long even if the fingerprint check is gated.
+// Don't re-reconcile warm globals more than this often per process (avoids a
+// Postgres round-trip on every request — the reconcile is cheap but pointless to
+// repeat constantly).
+const RECONCILE_INTERVAL_MS = 60 * 60 * 1000; // 1h
+// The cron rebuilds if the cache is older than this even when the source
+// fingerprint is unchanged (a backstop against a missed/failed source signal).
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 
 /**
- * Schedule the gated cache reconcile to run AFTER the response. Uses Next's
- * `after()` so the serverless runtime keeps the instance alive (via waitUntil)
- * until it settles — a bare floated promise can be dropped on shutdown. Outside a
- * request scope (scripts/tests/board-gen) `after()` throws; there we just run it
- * detached, since those processes aren't frozen after a response.
+ * Schedule a warm-cache reconcile to run AFTER the response (Next's `after()` keeps
+ * the serverless instance alive via waitUntil until it settles). Outside a request
+ * scope (scripts/board-gen) `after()` throws; there we run it detached.
  *
- * Safe to call on every request: refreshCacheIfStale() is gated + single-flight,
- * so the scheduled callback no-ops unless a check is actually due.
+ * This is the request-path hook. It is CHEAP and Postgres-only: it never rebuilds
+ * and never touches MotherDuck — it just lets a long-lived warm instance notice a
+ * rebuild the daily cron performed and drop its stale in-memory globals. Safe to
+ * call on every request (gated to ≤1×/hour/process and single-flight).
  */
-export function scheduleCacheRefresh(): void {
+export function scheduleWarmReconcile(): void {
   try {
-    after(() => refreshCacheIfStale());
+    after(() => reconcileWarmCachesIfDue());
   } catch {
-    void refreshCacheIfStale();
+    void reconcileWarmCachesIfDue();
   }
 }
 
 /**
- * Lazy stale-while-revalidate refresh — the cache's self-healing mechanism.
- * Reconciles warm globals and rebuilds when the source changed/aged. Gated to
- * once/hour per process and single-flight. NEVER call it on the synchronous read
- * path (the rebuild is multi-second) — go through scheduleCacheRefresh().
- *
- * The throttle timestamp is set only on SUCCESSFUL completion, so a run cut short
- * (e.g. an after()/floated promise killed on shutdown, or a rebuild past
- * maxDuration) doesn't consume the hour-long window — the next request retries.
+ * Drop this process's warm globals if the Postgres serving cache has been rebuilt
+ * (by the cron) since we last loaded them. One cheap point read of cache_meta; NO
+ * MotherDuck access, NO rebuild. Gated once/hour/process and single-flight.
  */
-export async function refreshCacheIfStale(): Promise<void> {
+async function reconcileWarmCachesIfDue(): Promise<void> {
   const now = Date.now();
   if (globalThis.__app_cache_check_inflight__) return;
   if (
     globalThis.__app_cache_last_check__ &&
-    now - globalThis.__app_cache_last_check__ < CHECK_INTERVAL_MS
+    now - globalThis.__app_cache_last_check__ < RECONCILE_INTERVAL_MS
   ) {
     return;
   }
   globalThis.__app_cache_check_inflight__ = true;
   try {
-    const meta = await queryRW<{ built_at: Date; source_fp: string }>(
-      `SELECT built_at, source_fp FROM ${ACDB}.cache_meta WHERE cache_key = 'global' LIMIT 1`,
+    const rows = await pgQueryRW<{ built_at: Date }>(
+      `SELECT built_at FROM ${PGC}.cache_meta WHERE cache_key = 'global' AND status = 'ready' LIMIT 1`,
     );
-    const row = meta[0];
-    if (!row) {
-      await runBuild(); // never built → build it
-    } else {
-      // Warm-cache reconciliation: if the build we're looking at differs from the
-      // one our warm globals were loaded against, drop them so they reload fresh.
-      // This fires on the FIRST observation too (seen === undefined): a process can
-      // warm __player_index__ etc. from an older build BEFORE its first check, so
-      // adopting a build without clearing would pin that stale data. Equality holds
-      // after our own build (we recorded its exact built_at), so no needless reload.
+    const row = rows[0];
+    if (row) {
+      globalThis.__app_cache_ready__ = true;
       const builtAtMs = new Date(row.built_at).getTime();
+      // Fires on first observation too (seen === undefined): a process can warm
+      // __player_index__ from an older build before its first reconcile, so adopting
+      // a build without clearing would pin stale data. Equality holds after our own
+      // build (pushCacheToPostgres recorded its exact built_at), so no needless reload.
       if (globalThis.__app_cache_seen_built_at__ !== builtAtMs) {
         globalThis.__app_cache_seen_built_at__ = builtAtMs;
         invalidateWarmCaches();
       }
-      const ageMs = now - builtAtMs;
-      const fp = await sourceFingerprint();
-      if (fp !== row.source_fp || ageMs > MAX_AGE_MS) {
-        await runBuild();
-      }
     }
     globalThis.__app_cache_last_check__ = Date.now(); // gate set only after success
-  } catch (err) {
-    // cache_meta / app_cache missing → first build. Leave last_check unset so a
-    // transient failure retries soon (the single-flight guard prevents a storm).
-    console.error("[app_cache] freshness check failed; rebuilding", err);
-    await runBuild().catch(() => {});
+  } catch {
+    // Postgres hiccup — leave the gate unset so the next request retries soon.
+  } finally {
+    globalThis.__app_cache_check_inflight__ = false;
+  }
+}
+
+/**
+ * Rebuild the cache if the source changed or it has aged past MAX_AGE_MS. This is
+ * the DAILY CRON entrypoint (app/api/cron/rebuild-cache) — the only thing that
+ * wakes MotherDuck now. It reads the last-built fingerprint from the Postgres
+ * serving cache, computes the current MotherDuck source fingerprint (one cheap
+ * count query), and rebuilds (recompute on MotherDuck → push to Postgres) only when
+ * they differ or the cache is stale. Single-flight; returns what it decided.
+ */
+export async function refreshCacheIfStale(): Promise<{
+  rebuilt: boolean;
+  reason: string;
+}> {
+  if (globalThis.__app_cache_check_inflight__) {
+    return { rebuilt: false, reason: "check-in-flight" };
+  }
+  globalThis.__app_cache_check_inflight__ = true;
+  try {
+    let meta: { built_at: Date; source_fp: string } | undefined;
+    try {
+      const rows = await pgQueryRW<{ built_at: Date; source_fp: string }>(
+        `SELECT built_at, source_fp FROM ${PGC}.cache_meta WHERE cache_key = 'global' AND status = 'ready' LIMIT 1`,
+      );
+      meta = rows[0];
+    } catch {
+      // cache_meta table missing → treat as never built.
+    }
+    if (!meta) {
+      await runBuild();
+      return { rebuilt: true, reason: "not-built" };
+    }
+    const fp = await sourceFingerprint();
+    if (fp !== meta.source_fp) {
+      await runBuild();
+      return { rebuilt: true, reason: "source-changed" };
+    }
+    if (Date.now() - new Date(meta.built_at).getTime() > MAX_AGE_MS) {
+      await runBuild();
+      return { rebuilt: true, reason: "max-age" };
+    }
+    return { rebuilt: false, reason: "fresh" };
   } finally {
     globalThis.__app_cache_check_inflight__ = false;
   }
