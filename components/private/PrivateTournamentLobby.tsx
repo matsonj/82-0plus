@@ -110,10 +110,12 @@ export function PrivateTournamentLobby({
     }
   };
 
-  // ---- Active draft. ---- (mobile width, matching the rest of the app)
+  // ---- Active draft. ---- Full width so LineupDraftBoard's desktop two-column
+  // layout (left flex 1.6 + right roster) has room, same as the daily game. The
+  // old max-w-lg cap crushed it into one 512px column → the player list clipped.
   if (session) {
     return (
-      <div className="mx-auto w-full max-w-lg">
+      <div className="w-full">
         <PrivateTournamentDraft
           tournamentId={data.tournamentId}
           entryId={session.entryId}

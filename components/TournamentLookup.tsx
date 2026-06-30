@@ -516,6 +516,7 @@ export function TournamentLookup({
   initialTab,
   initialDaily,
   initialTeam,
+  initialIntent,
   onChrome,
 }: {
   onBack?: () => void;
@@ -526,6 +527,10 @@ export function TournamentLookup({
   // Open this exact team id directly (/tournament?team=…), skipping the all-teams
   // lookup — used by daily "Review your team". `initialDaily` supplies the chrome.
   initialTeam?: string;
+  // Which sub-view to open within the Private/Tournaments tab, deep-linked from
+  // the home TOURNAMENTS card: "create" opens the create form; "join"/"public"
+  // scroll to the join form / public list on the tab landing.
+  initialIntent?: "create" | "join" | "public";
   // Reports which page chrome to render (see LookupChrome). The parent page uses
   // this to show the logged-out hero + sidebar only in the "lookup" state and go
   // full-width for the logged-in list and bracket-result views.
@@ -769,6 +774,34 @@ export function TournamentLookup({
     onChrome?.(mode);
   }, [view, bootingSession, onChrome]);
 
+  // ---- Home TOURNAMENTS-card deep-links (initialIntent) ----
+  // intent=create opens the create form once on entry to the Private tab.
+  const intentCreateApplied = useRef(false);
+  useEffect(() => {
+    if (intentCreateApplied.current) return;
+    if (initialTab === "private" && initialIntent === "create") {
+      intentCreateApplied.current = true;
+      setShowCreate(true);
+    }
+  }, [initialTab, initialIntent]);
+
+  // intent=join / intent=public scroll to that section once it renders. Deps
+  // include the view/boot signals so it retries until the target exists; a ref
+  // makes it fire only once.
+  const intentScrolled = useRef(false);
+  useEffect(() => {
+    if (intentScrolled.current) return;
+    if (initialTab !== "private") return;
+    if (initialIntent !== "join" && initialIntent !== "public") return;
+    const id =
+      initialIntent === "public" ? "tournament-public" : "tournament-join";
+    const el = document.getElementById(id);
+    if (el) {
+      intentScrolled.current = true;
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [initialTab, initialIntent, view, tab, privateRows, bootingSession, showCreate]);
+
   const openTeam = async (
     teamId: string,
     fallbackSummary?: Partial<TournamentTeamSummary> | null,
@@ -915,7 +948,11 @@ export function TournamentLookup({
 
             {/* Public "open to everyone" browse list — anonymous, self-fetching;
                 renders nothing when no tournaments are open. */}
-            {!showCreate && <PublicTournamentList />}
+            {!showCreate && (
+              <div id="tournament-public">
+                <PublicTournamentList />
+              </div>
+            )}
 
             {!showCreate &&
               (privateLoading ? (
@@ -1073,9 +1110,15 @@ export function TournamentLookup({
 
             {/* Public "open to everyone" browse list — anonymous; renders nothing
                 when no public tournaments are open. */}
-            <PublicTournamentList />
+            <div id="tournament-public">
+              <PublicTournamentList />
+            </div>
 
-            <form onSubmit={submitJoin} className="md-card flex flex-col gap-3 p-5">
+            <form
+              id="tournament-join"
+              onSubmit={submitJoin}
+              className="md-card flex flex-col gap-3 p-5"
+            >
               <div>
                 <div className="font-cond text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
                   Join a tournament
