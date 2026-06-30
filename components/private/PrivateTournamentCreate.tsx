@@ -59,6 +59,9 @@ export function PrivateTournamentCreate({
   const [mode, setMode] = useState<PrivateMode>("hoopiq");
   const [size, setSize] = useState<PrivateSize>(8);
   const [boardMode, setBoardMode] = useState<PrivateBoardMode>("blind");
+  // Opt-in: list this tournament in the public "open to everyone" browse feed.
+  // Default off — tournaments are unlisted (name+PIN / link only) unless chosen.
+  const [isPublic, setIsPublic] = useState(false);
 
   // Manual board picker.
   const [decades, setDecades] = useState<number[]>([]);
@@ -154,6 +157,7 @@ export function PrivateTournamentCreate({
         mode,
         size,
         boardMode,
+        isPublic,
       };
       if (boardMode === "manual") {
         payload.manualSlots = slots.map((s) => ({
@@ -202,7 +206,11 @@ export function PrivateTournamentCreate({
         <CopyLinkField
           label="Share link"
           value={fullShare}
-          hint="Anyone with the link can join."
+          hint={
+            isPublic
+              ? "Listed publicly — anyone can find & join it."
+              : "Anyone with the link can join."
+          }
         />
         <ButtonLink
           href={created.shareUrl}
@@ -222,7 +230,7 @@ export function PrivateTournamentCreate({
     >
       <div>
         <div className="font-display text-xl font-bold">
-          Create a private tournament
+          Create a tournament
         </div>
         <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
           Invite friends with a link. Everyone drafts the same six-team board.
@@ -286,6 +294,48 @@ export function PrivateTournamentCreate({
             : "Find the tournament later by its name + this PIN."
         }
       />
+
+      {/* List publicly — opt into the public "open to everyone" browse feed.
+          Off by default (unlisted: name+PIN / link only). Cobalt is the tournament
+          accent; when on, a left stripe + filled checkbox + "Listed" chip signal it. */}
+      <button
+        type="button"
+        onClick={() => setIsPublic((v) => !v)}
+        aria-pressed={isPublic}
+        className="flex items-start gap-3 border-2 border-[var(--md-ink)] bg-[var(--md-white)] py-3 pr-3 text-left"
+        style={{
+          cursor: "pointer",
+          paddingLeft: isPublic ? 17 : 13,
+          boxShadow: isPublic ? "inset 5px 0 0 0 var(--md-cobalt)" : undefined,
+        }}
+      >
+        <span
+          className="mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center border-2 border-[var(--md-ink)]"
+          style={{ background: isPublic ? "var(--md-cobalt)" : "var(--md-white)" }}
+        >
+          {isPublic && (
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3 8.5L6.5 12L13 4" stroke="var(--md-white)" strokeWidth="2.5" strokeLinecap="square" />
+            </svg>
+          )}
+        </span>
+        <span className="flex flex-col gap-1">
+          <span className="flex items-center gap-2">
+            <span className="font-display text-sm font-bold">List publicly</span>
+            {isPublic && (
+              <span
+                className="font-display text-[10px] font-bold uppercase tracking-wide"
+                style={{ background: "var(--md-cobalt)", color: "var(--md-white)", padding: "2px 7px" }}
+              >
+                Listed
+              </span>
+            )}
+          </span>
+          <span className="text-[12px] leading-[16px] text-[var(--md-ink-muted)]">
+            Show this in the public tournaments list so anyone can find and join it.
+          </span>
+        </span>
+      </button>
 
       {/* Mode. */}
       <div className="flex flex-col gap-1">

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EXPIRY_HOURS,
+  formatPublicSpots,
   isExpired,
   needsAttention,
   normalizeTournamentName,
@@ -11,8 +12,8 @@ import {
 
 describe("privateModeLabel", () => {
   it("maps hoopiq → Ranked and classic → Classic", () => {
-    expect(privateModeLabel("hoopiq")).toBe("Private - Ranked");
-    expect(privateModeLabel("classic")).toBe("Private - Classic");
+    expect(privateModeLabel("hoopiq")).toBe("Ranked");
+    expect(privateModeLabel("classic")).toBe("Classic");
   });
 });
 
@@ -136,5 +137,22 @@ describe("isExpired", () => {
 
   it("is not expired one millisecond before the boundary", () => {
     expect(isExpired(expiresAt, Date.parse(expiresAt) - 1)).toBe(false);
+  });
+});
+
+describe("formatPublicSpots", () => {
+  it("renders 'joined / size' and is not full below capacity", () => {
+    expect(formatPublicSpots(5, 8)).toEqual({ text: "5 / 8", full: false });
+    expect(formatPublicSpots(0, 4)).toEqual({ text: "0 / 4", full: false });
+  });
+
+  it("is full INCLUSIVELY — at and beyond the field size", () => {
+    expect(formatPublicSpots(8, 8)).toEqual({ text: "8 / 8", full: true });
+    // Defensive: an over-count (shouldn't happen) still reads full.
+    expect(formatPublicSpots(9, 8).full).toBe(true);
+  });
+
+  it("clamps a negative count to 0", () => {
+    expect(formatPublicSpots(-3, 16)).toEqual({ text: "0 / 16", full: false });
   });
 });

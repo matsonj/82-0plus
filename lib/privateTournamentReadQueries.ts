@@ -4,15 +4,19 @@ import {
   type EntryForUserDbRow,
   mapEntryForUserRow,
   mapEntryRow,
+  mapPublicTournamentRow,
   mapTournamentRow,
   PRIVATE_ENTRY_COLS,
   PRIVATE_ENTRY_FOR_USER_COLS,
   PRIVATE_TOURNAMENT_COLS,
+  PUBLIC_TOURNAMENT_LIST_COLS,
   type PrivateEntryForUserRow,
   type PrivateEntryRow,
   type PrivateTournamentRow,
+  type PublicTournamentDbRow,
   type TournamentDbRow,
 } from "./privateTournamentRows";
+import type { PublicTournamentSummary } from "./privateTournament";
 import { queryTournamentRO } from "./oltpReadDb";
 
 // READ-ONLY private-tournament queries for the PUBLIC share path (no PIN needed
@@ -88,4 +92,28 @@ export async function listPrivateEntriesForUserRO(
     [userId],
   );
   return rows.map(mapEntryForUserRow);
+}
+
+/**
+ * The public "open to everyone" browse list: every listed tournament that's still
+ * open and not past its entry window, newest first, with a live entrant count.
+ * Anonymous — no creds in, no PIN/hash out. Full tournaments are NOT filtered out
+ * (the row renders a Full badge and the register route enforces the cap), so the
+ * count drives the UI rather than the SQL. LEFT JOIN so a zero-entry tournament
+ * still appears with entry_count 0.
+ */
+export async function listPublicTournamentsRO(
+  limit = 50,
+): Promise<PublicTournamentSummary[]> {
+  const rows = await queryTournamentRO<PublicTournamentDbRow>(
+    `SELECT ${PUBLIC_TOURNAMENT_LIST_COLS}
+       FROM ${RO_DB}.private_tournaments t
+       LEFT JOIN ${RO_DB}.private_entries e ON e.tournament_id = t.tournament_id
+      WHERE t.is_public = true AND t.status = 'open' AND t.expires_at > now()
+      GROUP BY t.tournament_id
+      ORDER BY t.created_at DESC
+      LIMIT $1`,
+    [limit],
+  );
+  return rows.map(mapPublicTournamentRow);
 }

@@ -8,11 +8,15 @@ export function HomeMenu({
   dailyBody,
   dailyHistory,
   onStartGame,
+  openPublicCount,
 }: {
   dateline: string | null;
   dailyBody: ReactNode;
   dailyHistory: ReactNode;
   onStartGame: (mode: GameMode) => void;
+  // Open public-tournament count for the "X open now" enticement. null = unknown
+  // (loading / failed) → the public row falls back to a plain "Join public".
+  openPublicCount: number | null;
 }) {
   return (
     <section className="relative z-10 grid gap-6 md:grid-cols-[1.6fr_1fr]">
@@ -84,9 +88,16 @@ export function HomeMenu({
           </span>
         </div>
 
-        <Link
-          href="/tournament?tab=private"
-          className="flex flex-[1.1] flex-col justify-between gap-3 border-2 border-[var(--md-ink)] p-6 text-[var(--md-white)] transition-transform hover:-translate-y-0.5"
+        {/* Three tiles on an equal 3-row grid so the blue box is EXACTLY the same
+            height as Classic/Ranked regardless of content. The tournament entry
+            points live as a bento of buttons INSIDE the blue box; the yellow
+            "Join public" cell grows to fill, with the live open-count when set. */}
+        <div
+          className="grid flex-1 gap-4"
+          style={{ gridTemplateRows: "repeat(3, minmax(0, 1fr))" }}
+        >
+        <div
+          className="flex flex-col gap-2 border-2 border-[var(--md-ink)] p-6 text-[var(--md-white)]"
           style={{ background: "var(--md-cobalt)", boxShadow: "var(--md-shadow-md)" }}
         >
           <div className="flex items-center gap-2">
@@ -94,17 +105,43 @@ export function HomeMenu({
               🏆
             </span>
             <span className="font-cond text-[17px] font-bold uppercase tracking-[0.1em]">
-              Private Tournament
+              Tournaments
             </span>
           </div>
-          <p className="text-[15px] leading-[1.45] text-[#dde4ff]">
-            Host a bracket for your friends, or join one by link.
-          </p>
-          <div className="flex items-center justify-between border-t border-white/30 pt-3 font-cond text-[12px] font-semibold uppercase tracking-[0.12em] text-[#dde4ff]">
-            <span>Host or Join</span>
-            <span aria-hidden>→</span>
+
+          <div className="flex flex-1 flex-col gap-2">
+            {/* Primary: Join public — fills the height, count when available */}
+            <Link
+              href="/tournament?tab=private"
+              className="flex flex-1 items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-yellow)] px-4 py-2 text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
+            >
+              <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em]">
+                {openPublicCount && openPublicCount > 0 ? (
+                  <>{openPublicCount} open · Join public</>
+                ) : (
+                  <>Join public</>
+                )}
+              </span>
+              <span aria-hidden>→</span>
+            </Link>
+
+            {/* Secondary: Join private + Create — two ghost buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <Link
+                href="/tournament?tab=private"
+                className="border-2 border-white/55 px-3 py-2 text-center font-cond text-[12px] font-semibold uppercase tracking-[0.08em] transition-colors hover:bg-white/10"
+              >
+                Join private
+              </Link>
+              <Link
+                href="/tournament?tab=private"
+                className="border-2 border-white/55 px-3 py-2 text-center font-cond text-[12px] font-semibold uppercase tracking-[0.08em] transition-colors hover:bg-white/10"
+              >
+                Create
+              </Link>
+            </div>
           </div>
-        </Link>
+        </div>
 
         <ModeCard
           number="01"
@@ -122,6 +159,7 @@ export function HomeMenu({
           dark
           onClick={() => onStartGame("hoopiq")}
         />
+        </div>
       </div>
     </section>
   );

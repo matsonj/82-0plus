@@ -167,6 +167,14 @@ const SCHEMA_DDL: string[] = [
      created_at timestamptz DEFAULT now(), expires_at timestamptz, finalized_at timestamptz,
      final_bracket_json jsonb, champion_name text)`,
   `CREATE INDEX IF NOT EXISTS pt_name_norm_idx ON ${TDB}.private_tournaments (name_norm)`,
+  // `is_public` was added after the table shipped, so the CREATE above can't carry
+  // it (IF NOT EXISTS won't alter an existing table). Add it idempotently; the
+  // DEFAULT false backfills every existing row as unlisted. Public means the
+  // tournament shows in the browsable "open to everyone" list — discovery only;
+  // joining is unchanged (still name+PIN or a /p/<id> link → register).
+  `ALTER TABLE ${TDB}.private_tournaments ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT false`,
+  // Partial index backing the public browse query (is_public + open + newest first).
+  `CREATE INDEX IF NOT EXISTS pt_public_open_idx ON ${TDB}.private_tournaments (created_at DESC) WHERE is_public = true AND status = 'open'`,
 
   `CREATE TABLE IF NOT EXISTS ${TDB}.private_entries (
      entry_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

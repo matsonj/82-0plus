@@ -89,6 +89,7 @@ export function SlotMachine({
   decadePool,
   size = "md",
   onSettled,
+  spinOnMount = false,
 }: {
   team: string | null;
   decade: number;
@@ -99,6 +100,12 @@ export function SlotMachine({
   // their land animation has played out). Lets the parent reveal the player
   // list exactly when the reel stops, not while it's still settling.
   onSettled?: () => void;
+  // Spin on the FIRST mount even when `team` is already set. Board-reveal flows
+  // (e.g. a tournament draft) know the team up-front rather than fetching it, so
+  // there's no null→value change to trigger the usual spin — without this they'd
+  // sit static on the first reveal. Default false preserves the cancel-remount
+  // no-respin behaviour the main game relies on.
+  spinOnMount?: boolean;
 }) {
   const [display, setDisplay] = useState(team ?? "···");
   const [teamStrip, setTeamStrip] = useState<string[]>([team ?? "···"]);
@@ -172,7 +179,11 @@ export function SlotMachine({
     const firstRun = teamFirstRun.current;
     teamFirstRun.current = false;
     const changed = team !== prev.current;
-    if (!changed && !(firstRun && team === null)) return;
+    // Spin when: the team changed, OR a fresh full-roll mount (team still null),
+    // OR spinOnMount on the first run (board reveal — team known up-front).
+    if (!changed && !(firstRun && team === null) && !(firstRun && spinOnMount)) {
+      return;
+    }
     prev.current = team;
     setTeamStrip(buildReelStrip(display, team ?? display, teamChoices));
     setTeamStripKey((k) => k + 1);
@@ -192,7 +203,7 @@ export function SlotMachine({
     return () => {
       clearTimeout(to);
     };
-  }, [display, team, teamChoices]);
+  }, [display, team, teamChoices, spinOnMount]);
 
   // Decade reel: spins when the decade value changes (a decade skip, or a full
   // roll while mounted) OR on a FRESH MOUNT that's mid-full-roll (team === null).
@@ -206,7 +217,7 @@ export function SlotMachine({
     const firstRun = decadeFirstRun.current;
     decadeFirstRun.current = false;
     const changed = decade !== prevDecade.current;
-    if (changed || (firstRun && team === null)) {
+    if (changed || (firstRun && team === null) || (firstRun && spinOnMount)) {
       prevDecade.current = decade;
       setDecadeStrip(buildReelStrip(decadeDisplay, decade, decadeChoices));
       setDecadeStripKey((k) => k + 1);
@@ -250,7 +261,7 @@ export function SlotMachine({
         clearTimeout(to);
       };
     }
-  }, [decade, decadeChoices, decadeDisplay, team]);
+  }, [decade, decadeChoices, decadeDisplay, team, spinOnMount]);
 
   // Signal "fully settled" once BOTH reels have stopped spinning and the (longest)
   // land animation has played out — so the player list reveals right as the reel

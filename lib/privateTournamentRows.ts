@@ -6,6 +6,7 @@ import type {
   PrivateResultLabel,
   PrivateSize,
   PrivateStatus,
+  PublicTournamentSummary,
 } from "./privateTournament";
 
 // SHARED private-tournament row contract: the single source of truth for the
@@ -51,6 +52,7 @@ export interface PrivateTournamentRow {
   finalizedAt: string | null;
   finalBracketJson: unknown; // BracketResult once finalized; null while open
   championName: string | null;
+  isPublic: boolean; // listed in the public "open to everyone" browse list
 }
 
 /** A full private_entries row, mapped to camelCase with JSON parsed. */
@@ -128,6 +130,7 @@ export interface TournamentDbRow {
   finalized_at: string | Date | null;
   final_bracket_json: unknown;
   champion_name: string | null;
+  is_public: boolean;
 }
 
 export interface EntryDbRow {
@@ -188,7 +191,7 @@ export interface EntryForUserDbRow {
 export const PRIVATE_TOURNAMENT_COLS = `tournament_id, name, name_norm, pin_hash, pin_salt,
             admin_user_id, admin_name, mode, size, board_mode, board_json,
             status, created_at, expires_at, finalized_at,
-            final_bracket_json, champion_name`;
+            final_bracket_json, champion_name, is_public`;
 
 export const PRIVATE_ENTRY_COLS = `entry_id, tournament_id, user_id, user_name, team_name, status,
             roster_json, sixth_json, roster_display, captain_slot, seed_net,
@@ -234,6 +237,7 @@ export function mapTournamentRow(r: TournamentDbRow): PrivateTournamentRow {
     finalBracketJson:
       r.final_bracket_json == null ? null : parseJson(r.final_bracket_json),
     championName: r.champion_name ?? null,
+    isPublic: r.is_public ?? false,
   };
 }
 
@@ -292,5 +296,45 @@ export function mapEntryForUserRow(r: EntryForUserDbRow): PrivateEntryForUserRow
     finalStatus: r.final_status ?? null,
     finalReachedRound: r.final_reached_round ?? null,
     viewedFinalAt: toIso(r.viewed_final_at),
+  };
+}
+
+// ── Public browse list (aggregate; RO-only) ───────────────────────────────────
+// A bespoke shape for the anonymous "open to everyone" list: tournament summary
+// fields + a live entrant COUNT, and deliberately NO pin_hash/pin_salt (this is
+// the credential-free discovery surface). Lives here so the RO read path shares
+// the same column list + mapper convention as every other row.
+
+/** Raw aggregate row for the public browse list (snake_case, from the pg endpoint). */
+export interface PublicTournamentDbRow {
+  tournament_id: string;
+  name: string;
+  admin_name: string;
+  mode: string;
+  size: number;
+  board_mode: string;
+  expires_at: string | Date;
+  entry_count: number; // COUNT(entries)::int — coerced to a JS number by the pool
+}
+
+/** SELECT list for the public browse query. Aliased off `t` (tournaments) joined
+ *  with `e` (entries); pair with `GROUP BY t.tournament_id`. No PIN columns. */
+export const PUBLIC_TOURNAMENT_LIST_COLS = `t.tournament_id AS tournament_id, t.name AS name,
+            t.admin_name AS admin_name, t.mode AS mode, t.size AS size,
+            t.board_mode AS board_mode, t.expires_at AS expires_at,
+            COUNT(e.entry_id)::int AS entry_count`;
+
+export function mapPublicTournamentRow(
+  r: PublicTournamentDbRow,
+): PublicTournamentSummary {
+  return {
+    tournamentId: r.tournament_id,
+    name: r.name,
+    adminName: r.admin_name,
+    mode: r.mode as PrivateMode,
+    size: r.size as PrivateSize,
+    boardMode: r.board_mode as PrivateBoardMode,
+    entryCount: r.entry_count ?? 0,
+    expiresAt: toIso(r.expires_at) ?? "",
   };
 }

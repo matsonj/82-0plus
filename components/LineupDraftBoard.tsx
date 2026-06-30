@@ -34,6 +34,7 @@ export function LineupDraftBoard({
   rolling = false,
   mode,
   allowRespin = false,
+  spinOnMount = false,
   allowCancelPending = true,
   onConsumeSource,
   onNoneEligible,
@@ -56,6 +57,9 @@ export function LineupDraftBoard({
   rolling?: boolean;
   mode: GameMode;
   allowRespin?: boolean;
+  // Spin the reel on the first reveal even though the team is known up-front
+  // (board-reveal draft, e.g. a tournament). Forwarded to SlotMachine.spinOnMount.
+  spinOnMount?: boolean;
   // Whether a mid-placement pick can be CANCELED. Default true (main game): you
   // can back out of a just-tapped player and choose a different one. Private
   // tournaments pass false — the slot-choice (the "where does he play?" step with
@@ -277,6 +281,7 @@ export function LineupDraftBoard({
             decadePool={sourcePools?.decades}
             size="lg"
             onSettled={handleReelSettled}
+            spinOnMount={spinOnMount}
           />
           {controls && controls({ pending: pending !== null, rolling })}
         </div>
