@@ -453,9 +453,14 @@ declare global {
   // built_at (ms) this process has reconciled its warm caches with.
   // eslint-disable-next-line no-var
   var __app_cache_seen_built_at__: number | undefined;
-  // guards against concurrent freshness checks within a process.
+  // Single-flight guard for the cheap request-path warm reconcile.
   // eslint-disable-next-line no-var
-  var __app_cache_check_inflight__: boolean | undefined;
+  var __app_cache_reconcile_inflight__: boolean | undefined;
+  // Single-flight guard for the cron rebuild check. SEPARATE from the reconcile
+  // guard on purpose: sharing one flag let a cheap reconcile make the daily cron
+  // return early ("check-in-flight") and skip its only rebuild window.
+  // eslint-disable-next-line no-var
+  var __app_cache_refresh_inflight__: boolean | undefined;
 }
 
 /** Single-flight wrapper around buildAll (per process). Cross-instance dupes are
@@ -512,14 +517,14 @@ export function scheduleWarmReconcile(): void {
  */
 async function reconcileWarmCachesIfDue(): Promise<void> {
   const now = Date.now();
-  if (globalThis.__app_cache_check_inflight__) return;
+  if (globalThis.__app_cache_reconcile_inflight__) return;
   if (
     globalThis.__app_cache_last_check__ &&
     now - globalThis.__app_cache_last_check__ < RECONCILE_INTERVAL_MS
   ) {
     return;
   }
-  globalThis.__app_cache_check_inflight__ = true;
+  globalThis.__app_cache_reconcile_inflight__ = true;
   try {
     const rows = await pgQueryRW<{ built_at: Date }>(
       `SELECT built_at FROM ${PGC}.cache_meta WHERE cache_key = 'global' AND status = 'ready' LIMIT 1`,
@@ -541,7 +546,7 @@ async function reconcileWarmCachesIfDue(): Promise<void> {
   } catch {
     // Postgres hiccup — leave the gate unset so the next request retries soon.
   } finally {
-    globalThis.__app_cache_check_inflight__ = false;
+    globalThis.__app_cache_reconcile_inflight__ = false;
   }
 }
 
@@ -557,10 +562,10 @@ export async function refreshCacheIfStale(): Promise<{
   rebuilt: boolean;
   reason: string;
 }> {
-  if (globalThis.__app_cache_check_inflight__) {
+  if (globalThis.__app_cache_refresh_inflight__) {
     return { rebuilt: false, reason: "check-in-flight" };
   }
-  globalThis.__app_cache_check_inflight__ = true;
+  globalThis.__app_cache_refresh_inflight__ = true;
   try {
     let meta: { built_at: Date; source_fp: string } | undefined;
     try {
@@ -586,6 +591,6 @@ export async function refreshCacheIfStale(): Promise<{
     }
     return { rebuilt: false, reason: "fresh" };
   } finally {
-    globalThis.__app_cache_check_inflight__ = false;
+    globalThis.__app_cache_refresh_inflight__ = false;
   }
 }
