@@ -112,7 +112,7 @@ export function HomeMenu({
           <div className="flex flex-1 flex-col gap-2">
             {/* Primary: Join public — fills the height, count when available */}
             <Link
-              href="/tournament?tab=private"
+              href="/tournament?tab=private&intent=public"
               className="flex flex-1 items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-yellow)] px-4 py-2 text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
             >
               <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em]">
@@ -128,13 +128,13 @@ export function HomeMenu({
             {/* Secondary: Join private + Create — two ghost buttons */}
             <div className="grid grid-cols-2 gap-2">
               <Link
-                href="/tournament?tab=private"
+                href="/tournament?tab=private&intent=join"
                 className="border-2 border-white/55 px-3 py-2 text-center font-cond text-[12px] font-semibold uppercase tracking-[0.08em] transition-colors hover:bg-white/10"
               >
                 Join private
               </Link>
               <Link
-                href="/tournament?tab=private"
+                href="/tournament?tab=private&intent=create"
                 className="border-2 border-white/55 px-3 py-2 text-center font-cond text-[12px] font-semibold uppercase tracking-[0.08em] transition-colors hover:bg-white/10"
               >
                 Create

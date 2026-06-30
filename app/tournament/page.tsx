@@ -13,10 +13,21 @@ import { PageShell } from "@/components/layout/PageShell";
 export default function TournamentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; daily?: string; team?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    daily?: string;
+    team?: string;
+    intent?: string;
+  }>;
 }) {
-  const { tab, daily, team } = use(searchParams);
+  const { tab, daily, team, intent } = use(searchParams);
   const initialTab = tab === "private" ? ("private" as const) : undefined;
+  // Which sub-view to open within the Private/Tournaments tab — deep-linked from
+  // the home TOURNAMENTS card's three buttons (create / join / public).
+  const initialIntent =
+    intent === "create" || intent === "join" || intent === "public"
+      ? intent
+      : undefined;
   // `?daily=YYYY-MM-DD` (from a home-calendar click) auto-opens that day's bracket.
   const initialDaily = /^\d{4}-\d{2}-\d{2}$/.test(daily ?? "") ? daily : undefined;
   // `?team=<uuid>` (from "Review your team") opens that one bracket directly,
@@ -85,6 +96,7 @@ export default function TournamentPage({
           initialTab={initialTab}
           initialDaily={initialDaily}
           initialTeam={initialTeam}
+          initialIntent={initialIntent}
           onChrome={handleChrome}
         />
 

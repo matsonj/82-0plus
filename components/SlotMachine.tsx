@@ -230,13 +230,20 @@ export function SlotMachine({
         decadeWaiting.current = true; // full roll: wait for the team to land first
         return;
       }
-      setDecadeSpinMs(SPIN_MS);
+      // A board-reveal first spin (spinOnMount, team known up-front) lands the era
+      // a beat AFTER the team — left-to-right stop, like a full roll. A plain
+      // standalone decade skip lands on its own SPIN_MS.
+      const landMs =
+        firstRun && spinOnMount && team !== null
+          ? SPIN_MS + STAGGER_MS
+          : SPIN_MS;
+      setDecadeSpinMs(landMs);
       decadeWaiting.current = false;
       const to = setTimeout(() => {
         setDecadeDisplay(decade);
         setDecadeSpinning(false);
         setDecadeLand((n) => n + 1);
-      }, SPIN_MS);
+      }, landMs);
       return () => {
         clearTimeout(to);
       };
