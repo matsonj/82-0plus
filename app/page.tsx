@@ -27,6 +27,7 @@ import {
 import { TournamentEntry } from "@/components/TournamentEntry";
 import { PageShell } from "@/components/layout/PageShell";
 import { HomeMenu } from "@/components/home/HomeMenu";
+import { HomeLiveBar } from "@/components/home/HomeLiveBar";
 import Link from "next/link";
 import { Capsule } from "@/components/ui";
 import { HowToPlay } from "@/components/HowToPlay";
@@ -179,16 +180,29 @@ export default function Home() {
   // null until the anonymous browse feed resolves; 0 (or a failed fetch) hides the
   // count affordances entirely. Fetched once on mount; cheap, no creds.
   const [openPublicCount, setOpenPublicCount] = useState<number | null>(null);
+  // Total entrants across open public tournaments — social proof for the live bar.
+  const [openPublicEntrants, setOpenPublicEntrants] = useState(0);
+  // When exactly one public tournament is open, deep-link straight to its lobby
+  // instead of a one-row list. null when there are 0 or 2+.
+  const [soloPublicId, setSoloPublicId] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     fetch("/api/private-tournament/public")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (active) {
-          setOpenPublicCount(
-            Array.isArray(d?.tournaments) ? d.tournaments.length : 0,
-          );
-        }
+        if (!active) return;
+        const list = Array.isArray(d?.tournaments) ? d.tournaments : [];
+        setOpenPublicCount(list.length);
+        setOpenPublicEntrants(
+          list.reduce(
+            (sum: number, t: { entryCount?: number }) =>
+              sum + (Number(t?.entryCount) || 0),
+            0,
+          ),
+        );
+        setSoloPublicId(
+          list.length === 1 ? String(list[0]?.tournamentId ?? "") || null : null,
+        );
       })
       .catch(() => {
         /* leave null — the affordances just won't show a count */
@@ -197,6 +211,12 @@ export default function Home() {
       active = false;
     };
   }, []);
+  // "Join public" destination: a lone open tournament goes straight to its lobby;
+  // 2+ go to the browsable list (Tournaments tab).
+  const joinPublicHref =
+    openPublicCount === 1 && soloPublicId
+      ? `/p/${soloPublicId}`
+      : "/tournament?tab=private&intent=public";
   // Whether today's completion has resolved (results fetched, or no account to
   // fetch for). Until then we hold a stable placeholder so the daily block can't
   // flash "Play" and then flip to your result once the fetch lands. Seeds true when
@@ -1016,19 +1036,34 @@ export default function Home() {
               Review your team
             </button>
           </div>
-          {/* Caught your daily? Nudge toward the next hook: open public tournaments.
-              Only shows once today's result is in AND there are open ones to join. */}
+          {/* Caught your daily? Strong CTA toward the next hook at peak engagement:
+              open public tournaments. Only once today's result is in AND some are open. */}
           {openPublicCount && openPublicCount > 0 ? (
-            <Link
-              href="/tournament?tab=private"
-              className="mt-4 flex items-center gap-2 border-t border-white/15 pt-3 font-cond text-[12px] font-semibold uppercase tracking-[0.1em]"
-            >
-              <span className="text-[var(--md-paper-3)]">Need more?</span>
-              <span className="inline-flex items-center gap-1 text-[var(--md-yellow)]">
-                {openPublicCount} tournament{openPublicCount === 1 ? "" : "s"} open
-                <span aria-hidden>→</span>
+            <div className="mt-4 flex flex-col gap-2 border-t border-white/16 pt-4">
+              <span className="text-[13px] text-[var(--md-paper-3)]">
+                Daily&rsquo;s in the books — now go for a ring.
               </span>
-            </Link>
+              <Link
+                href={joinPublicHref}
+                className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] px-4 py-2.5 font-cond text-[14px] font-semibold uppercase tracking-[0.06em] text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
+                style={{ background: "var(--md-yellow)" }}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: "var(--md-coral)" }}
+                    aria-hidden
+                  />
+                  Join a public tournament
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="font-mono text-[13px] font-bold">
+                    {openPublicCount} open
+                  </span>
+                  <span aria-hidden>→</span>
+                </span>
+              </Link>
+            </div>
           ) : null}
         </>
       ) : (
@@ -1159,6 +1194,15 @@ export default function Home() {
       )}
 
       {/* ---------------- MENU ---------------- */}
+      {/* Live public-tournaments beacon — full-bleed flame strip under the masthead,
+          only when some are open. Strong, first thing every home visitor sees. */}
+      {phase === "menu" && (
+        <HomeLiveBar
+          count={openPublicCount ?? 0}
+          entrants={openPublicEntrants}
+          href={joinPublicHref}
+        />
+      )}
       {phase === "menu" && (
         <HomeMenu
           dateline={dateline}
@@ -1166,6 +1210,7 @@ export default function Home() {
           dailyHistory={dailyHistory}
           onStartGame={(nextMode) => startGame(nextMode, "free")}
           openPublicCount={openPublicCount}
+          joinPublicHref={joinPublicHref}
         />
       )}
 

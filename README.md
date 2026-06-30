@@ -65,6 +65,28 @@ workspace. API routes set an anonymous HTTP-only session GUID cookie and pass it
 as MotherDuck's `session_hint`, so read-scaling replicas can preserve per-user
 affinity.
 
+### Local previews & the database
+
+For **layout / design previews** you don't strictly need a database — `npm run dev`
+renders every screen and the data fetches fail gracefully (empty lists, no daily
+result, no live-tournaments bar).
+
+For previews **with real data** (tournaments, daily results, player lists), set
+`DATABASE_URL` in `.env.local`:
+
+- `DATABASE_URL` is marked **Sensitive** in Vercel, so `vercel env pull` returns it
+  **blank** — you can't pull it. Copy the pooled connection string (`:6432`) from the
+  **PlanetScale dashboard** into `.env.local` by hand.
+- ⚠️ Pointing at the **production** branch means local writes (creating a tournament,
+  submitting a daily) hit the live DB. For isolated testing, create a **PlanetScale
+  dev branch** and use its connection string instead.
+- Repeatable team setup: add a **non-sensitive** `DATABASE_URL` to Vercel's
+  **Development** environment (pointing at a dev branch) — then `vercel env pull`
+  populates `.env.local` automatically.
+
+Run local dev from the **main checkout**, not a git worktree: Turbopack rejects a
+symlinked `node_modules`, which worktrees use.
+
 ## Tournament Edition
 
 Submit a drafted team (under an 8-char arcade name + PIN) into a 16-team, East/West
@@ -164,6 +186,19 @@ Scaling token whose account can access `nba_box_scores_v2`. The data layer is
 the pure-JS `pg` driver, so there are no native binaries to bundle —
 `next.config.ts` is intentionally empty (no `serverExternalPackages`, no
 `outputFileTracingIncludes`). Routes run on the Node.js runtime.
+
+### CI deploys (GitHub Actions)
+
+`.github/workflows/vercel-deploy.yml` deploys through the Vercel CLI:
+
+- **Pull request → Preview** deploy; the preview URL is posted back as a PR comment.
+- **Push to `main` → Production** deploy (daily82.com).
+
+It needs three repo secrets (Settings → Secrets and variables → Actions):
+`VERCEL_TOKEN` (create at vercel.com/account/tokens), plus `VERCEL_ORG_ID` and
+`VERCEL_PROJECT_ID` (both in `.vercel/project.json`). Sensitive runtime vars like
+`DATABASE_URL` are injected by Vercel at runtime, so the CI **build** step doesn't
+need them.
 
 ---
 
