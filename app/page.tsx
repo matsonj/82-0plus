@@ -182,6 +182,9 @@ export default function Home() {
   const [openPublicCount, setOpenPublicCount] = useState<number | null>(null);
   // Total entrants across open public tournaments — social proof for the live bar.
   const [openPublicEntrants, setOpenPublicEntrants] = useState(0);
+  // When exactly one public tournament is open, deep-link straight to its lobby
+  // instead of a one-row list. null when there are 0 or 2+.
+  const [soloPublicId, setSoloPublicId] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     fetch("/api/private-tournament/public")
@@ -197,6 +200,9 @@ export default function Home() {
             0,
           ),
         );
+        setSoloPublicId(
+          list.length === 1 ? String(list[0]?.tournamentId ?? "") || null : null,
+        );
       })
       .catch(() => {
         /* leave null — the affordances just won't show a count */
@@ -205,6 +211,12 @@ export default function Home() {
       active = false;
     };
   }, []);
+  // "Join public" destination: a lone open tournament goes straight to its lobby;
+  // 2+ go to the browsable list (Tournaments tab).
+  const joinPublicHref =
+    openPublicCount === 1 && soloPublicId
+      ? `/p/${soloPublicId}`
+      : "/tournament?tab=private&intent=public";
   // Whether today's completion has resolved (results fetched, or no account to
   // fetch for). Until then we hold a stable placeholder so the daily block can't
   // flash "Play" and then flip to your result once the fetch lands. Seeds true when
@@ -1032,7 +1044,7 @@ export default function Home() {
                 Daily&rsquo;s in the books — now go for a ring.
               </span>
               <Link
-                href="/tournament?tab=private&intent=public"
+                href={joinPublicHref}
                 className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] px-4 py-2.5 font-cond text-[14px] font-semibold uppercase tracking-[0.06em] text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
                 style={{ background: "var(--md-yellow)" }}
               >
@@ -1185,7 +1197,11 @@ export default function Home() {
       {/* Live public-tournaments beacon — full-bleed flame strip under the masthead,
           only when some are open. Strong, first thing every home visitor sees. */}
       {phase === "menu" && (
-        <HomeLiveBar count={openPublicCount ?? 0} entrants={openPublicEntrants} />
+        <HomeLiveBar
+          count={openPublicCount ?? 0}
+          entrants={openPublicEntrants}
+          href={joinPublicHref}
+        />
       )}
       {phase === "menu" && (
         <HomeMenu
@@ -1194,6 +1210,7 @@ export default function Home() {
           dailyHistory={dailyHistory}
           onStartGame={(nextMode) => startGame(nextMode, "free")}
           openPublicCount={openPublicCount}
+          joinPublicHref={joinPublicHref}
         />
       )}
 

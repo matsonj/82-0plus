@@ -9,6 +9,7 @@ export function HomeMenu({
   dailyHistory,
   onStartGame,
   openPublicCount,
+  joinPublicHref,
 }: {
   dateline: string | null;
   dailyBody: ReactNode;
@@ -17,6 +18,9 @@ export function HomeMenu({
   // Open public-tournament count for the "X open now" enticement. null = unknown
   // (loading / failed) → the public row falls back to a plain "Join public".
   openPublicCount: number | null;
+  // "Join public" destination — a lone open tournament links to its lobby, 2+ to
+  // the list (computed by the page from the live count).
+  joinPublicHref: string;
 }) {
   return (
     <section className="relative z-10 grid gap-6 md:grid-cols-[1.6fr_1fr]">
@@ -110,9 +114,10 @@ export function HomeMenu({
           </div>
 
           <div className="flex flex-1 flex-col gap-2">
-            {/* Primary: Join public — fills the height, count when available */}
+            {/* Primary: Join public — fills the height, count when available.
+                One open tournament → its lobby; 2+ → the browsable list. */}
             <Link
-              href="/tournament?tab=private&intent=public"
+              href={joinPublicHref}
               className="flex flex-1 items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-yellow)] px-4 py-2 text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
             >
               <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em]">
