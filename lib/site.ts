@@ -1,7 +1,9 @@
-// Canonical public origin. Prefer the Vercel-provided URL in deploys, fall back
-// to the production domain (and localhost in dev is fine for relative links).
+// Canonical public origin. Prefer the configured URL in deploys, fall back to the
+// production domain. Use `|| ` (not `??`) and trim so an EMPTY/whitespace value
+// also falls back — `vercel pull` returns a Sensitive `NEXT_PUBLIC_SITE_URL` as ""
+// in CI, and `new URL("")` (via layout's metadataBase) would crash the build.
 export const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://daily82.com";
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://daily82.com";
 
 // MotherDuck homepage, UTM-tagged so referrals from this app are attributable.
 export const MOTHERDUCK_URL = "https://motherduck.com/?utm_source=82-0plus";
