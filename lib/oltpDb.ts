@@ -1,4 +1,4 @@
-import { Pool, types } from "pg";
+import { Pool, type PoolClient, types } from "pg";
 
 // OLTP store for the tournament/daily transactional tables (users, teams,
 // daily_results, ghosts, private_tournaments, private_entries). These were on
@@ -28,6 +28,8 @@ declare global {
   var __oltp_pool__: Pool | undefined;
   // eslint-disable-next-line no-var
   var __oltp_schema__: Promise<void> | undefined;
+  // eslint-disable-next-line no-var
+  var __oltp_cache_schema__: Promise<void> | undefined;
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -85,6 +87,34 @@ export async function queryRW<T = Record<string, unknown>>(
 ): Promise<T[]> {
   const res = await getPool().query(sql, params);
   return res.rows as T[];
+}
+
+/**
+ * Run `fn` inside a single transaction on ONE pooled connection. Needed for
+ * multi-statement atomicity (DELETE+INSERT a whole cache table) — `queryRW` can't
+ * span statements because PgBouncer transaction-mode pooling hands each `query()`
+ * a possibly-different backend. The checked-out client pins one backend for the
+ * transaction's lifetime (PgBouncer keeps it assigned until COMMIT/ROLLBACK).
+ */
+export async function withTx<T>(
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const out = await fn(client);
+    await client.query("COMMIT");
+    return out;
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* connection already broken — release will discard it */
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // Schema DDL. Unlike MotherDuck, Postgres enforces PRIMARY KEY / UNIQUE, so the
@@ -169,4 +199,67 @@ export function ensureSchema(): Promise<void> {
     });
   }
   return globalThis.__oltp_schema__;
+}
+
+// ── Derived-data cache tables ────────────────────────────────────────────────
+//
+// Mirrors of the three small `app_cache` tables (lib/appCache.ts) the request path
+// reads on every page: the player-card rollup, the browsable player index, and the
+// slot-machine weights. They used to be read over the MotherDuck PG endpoint, which
+// kept the duckling awake ~24/7 (it bills wall-clock awake time, and these point
+// lookups never let it idle). Serving them from this always-warm Postgres instead
+// lets MotherDuck sleep — it's now woken only by the daily cache-rebuild cron, which
+// recomputes the heavy analytics on MotherDuck and pushes the results here.
+//
+// They live in the SAME `tournament` schema as the OLTP tables (not a dedicated
+// `cache` schema) on purpose: the app role is least-privilege and cannot CREATE
+// SCHEMA, but it owns `tournament` and can create tables in it — so this needs no
+// out-of-band admin grant. Column shapes mirror the BUILD_* SQL in lib/appCache.ts;
+// keep them in sync. The big `game_quality` intermediate (~1.46M rows) stays on
+// MotherDuck — only these three small tables cross over.
+const CACHE_DDL: string[] = [
+  `CREATE TABLE IF NOT EXISTS ${TDB}.cache_player_index (
+     entity_id text, player_name text, team text, decade integer,
+     best_season integer, value double precision, gp integer, mpg double precision,
+     pts double precision, reb double precision, ast double precision,
+     fga double precision, fg3a double precision, fta double precision,
+     stl double precision, blk double precision, tov double precision,
+     fg3m double precision, fgm double precision, ftm double precision,
+     tsplus double precision, height_in integer, pos text,
+     all_def integer, debut integer)`,
+
+  `CREATE TABLE IF NOT EXISTS ${TDB}.cache_player_season_stats (
+     entity_id text, season integer, team text,
+     gq double precision, usg double precision, gp integer,
+     pts double precision, reb double precision, ast double precision,
+     stl double precision, blk double precision,
+     fg_pct double precision, ft_pct double precision, tov double precision,
+     fg3m double precision, all_def integer)`,
+  `CREATE INDEX IF NOT EXISTS cache_pss_entity_idx
+     ON ${TDB}.cache_player_season_stats (entity_id, season)`,
+
+  `CREATE TABLE IF NOT EXISTS ${TDB}.cache_team_decade_weights (
+     decade integer, team text, weight integer)`,
+
+  `CREATE TABLE IF NOT EXISTS ${TDB}.cache_meta (
+     cache_key text PRIMARY KEY, built_at timestamptz, source_fp text, status text)`,
+];
+
+/**
+ * Create the derived-cache tables if absent (in the `tournament` schema, which the
+ * app role owns). Idempotent, guarded by a module-level promise so concurrent
+ * callers run it once; a failure clears the guard so a later call retries. Separate
+ * from ensureSchema() because the cache build/read paths can run without the OLTP
+ * path having initialized (e.g. the rebuild cron, the seed script).
+ */
+export function ensureCacheSchema(): Promise<void> {
+  if (!globalThis.__oltp_cache_schema__) {
+    globalThis.__oltp_cache_schema__ = (async () => {
+      for (const stmt of CACHE_DDL) await queryRW(stmt);
+    })().catch((err) => {
+      globalThis.__oltp_cache_schema__ = undefined; // allow retry on failure
+      throw err;
+    });
+  }
+  return globalThis.__oltp_cache_schema__;
 }

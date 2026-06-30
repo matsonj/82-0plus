@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPlayerSeasonHistory } from "@/lib/queries";
-import { scheduleCacheRefresh } from "@/lib/appCache";
+import { scheduleWarmReconcile } from "@/lib/appCache";
 import { jsonPublicCacheable } from "@/lib/publicCache";
 
 export const runtime = "nodejs";
@@ -11,12 +11,10 @@ export const runtime = "nodejs";
 // CDN always serves instantly, but background-revalidates within ~10 min — so once
 // a cache rebuild lands, the fresh data propagates quickly instead of being pinned
 // behind a day-long CDN entry built from the stale snapshot. Served from the
-// app_cache rollup (sub-ms); a
-// gated, non-blocking freshness check on the (cheap, background) revalidation
-// keeps app_cache warm. This is the app's single hottest query — caching it here
-// keeps the bulk of the carousel's ±2 prefetch traffic off the function and DB.
-// (No session-hint cookie here: the response is shared/public, and the data comes
-// from app_cache via the RW pool, so read-pool affinity is irrelevant.)
+// Postgres serving cache (tournament.cache_player_season_stats, sub-ms); a cheap,
+// background warm-reconcile runs on revalidation. This is the app's single hottest
+// query — caching it here keeps the bulk of the carousel's ±2 prefetch traffic off
+// the function and DB. (No session-hint cookie here: the response is shared/public.)
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id") ?? "";
   if (!id || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
@@ -24,7 +22,7 @@ export async function GET(req: NextRequest) {
   }
   try {
     const seasons = await getPlayerSeasonHistory(id);
-    scheduleCacheRefresh(); // background (after()), runs only on a cache MISS
+    scheduleWarmReconcile(); // background (after()): cheap Postgres-only warm reconcile
     return jsonPublicCacheable({ seasons });
   } catch (err) {
     console.error("[/api/player]", err);

@@ -1,5 +1,5 @@
 import { query, type QueryOptions } from "./motherduck";
-import { ACDB, readCache, isCacheReady, scheduleCacheRefresh } from "./appCache";
+import { PGC, readPgCache, isCacheReady, scheduleWarmReconcile } from "./appCache";
 import { eligiblePositions, positionRank } from "./positions";
 import type { GameMode, PublicPlayer, SimPick, SimRosterLine } from "./types";
 import type { ScoringPlayer } from "./scoring";
@@ -154,8 +154,8 @@ declare global {
 function getTeamWeightsCache(): Promise<Map<number, TeamWeight[]> | null> {
   if (!globalThis.__team_weights__) {
     globalThis.__team_weights__ = (async () => {
-      const rows = await readCache<{ decade: number } & TeamWeight>(
-        `SELECT decade, team, weight FROM ${ACDB}.team_decade_weights ORDER BY weight DESC`,
+      const rows = await readPgCache<{ decade: number } & TeamWeight>(
+        `SELECT decade, team, weight FROM ${PGC}.cache_team_decade_weights ORDER BY weight DESC`,
       );
       if (rows.length === 0) return null;
       const byDecade = new Map<number, TeamWeight[]>();
@@ -200,28 +200,29 @@ declare global {
 }
 
 /**
- * Read the precomputed index. Prefers the self-managed `app_cache.main.player_index`
- * table (a fast SELECT, refreshed by lib/appCache), and falls back to computing it
- * live against the view if the cache is missing or empty.
+ * Read the precomputed index from the Postgres serving cache
+ * (`tournament.cache_player_index`, a fast always-warm SELECT). Falls back to
+ * computing it live against the MotherDuck view if the cache is missing or empty
+ * (e.g. before the first build).
  *
  * Nearly every route except /api/player funnels through here, so this is also
- * where the cache reconciles: scheduleCacheRefresh() registers a gated
- * (≤1×/hour/process), non-blocking check via after() that drops stale warm
- * globals + rebuilds when the source changed — so any route process self-heals,
- * not just ones that hit /api/player.
+ * where warm globals reconcile: scheduleWarmReconcile() registers a gated
+ * (≤1×/hour/process), Postgres-only check via after() that drops this process's
+ * stale in-memory index when the daily cron has rebuilt the cache. It never touches
+ * MotherDuck and never rebuilds — the rebuild is the cron's job.
  */
 export function getPlayerIndex(
   options: QueryOptions = {},
 ): Promise<IndexedPlayer[]> {
-  scheduleCacheRefresh();
+  scheduleWarmReconcile();
   if (!globalThis.__player_index__) {
     globalThis.__player_index__ = (async () => {
       try {
-        const rows = await readCache<IndexedPlayer>(
+        const rows = await readPgCache<IndexedPlayer>(
           `SELECT entity_id, player_name, team, decade, best_season, value, gp, mpg,
                   pts, reb, ast, fga, fg3a, fta, stl, blk, tov, fg3m, fgm, ftm, tsplus,
                   height_in, pos, all_def, debut
-             FROM ${ACDB}.player_index`,
+             FROM ${PGC}.cache_player_index`,
         );
         if (rows.length > 0) return rows;
       } catch {
@@ -382,10 +383,10 @@ export async function getPlayerSeasonHistory(
   // Fast path: the pre-aggregated rollup (sub-ms indexed lookup). Falls back to
   // the live view if the cache isn't built yet (then it's empty for this id).
   try {
-    const cached = await readCache<PlayerSeasonRow>(
+    const cached = await readPgCache<PlayerSeasonRow>(
       `SELECT season, team, gq, usg, gp, pts, reb, ast, stl, blk,
               fg_pct, ft_pct, tov, fg3m, all_def
-         FROM ${ACDB}.player_season_stats
+         FROM ${PGC}.cache_player_season_stats
         WHERE entity_id = $1
         ORDER BY season, gp DESC, team`,
       [entityId],

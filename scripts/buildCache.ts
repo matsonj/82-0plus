@@ -8,15 +8,17 @@
  *   account must also be able to read nba_box_scores_v2 — the rebuild's source).
  */
 import "./_env";
-import { rebuildCache, ACDB } from "../lib/appCache";
+import { rebuildCache, ACDB, PGC } from "../lib/appCache";
 import { queryRW } from "../lib/tournamentDb";
 import { query } from "../lib/motherduck";
+import { queryRW as queryPG } from "../lib/oltpDb";
 
 async function main() {
   console.time("rebuild");
   await rebuildCache();
   console.timeEnd("rebuild");
 
+  console.log("MotherDuck app_cache:");
   for (const t of [
     "game_quality",
     "player_season_stats",
@@ -27,6 +29,24 @@ async function main() {
       `SELECT count(*) AS n FROM ${ACDB}.${t}`,
     );
     console.log(`  ${t}: ${n.toLocaleString()} rows`);
+  }
+
+  // rebuildCache() also pushed the three small tables to the Postgres serving cache
+  // (what the request path reads). Verify parity there too.
+  console.log("Postgres serving cache:");
+  for (const [pg, md] of [
+    ["cache_player_index", "player_index"],
+    ["cache_player_season_stats", "player_season_stats"],
+    ["cache_team_decade_weights", "team_decade_weights"],
+  ]) {
+    const [{ n: pgN }] = await queryPG<{ n: number }>(
+      `SELECT count(*)::int AS n FROM ${PGC}.${pg}`,
+    );
+    const [{ n: mdN }] = await queryRW<{ n: number }>(
+      `SELECT count(*) AS n FROM ${ACDB}.${md}`,
+    );
+    const mark = Number(pgN) === Number(mdN) ? "✓" : "✗ MISMATCH";
+    console.log(`  ${pg}: ${pgN.toLocaleString()} rows (MotherDuck ${mdN.toLocaleString()}) ${mark}`);
   }
 
   // Spot-check: cached card rows for entity 1449 must match the live view.
