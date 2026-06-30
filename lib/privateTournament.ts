@@ -63,6 +63,21 @@ export interface PrivateTournamentSummary {
   championName: string | null; // winning team's name once completed; null while open
 }
 
+/** A PUBLIC (listed) tournament row for the browsable "open to everyone" list.
+ *  No PIN/hash — this is the anonymous, credential-free discovery surface; a
+ *  reader taps through to /p/<id> and joins with their own account creds. Carries
+ *  the live entrant count so the list can show "5 / 8 joined" + a Full badge. */
+export interface PublicTournamentSummary {
+  tournamentId: string;
+  name: string;
+  adminName: string; // the host's (normalized) username — shown as "host: <name>"
+  mode: PrivateMode;
+  size: PrivateSize;
+  boardMode: PrivateBoardMode;
+  entryCount: number; // entrants registered so far (any pre-final state)
+  expiresAt: string; // ISO timestamp the open window closes
+}
+
 /** One entrant's row within a private tournament (camelCase). */
 export interface PrivateEntrySummary {
   entryId: string;
@@ -89,10 +104,20 @@ export interface PrivateEntrySummary {
 // ── Labels ─────────────────────────────────────────────────────────────────
 
 /** Public label for the mode. hoopiq is the Ranked game; classic shows stats. */
-export function privateModeLabel(
-  mode: PrivateMode,
-): "Private - Ranked" | "Private - Classic" {
-  return mode === "hoopiq" ? "Private - Ranked" : "Private - Classic";
+export function privateModeLabel(mode: PrivateMode): "Ranked" | "Classic" {
+  return mode === "hoopiq" ? "Ranked" : "Classic";
+}
+
+/** Render the "X / Y joined" count for a public tournament row, plus whether it's
+ *  full. Full is INCLUSIVE: once entrants reach the field size the slots are gone
+ *  (the register route then rejects with "this tournament is full"). Counts are
+ *  clamped at 0 so a malformed negative never renders. */
+export function formatPublicSpots(
+  entryCount: number,
+  size: PrivateSize,
+): { text: string; full: boolean } {
+  const joined = Math.max(0, entryCount);
+  return { text: `${joined} / ${size}`, full: joined >= size };
 }
 
 // ── Create-params validation ─────────────────────────────────────────────────

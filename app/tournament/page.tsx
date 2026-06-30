@@ -112,7 +112,7 @@ export default function TournamentPage({
               {[
                 { label: "Play Classic", href: "/" },
                 { label: "Play Ranked", href: "/" },
-                { label: "Host a Private Tournament", href: "/tournament?tab=private", cobalt: true },
+                { label: "Host a Tournament", href: "/tournament?tab=private", cobalt: true },
               ].map(({ label, href, cobalt }) => (
                 <Link
                   key={label}

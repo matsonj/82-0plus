@@ -350,12 +350,12 @@ export function GlobalHeader({
               )}
 
               <span className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                Private tournaments
+                Tournaments
               </span>
               <div className="mt-1">
                 {!getSavedUser() ? (
                   <p className="text-[12px] text-[var(--md-ink-muted)]">
-                    Enter a private tournament to see alerts here.
+                    Enter a tournament to see alerts here.
                   </p>
                 ) : count === 0 ? (
                   <p className="text-[12px] text-[var(--md-ink-muted)]">

@@ -27,6 +27,7 @@ import {
 import { TournamentEntry } from "@/components/TournamentEntry";
 import { PageShell } from "@/components/layout/PageShell";
 import { HomeMenu } from "@/components/home/HomeMenu";
+import Link from "next/link";
 import { Capsule } from "@/components/ui";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
@@ -173,6 +174,29 @@ export default function Home() {
   // always comes fresh from the next /api/daily/results fetch rather than a
   // possibly-stale snapshot (see lib/dailyResultsCache).
   const [dailyRank, setDailyRank] = useState<DailyRank | null>(null);
+  // Count of open public tournaments — powers the entry-point enticements (the
+  // sidebar TOURNAMENTS card's "X open now" and the post-daily "need more?" nudge).
+  // null until the anonymous browse feed resolves; 0 (or a failed fetch) hides the
+  // count affordances entirely. Fetched once on mount; cheap, no creds.
+  const [openPublicCount, setOpenPublicCount] = useState<number | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/private-tournament/public")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active) {
+          setOpenPublicCount(
+            Array.isArray(d?.tournaments) ? d.tournaments.length : 0,
+          );
+        }
+      })
+      .catch(() => {
+        /* leave null — the affordances just won't show a count */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   // Whether today's completion has resolved (results fetched, or no account to
   // fetch for). Until then we hold a stable placeholder so the daily block can't
   // flash "Play" and then flip to your result once the fetch lands. Seeds true when
@@ -992,6 +1016,20 @@ export default function Home() {
               Review your team
             </button>
           </div>
+          {/* Caught your daily? Nudge toward the next hook: open public tournaments.
+              Only shows once today's result is in AND there are open ones to join. */}
+          {openPublicCount && openPublicCount > 0 ? (
+            <Link
+              href="/tournament?tab=private"
+              className="mt-4 flex items-center gap-2 border-t border-white/15 pt-3 font-cond text-[12px] font-semibold uppercase tracking-[0.1em]"
+            >
+              <span className="text-[var(--md-paper-3)]">Need more?</span>
+              <span className="inline-flex items-center gap-1 text-[var(--md-yellow)]">
+                {openPublicCount} tournament{openPublicCount === 1 ? "" : "s"} open
+                <span aria-hidden>→</span>
+              </span>
+            </Link>
+          ) : null}
         </>
       ) : (
         <>
@@ -1127,6 +1165,7 @@ export default function Home() {
           dailyBody={dailyBody}
           dailyHistory={dailyHistory}
           onStartGame={(nextMode) => startGame(nextMode, "free")}
+          openPublicCount={openPublicCount}
         />
       )}
 

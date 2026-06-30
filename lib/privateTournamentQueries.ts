@@ -59,6 +59,7 @@ export interface CreatePrivateTournamentArgs {
   boardMode: PrivateBoardMode;
   board: PrivateBoard;
   expiresAt: string; // ISO timestamp the open window closes
+  isPublic: boolean; // list in the public "open to everyone" browse feed
   // Optional caller-supplied id. The blind board is seeded by the tournament id,
   // so the create route fixes the id UP FRONT, generates the board from it, then
   // passes it here so the stored row and the board's seed agree. Omit to let this
@@ -82,8 +83,8 @@ export async function createPrivateTournament(
     `INSERT INTO ${TDB}.private_tournaments
        (tournament_id, name, name_norm, pin_hash, pin_salt,
         admin_user_id, admin_name, mode, size, board_mode, board_json,
-        status, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', $12)`,
+        status, expires_at, is_public)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', $12, $13)`,
     [
       tournamentId,
       args.name,
@@ -97,6 +98,7 @@ export async function createPrivateTournament(
       args.boardMode,
       JSON.stringify(args.board),
       args.expiresAt,
+      args.isPublic,
     ],
   );
   return tournamentId;

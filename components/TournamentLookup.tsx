@@ -18,6 +18,7 @@ import {
 import { TournamentResults } from "@/components/TournamentResults";
 import { TierBadge } from "@/components/TierBadge";
 import { PrivateTournamentCreate } from "@/components/private/PrivateTournamentCreate";
+import { PublicTournamentList } from "@/components/private/PublicTournamentList";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
 import { getCachedTeams, setCachedTeams } from "@/lib/tournamentTeamsCache";
 import { regWinsFromSeedNet } from "@/lib/tier";
@@ -685,7 +686,7 @@ export function TournamentLookup({
         setError(
           res.status === 401
             ? "No account found for that name and PIN."
-            : "Couldn't load your private tournaments right now. Try again.",
+            : "Couldn't load your tournaments right now. Try again.",
         );
         return;
       }
@@ -696,7 +697,7 @@ export function TournamentLookup({
       setPage(0);
       setView("list");
     } catch {
-      setError("Couldn't load your private tournaments right now. Try again.");
+      setError("Couldn't load your tournaments right now. Try again.");
     } finally {
       setSubmitting(false);
     }
@@ -908,9 +909,13 @@ export function TournamentLookup({
                 variant="teal"
                 onClick={() => setShowCreate(true)}
               >
-                + Create private tournament
+                + Create tournament
               </Button>
             )}
+
+            {/* Public "open to everyone" browse list — anonymous, self-fetching;
+                renders nothing when no tournaments are open. */}
+            {!showCreate && <PublicTournamentList />}
 
             {!showCreate &&
               (privateLoading ? (
@@ -918,14 +923,14 @@ export function TournamentLookup({
                   spacingClassName="py-6"
                   textClassName="font-mono text-[13px] normal-case tracking-normal"
                 >
-                  Loading your private tournaments…
+                  Loading your tournaments…
                 </LoadingState>
               ) : privateRows && privateRows.length > 0 ? (
                 privateRows.map((r) => (
                   <PrivateRow key={r.tournamentId} row={r} />
                 ))
               ) : (
-                <EmptyState title="No active private tournaments">
+                <EmptyState title="No active tournaments">
                   Create one above, or open a friend&rsquo;s invite link.
                 </EmptyState>
               ))}
@@ -1050,11 +1055,11 @@ export function TournamentLookup({
                   className="font-archivo leading-tight"
                   style={{ fontSize: 20, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}
                 >
-                  Private tournament
+                  Tournaments
                 </div>
                 <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
-                  Host an invite-only bracket for your friends, or open an invite
-                  link someone shared with you.
+                  Host a bracket for your crew, share the link, or jump into a
+                  public one that&rsquo;s open to everyone.
                 </p>
               </div>
               <Button
@@ -1062,14 +1067,18 @@ export function TournamentLookup({
                 variant="teal"
                 onClick={() => setShowCreate(true)}
               >
-                + Create private tournament
+                + Create tournament
               </Button>
             </div>
+
+            {/* Public "open to everyone" browse list — anonymous; renders nothing
+                when no public tournaments are open. */}
+            <PublicTournamentList />
 
             <form onSubmit={submitJoin} className="md-card flex flex-col gap-3 p-5">
               <div>
                 <div className="font-cond text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Join a private tournament
+                  Join a tournament
                 </div>
                 <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
                   Enter the tournament&rsquo;s name + PIN to grab a slot and
@@ -1140,7 +1149,7 @@ export function TournamentLookup({
                 variant="secondary"
                 disabled={!canSubmit}
               >
-                {submitting ? "Checking…" : "Show my private tournaments"}
+                {submitting ? "Checking…" : "Show my tournaments"}
               </Button>
             </form>
           </>

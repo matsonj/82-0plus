@@ -11,7 +11,7 @@ const TAB_LABEL: Record<TournamentLookupTab, string> = {
   daily: "Daily",
   hoopiq: "Ranked",
   classic: "Classic",
-  private: "Private",
+  private: "Tournaments",
 };
 
 export function TournamentLookupTabs({

@@ -73,6 +73,11 @@ export async function POST(req: NextRequest) {
     }
     const { name, pin, mode, size, boardMode } = parsed.value;
 
+    // Opt-in public listing (parsed loosely, like manualSlots — kept out of the
+    // shared validateCreateParams shape). Default false = unlisted; only an
+    // explicit `true` lists the tournament in the public browse feed.
+    const isPublic = body?.isPublic === true;
+
     // ---- Admin account (create-or-match by the signed-in account's creds). ----
     // Primary contract: adminName/adminPin. Backward-compat: if those are absent,
     // fall back to the tournament's name/pin so older callers don't 500.
@@ -174,6 +179,7 @@ export async function POST(req: NextRequest) {
       boardMode,
       board,
       expiresAt,
+      isPublic,
     });
 
     // Telemetry: a private tournament was created. mode + size are the two knobs
