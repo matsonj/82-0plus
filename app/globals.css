@@ -32,7 +32,8 @@
   --md-teal-bright: #1e8e5a;  /* brighter court green */
   --md-blue: #1a2eae;         /* process-blue editorial ink — data links, info */
   --md-sky: #5b23c9;          /* violet — era / decade theming, "Flex" slot */
-  --md-cobalt: #2b4bff;       /* Private Tournament accent (new) */
+  --md-cobalt: #1a2eae;       /* tournament/"YOU" accent — aliases the on-system
+                                 process-blue (--md-blue); was an off-palette #2b4bff */
   --md-magenta: #e0218a;      /* riso magenta — overprint / sticker double-shadow (decorative) */
   --md-gray-100: #e1d9c6;     /* legacy alias */
 
