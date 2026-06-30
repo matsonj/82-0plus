@@ -325,6 +325,7 @@ export function PrivateTournamentDraft({
         mode={gameMode}
         allowCancelPending={false}
         allowRespin={false}
+        spinOnMount
         onConsumeSource={() => {}}
         headerLabel="Your starting five"
         counterLabel={(placed, total) => `Reveal ${placed + 1} of ${total}`}
