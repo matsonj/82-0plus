@@ -350,6 +350,28 @@ export async function registerWithPurgeTx(
   });
 }
 
+/** Result of a partial/submit write. `gone` = the row was deleted (purged by the
+ *  10-minute timeout / removed) between the caller's gate and the write; `locked` =
+ *  the row survives but already advanced past in-progress (a concurrent submit or a
+ *  finalize flipped it to submitted/bot_replaced). Both are 0-row UPDATEs, but the
+ *  caller reports them differently (410 removed vs 409 already-locked). */
+export type EntryWriteOutcome =
+  | { ok: true }
+  | { ok: false; reason: "gone" | "locked" };
+
+/** Classify why an in-progress UPDATE matched 0 rows. Best-effort and only used for
+ *  the caller's error message — the UPDATE's own `status IN ('registered','partial')`
+ *  predicate is what actually prevents clobbering a submitted/bot_replaced row. */
+async function classifyEntryWriteMiss(
+  entryId: string,
+): Promise<{ ok: false; reason: "gone" | "locked" }> {
+  const rows = await queryRW<{ status: string }>(
+    `SELECT status FROM ${TDB}.private_entries WHERE entry_id = $1 LIMIT 1`,
+    [entryId],
+  );
+  return { ok: false, reason: rows.length === 0 ? "gone" : "locked" };
+}
+
 export interface SavePrivatePartialArgs {
   entryId: string;
   rosterJson: unknown; // SimPick[] — the five starters
@@ -366,14 +388,16 @@ export interface SavePrivatePartialArgs {
  * the reg-season record + seed, and the share box. The sixth man, captain and
  * final bracket fields are filled later (submit / finalize).
  *
- * Returns true iff a row was actually updated. A public entry can be purged (the
- * 10-minute timeout) between loadOpenPrivateEntry's gate and this write; when that
- * happens the UPDATE matches 0 rows and this returns false so the caller reports
- * "removed" rather than a false success.
+ * Only updates an IN-PROGRESS row (status registered|partial). Between the caller's
+ * loadOpenPrivateEntry gate and this write the entry can be purged (10-minute
+ * timeout) OR advanced by a concurrent submit/finalize; without the status
+ * predicate a slow /partial would clobber a submitted/bot_replaced row, regressing
+ * finalized state. On a 0-row UPDATE we classify the miss (gone vs locked) so the
+ * caller reports it correctly instead of a false success.
  */
 export async function savePrivatePartial(
   args: SavePrivatePartialArgs,
-): Promise<boolean> {
+): Promise<EntryWriteOutcome> {
   await ensureSchema();
   const updated = await queryRW<{ entry_id: string }>(
     `UPDATE ${TDB}.private_entries
@@ -386,6 +410,7 @@ export async function savePrivatePartial(
             team_box_json = $7,
             team_name = COALESCE($8, team_name)
       WHERE entry_id = $1
+        AND status IN ('registered', 'partial')
       RETURNING entry_id`,
     [
       args.entryId,
@@ -398,7 +423,8 @@ export async function savePrivatePartial(
       args.teamName ?? null,
     ],
   );
-  return updated.length > 0;
+  if (updated.length > 0) return { ok: true };
+  return classifyEntryWriteMiss(args.entryId);
 }
 
 export interface SubmitPrivateEntryArgs {
@@ -417,14 +443,15 @@ export interface SubmitPrivateEntryArgs {
  * final roster display, and the provisional bracket standing computed at submit
  * time. The final_* playoff fields are written only at finalization.
  *
- * Returns true iff a row was actually updated. Like savePrivatePartial, a public
- * entry can be purged (the 10-minute timeout) between loadOpenPrivateEntry's gate
- * and this write; a 0-row UPDATE returns false so the caller reports "removed"
- * instead of a false success (and skips the eager finalize).
+ * Only updates an IN-PROGRESS row (status registered|partial). Guards the same race
+ * as savePrivatePartial: a slow /submit must NOT overwrite a row that a concurrent
+ * submit already locked in or that finalize turned into bot_replaced. On a 0-row
+ * UPDATE the miss is classified (gone vs locked) so the caller reports removal /
+ * conflict instead of a false success (and skips the eager finalize).
  */
 export async function submitPrivateEntry(
   args: SubmitPrivateEntryArgs,
-): Promise<boolean> {
+): Promise<EntryWriteOutcome> {
   await ensureSchema();
   const updated = await queryRW<{ entry_id: string }>(
     `UPDATE ${TDB}.private_entries
@@ -438,6 +465,7 @@ export async function submitPrivateEntry(
             team_name = COALESCE($8, team_name),
             submitted_at = now()
       WHERE entry_id = $1
+        AND status IN ('registered', 'partial')
       RETURNING entry_id`,
     [
       args.entryId,
@@ -450,7 +478,8 @@ export async function submitPrivateEntry(
       args.teamName ?? null,
     ],
   );
-  return updated.length > 0;
+  if (updated.length > 0) return { ok: true };
+  return classifyEntryWriteMiss(args.entryId);
 }
 
 // ── Finalization persistence (MATH lives elsewhere) ───────────────────────────

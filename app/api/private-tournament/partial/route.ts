@@ -107,18 +107,24 @@ export async function POST(req: NextRequest) {
       teamBoxJson: sim.teamBox,
       teamName,
     });
-    if (!saved) {
-      // The entry was purged (10-minute timeout) between the gate and this write.
-      // Report removal (410) rather than a false success so the client shows the
-      // "you were removed" state instead of pretending the draft saved.
-      return jsonWithSessionHint(
-        sessionHint,
-        {
-          error:
-            "Your 10-minute window expired — you were removed. Rejoin if there's still room.",
-        },
-        { status: 410 },
-      );
+    if (!saved.ok) {
+      // The write matched no in-progress row. `gone` = purged (10-min timeout) →
+      // removed (410); `locked` = a concurrent submit/finalize already advanced this
+      // entry → conflict (409). Either way we never clobber and never false-succeed.
+      return saved.reason === "gone"
+        ? jsonWithSessionHint(
+            sessionHint,
+            {
+              error:
+                "Your 10-minute window expired — you were removed. Rejoin if there's still room.",
+            },
+            { status: 410 },
+          )
+        : jsonWithSessionHint(
+            sessionHint,
+            { error: "This entry is already locked in." },
+            { status: 409 },
+          );
     }
 
     return jsonWithSessionHint(sessionHint, {
