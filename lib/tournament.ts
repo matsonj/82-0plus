@@ -937,6 +937,21 @@ export function simulateBracket(
     // round 1 with NO recovery — route them through `recoveryCarryFromPlayIn`.
     playInSurvivors.add(sevenWinId);
     playInSurvivors.add(eightWinId);
+    // NBA seeding: the play-in decides seeds 7-10 by OUTCOME, not the regular-
+    // season line. seedConf assigns 1..10 by strength up front and never rewrites
+    // these, so without this the survivors keep their reg seed and the bracket
+    // reads as odd 1v7/2v8 pairings. Reassign all four so the conference stays a
+    // unique 1..10 and the finish order (decider loser 9 > 9v10 loser 10) matches
+    // the standings tail. `.seed` is a DISPLAY field only (the sim keys off
+    // seedNet + slot position), so this does not affect simulation.
+    const setSeed = (id: string, seed: number) => {
+      const bt = bracketById.get(id);
+      if (bt) bt.seed = seed;
+    };
+    setSeed(sevenWinId, 7); // won the 7v8
+    setSeed(eightWinId, 8); // won the 8-seed decider
+    setSeed(eightLoserId, 9); // reached the decider, lost it
+    setSeed(bLoserId, 10); // lost the 9v10, out first
     // Resolved 7 & 8 seeds replace slots 6 & 7; seeds 9/10 are gone.
     const out = seeded.slice(0, 6);
     out.push({ team: byId.get(sevenWinId)! });

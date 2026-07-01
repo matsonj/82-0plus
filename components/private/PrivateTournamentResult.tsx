@@ -16,14 +16,241 @@ import type { PrivateCompletedEntry } from "@/components/private/types";
 import { copyText } from "@/lib/copyText";
 import { SITE_URL } from "@/lib/site";
 import { Button, Capsule } from "@/components/ui";
+import type { BracketTeam } from "@/lib/types";
 
-// Final standings rank: most playoff wins first, then better net margin. A
-// timed-out (bot_replaced) entrant is DISPLAYED as "Bot (timed out)" with its
-// W-L/margin hidden — so it must rank at the BOTTOM, regardless of the replacement
-// bot's stored final record (which finalization writes back onto the entry).
-function standingsRank(e: PrivateCompletedEntry): [number, number] {
-  if (e.status === "bot_replaced") return [-Infinity, -Infinity];
-  return [e.finalRecordW ?? -1, e.finalRealizedMargin ?? -Infinity];
+// ── Standings ordering (elimination round first) ──────────────────────────────
+// Rank by how far a team advanced (round reached), then playoff record, then net
+// margin. The stored `finalStatus` strings are a fixed set (see statusLabel):
+// Champion › Lost Finals › Lost Conf Finals › Lost Semis › Lost R1 › Lost Play-In.
+function statusOrdinal(status: string | null | undefined): number {
+  switch (status) {
+    case "Champion": return 6;
+    case "Lost Finals": return 5;
+    case "Lost Conf Finals": return 4;
+    case "Lost Semis": return 3;
+    case "Lost R1": return 2;
+    case "Lost Play-In": return 1;
+    default: return 0; // "Eliminated" / unknown
+  }
+}
+
+// Friendly RESULT-column phrasing: achievement framing for the deep runs; the
+// loss framing (in flame) is kept only for the play-in exit. Unknown → stored.
+function resultLabel(status: string | null | undefined): string {
+  switch (status) {
+    case "Champion": return "Champion";
+    case "Lost Finals": return "Runner-Up";
+    case "Lost Conf Finals": return "Conf Finals";
+    case "Lost Semis": return "Semifinals";
+    case "Lost R1": return "Round 1";
+    case "Lost Play-In": return "Lost Play-In";
+    default: return formatTournamentStatus(status);
+  }
+}
+
+type StandingTier = "champion" | "podium" | "body" | "tail";
+
+// The editorial leaderboard tapers weight by finish: a gold champion hero, a
+// heavier podium for the deep runs, plain body rows, and a muted tail for the
+// play-in losers / timed-out bots.
+const TIER_STYLE: Record<
+  StandingTier,
+  {
+    pad: string;
+    numeral: string;
+    numeralColor: string;
+    name: string;
+    nameWeight: number;
+    nameColor: string;
+    nameGap: number;
+    metaColor: string;
+    metaOpacity: number;
+    metaSize: string;
+    regSize: string;
+    regOpacity: number;
+    playoffSize: string;
+    playoffMuted: boolean;
+    netSize: string;
+    resultSize: string;
+    resultWeight: number;
+    resultMuted: boolean;
+  }
+> = {
+  champion: {
+    pad: "py-4",
+    numeral: "text-[38px]", numeralColor: "var(--md-ink)",
+    name: "text-[26px]", nameWeight: 800, nameColor: "var(--md-ink)", nameGap: 3,
+    metaColor: "var(--md-ink)", metaOpacity: 0.72, metaSize: "text-[11px]",
+    regSize: "text-[13px]", regOpacity: 0.6,
+    playoffSize: "text-[16px]", playoffMuted: false,
+    netSize: "text-[15px]",
+    resultSize: "text-[13px]", resultWeight: 700, resultMuted: false,
+  },
+  podium: {
+    pad: "py-[13px]",
+    numeral: "text-[28px]", numeralColor: "var(--md-ink)",
+    name: "text-[20px]", nameWeight: 700, nameColor: "var(--md-ink)", nameGap: 2,
+    metaColor: "var(--md-ink-muted)", metaOpacity: 1, metaSize: "text-[10px]",
+    regSize: "text-[12px]", regOpacity: 1,
+    playoffSize: "text-[14px]", playoffMuted: false,
+    netSize: "text-[13px]",
+    resultSize: "text-[12px]", resultWeight: 600, resultMuted: false,
+  },
+  body: {
+    pad: "py-[9px]",
+    numeral: "text-[22px]", numeralColor: "var(--md-ink)",
+    name: "text-[17px]", nameWeight: 600, nameColor: "var(--md-ink)", nameGap: 1,
+    metaColor: "var(--md-ink-muted)", metaOpacity: 1, metaSize: "text-[10px]",
+    regSize: "text-[12px]", regOpacity: 1,
+    playoffSize: "text-[14px]", playoffMuted: false,
+    netSize: "text-[13px]",
+    resultSize: "text-[11px]", resultWeight: 500, resultMuted: true,
+  },
+  tail: {
+    pad: "py-[7px]",
+    numeral: "text-[18px]", numeralColor: "var(--md-ink-muted)",
+    name: "text-[14px]", nameWeight: 500, nameColor: "var(--md-ink-muted)", nameGap: 1,
+    metaColor: "var(--md-ink-muted)", metaOpacity: 0.75, metaSize: "text-[9px]",
+    regSize: "text-[11px]", regOpacity: 0.7,
+    playoffSize: "text-[12px]", playoffMuted: true,
+    netSize: "text-[12px]",
+    resultSize: "text-[11px]", resultWeight: 500, resultMuted: true,
+  },
+};
+
+function rowTier(rankIndex: number, status: string | null | undefined, isBot: boolean): StandingTier {
+  if (rankIndex === 0 && status === "Champion") return "champion";
+  if (isBot || status === "Lost Play-In") return "tail";
+  if (rankIndex <= 2) return "podium";
+  return "body";
+}
+
+// Champion crown (matches the bracket terminus + header badge).
+function CrownMark() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M3 7L7 11L12 4L17 11L21 7L19.5 19H4.5L3 7Z" fill="var(--md-ink)" />
+      <rect x="4.5" y="19.5" width="15" height="2.2" fill="var(--md-ink)" />
+    </svg>
+  );
+}
+
+// One leaderboard row: [Rk] [Team + conf·seed] [Reg] [Playoff] [Net] [Result].
+function StandingRow({
+  rank,
+  entry,
+  team,
+  mine,
+}: {
+  rank: number;
+  entry: PrivateCompletedEntry;
+  team: BracketTeam | undefined;
+  mine: boolean;
+}) {
+  const isBot = entry.status === "bot_replaced";
+  const tier = rowTier(rank - 1, entry.finalStatus, isBot);
+  const t = TIER_STYLE[tier];
+
+  const teamName = entry.teamName ?? entry.userName;
+  const meta = team ? `${team.conference} · ${team.seed} seed` : null;
+
+  const reg = formatRecord(entry.regW, entry.regL);
+  const playoff = isBot ? null : formatRecord(entry.finalRecordW, entry.finalRecordL);
+  const margin =
+    !isBot && entry.finalRealizedMargin != null
+      ? formatSignedMargin(entry.finalRealizedMargin)
+      : null;
+  const result = isBot ? formatPrivateEntryStatus(entry.status) : resultLabel(entry.finalStatus);
+
+  const isPlayInLoss = entry.finalStatus === "Lost Play-In";
+  const resultColor = isPlayInLoss
+    ? "var(--md-coral-deep)"
+    : t.resultMuted
+      ? "var(--md-ink-muted)"
+      : "var(--md-ink)";
+  const nameColor = mine && tier !== "champion" ? "var(--md-cobalt)" : t.nameColor;
+
+  // Row chrome: champion = gold hero; everyone else = hairline-separated. The
+  // viewer's own row (when not champion) is tinted cobalt — never yellow.
+  const rowStyle: React.CSSProperties =
+    tier === "champion"
+      ? {
+          background: "var(--md-yellow)",
+          border: "2px solid var(--md-ink)",
+          boxShadow: "3px 3px 0 0 var(--md-ink)",
+        }
+      : {
+          borderBottom: "1px solid var(--md-paper-3)",
+          background: mine ? "color-mix(in srgb, var(--md-cobalt) 8%, transparent)" : undefined,
+          borderLeft: mine ? "3px solid var(--md-cobalt)" : undefined,
+        };
+
+  return (
+    <div
+      className={`flex items-center gap-4 px-3.5 ${t.pad} ${tier === "champion" ? "mb-2" : ""}`}
+      style={rowStyle}
+    >
+      {/* Rank */}
+      <div
+        className={`w-14 shrink-0 text-center font-cover leading-[80%] ${t.numeral}`}
+        style={{ color: t.numeralColor }}
+      >
+        {rank}
+      </div>
+      {/* Team + meta */}
+      <div className="flex min-w-0 grow flex-col" style={{ gap: t.nameGap }}>
+        <div className="flex items-center gap-2">
+          {tier === "champion" && <CrownMark />}
+          <span
+            className={`truncate font-archivo uppercase leading-[105%] ${t.name}`}
+            style={{ fontWeight: t.nameWeight, color: nameColor }}
+          >
+            {mine ? "★ " : ""}
+            {entry.status === "bot_replaced" && !entry.teamName ? entry.userName : teamName}
+          </span>
+        </div>
+        {meta && (
+          <span
+            className={`font-byline uppercase tracking-[0.06em] ${t.metaSize}`}
+            style={{ color: t.metaColor, opacity: t.metaOpacity }}
+          >
+            {meta}
+          </span>
+        )}
+      </div>
+      {/* Reg */}
+      <div
+        className={`w-[90px] shrink-0 text-right font-mono tabular-nums ${t.regSize}`}
+        style={{ color: "var(--md-ink-muted)", opacity: t.regOpacity }}
+      >
+        {reg ?? "—"}
+      </div>
+      {/* Playoff */}
+      <div
+        className={`w-[84px] shrink-0 text-right font-mono font-bold tabular-nums ${t.playoffSize}`}
+        style={{ color: t.playoffMuted ? "var(--md-ink-muted)" : "var(--md-ink)", opacity: t.playoffMuted ? 0.7 : 1 }}
+      >
+        {playoff ?? "—"}
+      </div>
+      {/* Net */}
+      <div
+        className={`w-[76px] shrink-0 text-right font-mono font-bold tabular-nums ${t.netSize}`}
+        style={{
+          color: margin ? (margin.positive ? "var(--md-teal)" : "var(--md-coral)") : "var(--md-ink-muted)",
+          opacity: margin ? 1 : tier === "tail" ? 0.5 : 1,
+        }}
+      >
+        {margin ? margin.text : "—"}
+      </div>
+      {/* Result */}
+      <div
+        className={`w-[150px] shrink-0 text-right font-cond uppercase tracking-[0.08em] ${t.resultSize}`}
+        style={{ fontWeight: t.resultWeight, color: resultColor }}
+      >
+        {result}
+      </div>
+    </div>
+  );
 }
 
 export function PrivateTournamentResult({
@@ -58,11 +285,34 @@ export function PrivateTournamentResult({
     }).catch(() => {});
   }, [you, data.tournamentId]);
 
-  // Sort entries for the standings table.
+  // Join each entry to its bracket team (id = `entry:<entryId>`) for conference +
+  // seed, and to sub-order play-in losers (decider loser seed 9 above 9v10 seed 10).
+  const teamByEntry = new Map((data.bracket?.teams ?? []).map((t) => [t.id, t]));
+  const teamOf = (e: PrivateCompletedEntry) => teamByEntry.get(`entry:${e.entryId}`);
+
+  // Rank: deeper run first, then playoff record, then net margin. Timed-out bots
+  // sink to the bottom; play-in losers are sub-ordered by earned seed.
   const sortedEntries = [...data.entries].sort((a, b) => {
-    const [aw, am] = standingsRank(a);
-    const [bw, bm] = standingsRank(b);
-    return bw - aw || bm - am;
+    const aBot = a.status === "bot_replaced";
+    const bBot = b.status === "bot_replaced";
+    if (aBot !== bBot) return aBot ? 1 : -1;
+    if (aBot && bBot)
+      return (a.teamName ?? a.userName).localeCompare(b.teamName ?? b.userName);
+
+    const ao = statusOrdinal(a.finalStatus);
+    const bo = statusOrdinal(b.finalStatus);
+    if (ao !== bo) return bo - ao;
+
+    if (ao === 1) {
+      const as = teamOf(a)?.seed ?? 99;
+      const bs = teamOf(b)?.seed ?? 99;
+      if (as !== bs) return as - bs;
+      return (b.finalRealizedMargin ?? -Infinity) - (a.finalRealizedMargin ?? -Infinity);
+    }
+    const aw = a.finalRecordW ?? -1;
+    const bw = b.finalRecordW ?? -1;
+    if (aw !== bw) return bw - aw;
+    return (b.finalRealizedMargin ?? -Infinity) - (a.finalRealizedMargin ?? -Infinity);
   });
 
   // Viewer's own entry for the footer callout.
@@ -117,107 +367,56 @@ export function PrivateTournamentResult({
         )}
       </div>
 
-      {/* Final standings — tabular; the viewer's own team highlighted yellow. */}
-      <div className="flex flex-col gap-2">
-        <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
-          Final Standings
-        </span>
+      {/* Final standings — editorial leaderboard. Champion gold hero, weight
+          tapers by finish; the viewer's own row is tinted cobalt (never yellow). */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-baseline gap-4">
+          <span className="font-cond text-[13px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
+            Final Standings
+          </span>
+          <div className="h-px grow bg-[var(--md-paper-3)]" />
+          <span className="font-mono text-[10px] text-[var(--md-ink-muted)]">
+            {data.entries.length} entrants · ranked by round reached, then record
+          </span>
+        </div>
         <div className="overflow-x-auto">
-          {/* A real table so every column shares ONE width across all rows —
-              fixed layout + explicit column widths keep it aligned. */}
-          <table className="w-full min-w-[460px] table-fixed border-collapse">
-            <colgroup>
-              <col />
-              <col style={{ width: 64 }} />
-              <col style={{ width: 72 }} />
-              <col style={{ width: 64 }} />
-              <col style={{ width: 124 }} />
-            </colgroup>
-            <thead>
-              <tr
-                className="text-left"
-                style={{ borderBottom: "2px solid var(--md-ink)" }}
-              >
-                <th className="pb-1 pr-1 font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Team
-                </th>
-                <th className="pb-1 pr-1 text-right font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Net
-                </th>
-                <th className="pb-1 pr-1 text-right font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Reg
-                </th>
-                <th className="pb-1 pr-1 text-right font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Playoff
-                </th>
-                <th className="pb-1 pr-1 text-right font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
-                  Round
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedEntries.map((e, i) => {
-                const mine = !!you?.entryId && e.entryId === you.entryId;
-                const isBot = e.status === "bot_replaced";
-                const margin =
-                  !isBot && e.finalRealizedMargin != null
-                    ? formatSignedMargin(e.finalRealizedMargin)
-                    : null;
-                const reg = formatRecord(e.regW, e.regL);
-                const playoff = isBot
-                  ? null
-                  : formatRecord(e.finalRecordW, e.finalRecordL);
-                const round = isBot
-                  ? formatPrivateEntryStatus(e.status)
-                  : formatTournamentStatus(e.finalStatus);
-                return (
-                  <tr
-                    key={e.entryId || `${e.userName}-${i}`}
-                    style={{
-                      borderBottom: "1px solid var(--md-paper-3)",
-                      background: mine ? "var(--md-yellow)" : undefined,
-                    }}
-                  >
-                    <td className="truncate py-1.5 pr-1 font-mono text-[12px] font-bold tabular-nums">
-                      {mine ? "★ " : ""}
-                      {e.teamName ?? e.userName}
-                    </td>
-                    <td className="py-1.5 pr-1 text-right font-mono text-[12px] tabular-nums">
-                      {margin ? (
-                        <span
-                          style={{
-                            color: margin.positive
-                              ? "var(--md-teal)"
-                              : "var(--md-coral)",
-                          }}
-                        >
-                          {margin.text}
-                        </span>
-                      ) : (
-                        <span className="text-[var(--md-ink-muted)]">—</span>
-                      )}
-                    </td>
-                    <td className="py-1.5 pr-1 text-right font-mono text-[12px] tabular-nums text-[var(--md-ink-muted)]">
-                      {reg ?? "—"}
-                    </td>
-                    <td className="py-1.5 pr-1 text-right font-mono text-[12px] tabular-nums">
-                      {playoff ?? "—"}
-                    </td>
-                    <td className="whitespace-nowrap py-1.5 pr-1 text-right font-mono text-[11px] text-[var(--md-ink-muted)]">
-                      {round}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="min-w-[620px]">
+            {/* Column header */}
+            <div className="flex items-center gap-4 border-b-2 border-[var(--md-ink)] px-3.5 pb-1.5">
+              <span className="w-14 shrink-0 font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                Rk
+              </span>
+              <span className="min-w-0 grow font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                Team
+              </span>
+              <span className="w-[90px] shrink-0 text-right font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                Reg
+              </span>
+              <span className="w-[84px] shrink-0 text-right font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                Playoff
+              </span>
+              <span className="w-[76px] shrink-0 text-right font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                Net
+              </span>
+              <span className="w-[150px] shrink-0 text-right font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+                Result
+              </span>
+            </div>
+            {/* Rows */}
+            {sortedEntries.map((e, i) => (
+              <StandingRow
+                key={e.entryId || `${e.userName}-${i}`}
+                rank={i + 1}
+                entry={e}
+                team={teamOf(e)}
+                mine={!!you?.entryId && e.entryId === you.entryId}
+              />
+            ))}
+          </div>
         </div>
         {you && (
           <div className="flex items-center gap-1.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
-            <span
-              className="inline-block h-3 w-3 border-2 border-[var(--md-ink)]"
-              style={{ background: "var(--md-yellow)" }}
-            />
+            <span className="inline-block h-3 w-3" style={{ background: "var(--md-cobalt)" }} />
             <span>★ your team</span>
           </div>
         )}
