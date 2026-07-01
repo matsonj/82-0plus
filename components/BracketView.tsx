@@ -1028,53 +1028,64 @@ function PlayInMiniBracket({
   // Same tile width as the main bracket cards.
   const CARD_W = 240;
 
+  const cardA = (
+    <PlayInCard
+      label="Seeds 7 – 8"
+      stampSeed={7}
+      stampColor={confColor}
+      hi={row(a, a.hiId, a.winnerId === a.hiId, false)}
+      lo={row(a, a.loId, a.winnerId === a.loId, false)}
+    />
+  );
+  const cardB = (
+    <PlayInCard
+      label="Seeds 9 – 10"
+      hi={row(b, b.hiId, b.winnerId === b.hiId, b.winnerId !== b.hiId)}
+      lo={row(b, b.loId, b.winnerId === b.loId, b.winnerId !== b.loId)}
+    />
+  );
+  const cardC = (
+    <PlayInCard
+      label="8-Seed Game"
+      stampSeed={8}
+      stampColor={confColor}
+      hi={row(c, c.hiId, c.winnerId === c.hiId, c.winnerId !== c.hiId)}
+      lo={row(c, c.loId, c.winnerId === c.loId, c.winnerId !== c.loId)}
+    />
+  );
+
   return (
-    <div className="flex" style={{ minHeight: 200 }}>
-      {/* Feeders: A over B */}
-      <div className="flex flex-col" style={{ width: CARD_W + 24 }}>
-        <PlayInFeederSlot isTop>
-          <PlayInCard
-            label="Seeds 7 – 8"
-            stampSeed={7}
-            stampColor={confColor}
-            hi={row(a, a.hiId, a.winnerId === a.hiId, false)}
-            lo={row(a, a.loId, a.winnerId === a.loId, false)}
-          />
-        </PlayInFeederSlot>
-        <PlayInFeederSlot isTop={false}>
-          <PlayInCard
-            label="Seeds 9 – 10"
-            hi={row(b, b.hiId, b.winnerId === b.hiId, b.winnerId !== b.hiId)}
-            lo={row(b, b.loId, b.winnerId === b.loId, b.winnerId !== b.loId)}
-          />
-        </PlayInFeederSlot>
-      </div>
-      {/* Decider */}
-      <div className="flex flex-col" style={{ width: CARD_W + 24 }}>
-        <div className="relative flex flex-1 flex-col items-stretch justify-center">
-          <div
-            className="pointer-events-none absolute"
-            style={{
-              top: "50%",
-              left: 0,
-              width: 24,
-              height: 1,
-              background: "var(--md-ink)",
-              transform: "translateY(-0.5px)",
-            }}
-          />
-          <div style={{ marginLeft: 24 }}>
-            <PlayInCard
-              label="8-Seed Game"
-              stampSeed={8}
-              stampColor={confColor}
-              hi={row(c, c.hiId, c.winnerId === c.hiId, c.winnerId !== c.hiId)}
-              lo={row(c, c.loId, c.winnerId === c.loId, c.winnerId !== c.loId)}
+    <>
+      {/* Desktop / tablet: horizontal feeder → decider tree (sm+) */}
+      <div className="hidden sm:flex" style={{ minHeight: 200 }}>
+        <div className="flex flex-col" style={{ width: CARD_W + 24 }}>
+          <PlayInFeederSlot isTop>{cardA}</PlayInFeederSlot>
+          <PlayInFeederSlot isTop={false}>{cardB}</PlayInFeederSlot>
+        </div>
+        <div className="flex flex-col" style={{ width: CARD_W + 24 }}>
+          <div className="relative flex flex-1 flex-col items-stretch justify-center">
+            <div
+              className="pointer-events-none absolute"
+              style={{
+                top: "50%",
+                left: 0,
+                width: 24,
+                height: 1,
+                background: "var(--md-ink)",
+                transform: "translateY(-0.5px)",
+              }}
             />
+            <div style={{ marginLeft: 24 }}>{cardC}</div>
           </div>
         </div>
       </div>
-    </div>
+      {/* Mobile: the three games stacked full-width, no connectors (below sm) */}
+      <div className="flex w-full flex-col gap-3 sm:hidden">
+        {cardA}
+        {cardB}
+        {cardC}
+      </div>
+    </>
   );
 }
 

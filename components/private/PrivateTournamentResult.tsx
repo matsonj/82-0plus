@@ -258,6 +258,90 @@ function StandingRow({
   );
 }
 
+// Compact mobile standings row: rank + (name / meta line) + result. Avoids the
+// 6-column desktop table, which overflows and truncates on a phone.
+function StandingRowMobile({
+  rank,
+  entry,
+  team,
+  mine,
+}: {
+  rank: number;
+  entry: PrivateCompletedEntry;
+  team: BracketTeam | undefined;
+  mine: boolean;
+}) {
+  const isBot = entry.status === "bot_replaced";
+  const tier = rowTier(rank - 1, entry.finalStatus, isBot);
+  const teamName = entry.teamName ?? entry.userName;
+  const reg = formatRecord(entry.regW, entry.regL);
+  const playoff = isBot ? null : formatRecord(entry.finalRecordW, entry.finalRecordL);
+  const result = isBot ? formatPrivateEntryStatus(entry.status) : resultLabel(entry.finalStatus);
+
+  const resultColor =
+    entry.finalStatus === "Lost Play-In"
+      ? "var(--md-coral-deep)"
+      : tier === "champion" || tier === "podium"
+        ? "var(--md-ink)"
+        : "var(--md-ink-muted)";
+  const numeralSize =
+    tier === "champion"
+      ? "text-[26px]"
+      : tier === "podium"
+        ? "text-[22px]"
+        : tier === "body"
+          ? "text-[18px]"
+          : "text-[15px]";
+
+  const metaParts: string[] = [];
+  if (team) metaParts.push(`${team.conference} · ${team.seed} seed`);
+  if (reg) metaParts.push(`Reg ${reg}`);
+  if (playoff) metaParts.push(`PO ${playoff}`);
+
+  const rowStyle: React.CSSProperties =
+    tier === "champion"
+      ? { background: "var(--md-yellow)", borderBottom: "1px solid var(--md-ink)" }
+      : {
+          borderBottom: "1px solid var(--md-paper-3)",
+          background: mine ? "color-mix(in srgb, var(--md-cobalt) 14%, transparent)" : undefined,
+        };
+
+  return (
+    <div className="flex items-center gap-3 px-2 py-2.5" style={rowStyle}>
+      <span
+        className={`w-9 shrink-0 text-center font-cover leading-none ${numeralSize}`}
+        style={{ color: tier === "tail" ? "var(--md-ink-muted)" : "var(--md-ink)" }}
+      >
+        {rank}
+      </span>
+      <div className="flex min-w-0 grow flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span
+            className="min-w-0 truncate font-archivo uppercase leading-none"
+            style={{
+              fontSize: tier === "champion" ? 18 : 15,
+              fontWeight: tier === "tail" ? 500 : 700,
+              color: tier === "tail" ? "var(--md-ink-muted)" : "var(--md-ink)",
+            }}
+          >
+            {mine ? "★ " : ""}
+            {teamName}
+          </span>
+          <span
+            className="shrink-0 whitespace-nowrap font-cond text-[10px] font-semibold uppercase tracking-[0.06em]"
+            style={{ color: resultColor }}
+          >
+            {result}
+          </span>
+        </div>
+        <div className="truncate font-byline text-[10px] tracking-[0.04em] text-[var(--md-ink-muted)]">
+          {metaParts.join(" · ") || "—"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PrivateTournamentResult({
   data,
 }: {
@@ -423,7 +507,8 @@ export function PrivateTournamentResult({
             {data.entries.length} entrants · ranked by round reached, then record
           </span>
         </div>
-        <div className="overflow-x-auto">
+        {/* Desktop: full editorial table (md+). */}
+        <div className="hidden overflow-x-auto md:block">
           <div className="min-w-[620px]">
             {/* Column header */}
             <div className="flex items-center gap-4 border-b-2 border-[var(--md-ink)] px-3.5 pb-1.5">
@@ -457,6 +542,18 @@ export function PrivateTournamentResult({
               />
             ))}
           </div>
+        </div>
+        {/* Mobile: compact stacked rows (below md) — name + meta line + result. */}
+        <div className="flex flex-col md:hidden" style={{ borderTop: "2px solid var(--md-ink)" }}>
+          {sortedEntries.map((e, i) => (
+            <StandingRowMobile
+              key={e.entryId || `${e.userName}-${i}`}
+              rank={i + 1}
+              entry={e}
+              team={teamOf(e)}
+              mine={!!you?.entryId && e.entryId === you.entryId}
+            />
+          ))}
         </div>
         {you && (
           <div className="flex items-center gap-1.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
