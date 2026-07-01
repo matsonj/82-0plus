@@ -8,17 +8,17 @@ export function HomeMenu({
   dailyBody,
   dailyHistory,
   onStartGame,
-  openPublicCount,
+  joinablePublicCount,
   joinPublicHref,
 }: {
   dateline: string | null;
   dailyBody: ReactNode;
   dailyHistory: ReactNode;
   onStartGame: (mode: GameMode) => void;
-  // Open public-tournament count for the "X open now" enticement. null = unknown
+  // Joinable public-tournament count for the "X open now" enticement. null = unknown
   // (loading / failed) → the public row falls back to a plain "Join public".
-  openPublicCount: number | null;
-  // "Join public" destination — a lone open tournament links to its lobby, 2+ to
+  joinablePublicCount: number | null;
+  // "Join public" destination — a lone joinable tournament links to its lobby, 2+ to
   // the list (computed by the page from the live count).
   joinPublicHref: string;
 }) {
@@ -121,8 +121,8 @@ export function HomeMenu({
               className="flex flex-1 items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-yellow)] px-4 py-2 text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
             >
               <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em]">
-                {openPublicCount && openPublicCount > 0 ? (
-                  <>{openPublicCount} open · Join public</>
+                {joinablePublicCount && joinablePublicCount > 0 ? (
+                  <>{joinablePublicCount} open · Join public</>
                 ) : (
                   <>Join public</>
                 )}

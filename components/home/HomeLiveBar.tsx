@@ -2,8 +2,8 @@ import Link from "next/link";
 
 // Full-bleed "live public tournaments" beacon, shown under the masthead on the
 // home menu. Flame red is THE SLAM live-beacon / CTA ink (type on flame is cream);
-// the JOIN chip is a press-yellow stamp (ink type). Renders nothing when no
-// tournaments are open, so it never shows a dead "0 open" bar.
+// the JOIN chip is a press-yellow stamp (ink type). Renders nothing when no listed
+// tournaments still have room, so it never shows a dead "0 open" bar.
 //
 // Full-bleed trick (same as GlobalHeader): width:100vw + marginLeft:calc(50% - 50vw)
 // breaks it out of the PageShell max-width; body has overflow-x:hidden to absorb
@@ -15,7 +15,7 @@ export function HomeLiveBar({
 }: {
   count: number;
   entrants: number;
-  // Where "Join the field" goes: a single open tournament links straight to its
+  // Where "Join the field" goes: a single joinable tournament links straight to its
   // lobby (/p/<id>); 2+ go to the browsable list. Computed by the caller.
   href: string;
 }) {
