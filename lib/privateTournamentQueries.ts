@@ -365,12 +365,17 @@ export interface SavePrivatePartialArgs {
  * Save the interstitial 5-player draft as a 'partial' entry: just the starters,
  * the reg-season record + seed, and the share box. The sixth man, captain and
  * final bracket fields are filled later (submit / finalize).
+ *
+ * Returns true iff a row was actually updated. A public entry can be purged (the
+ * 10-minute timeout) between loadOpenPrivateEntry's gate and this write; when that
+ * happens the UPDATE matches 0 rows and this returns false so the caller reports
+ * "removed" rather than a false success.
  */
 export async function savePrivatePartial(
   args: SavePrivatePartialArgs,
-): Promise<void> {
+): Promise<boolean> {
   await ensureSchema();
-  await queryRW(
+  const updated = await queryRW<{ entry_id: string }>(
     `UPDATE ${TDB}.private_entries
         SET status = 'partial',
             roster_json = $2,
@@ -380,7 +385,8 @@ export async function savePrivatePartial(
             reg_l = $6,
             team_box_json = $7,
             team_name = COALESCE($8, team_name)
-      WHERE entry_id = $1`,
+      WHERE entry_id = $1
+      RETURNING entry_id`,
     [
       args.entryId,
       JSON.stringify(args.rosterJson),
@@ -392,6 +398,7 @@ export async function savePrivatePartial(
       args.teamName ?? null,
     ],
   );
+  return updated.length > 0;
 }
 
 export interface SubmitPrivateEntryArgs {
@@ -409,12 +416,17 @@ export interface SubmitPrivateEntryArgs {
  * Lock in a complete six as a 'submitted' entry: the sixth man, captain slot,
  * final roster display, and the provisional bracket standing computed at submit
  * time. The final_* playoff fields are written only at finalization.
+ *
+ * Returns true iff a row was actually updated. Like savePrivatePartial, a public
+ * entry can be purged (the 10-minute timeout) between loadOpenPrivateEntry's gate
+ * and this write; a 0-row UPDATE returns false so the caller reports "removed"
+ * instead of a false success (and skips the eager finalize).
  */
 export async function submitPrivateEntry(
   args: SubmitPrivateEntryArgs,
-): Promise<void> {
+): Promise<boolean> {
   await ensureSchema();
-  await queryRW(
+  const updated = await queryRW<{ entry_id: string }>(
     `UPDATE ${TDB}.private_entries
         SET status = 'submitted',
             sixth_json = $2,
@@ -425,7 +437,8 @@ export async function submitPrivateEntry(
             provisional_status = $7,
             team_name = COALESCE($8, team_name),
             submitted_at = now()
-      WHERE entry_id = $1`,
+      WHERE entry_id = $1
+      RETURNING entry_id`,
     [
       args.entryId,
       JSON.stringify(args.sixthJson),
@@ -437,6 +450,7 @@ export async function submitPrivateEntry(
       args.teamName ?? null,
     ],
   );
+  return updated.length > 0;
 }
 
 // ── Finalization persistence (MATH lives elsewhere) ───────────────────────────

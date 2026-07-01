@@ -372,6 +372,9 @@ export function PrivateTournamentDraft({
             name,
             pin,
             onSubmitted: handleSubmitted,
+            // A submit past the 10-minute window returns 410 → show the removed
+            // state (same terminal screen as the countdown expiry / partial 410).
+            onRemoved: () => setRemoved(true),
           }}
           onBack={() => setStep("interstitial")}
         />

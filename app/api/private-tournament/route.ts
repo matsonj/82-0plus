@@ -59,6 +59,16 @@ export async function GET(req: NextRequest) {
       return jsonWithSessionHint(sessionHint, { error: "tournament not found" }, { status: 404 });
     }
 
+    // ---- Per-entrant timeout (PUBLIC only): purge stale incomplete entries BEFORE
+    // any lazy finalize. Order matters: an EXPIRING public tournament must finalize
+    // with the timed-out slots FREED (finalize fills them with generic bots) rather
+    // than converting kicked entrants into named bot_replaced bracket entries. This
+    // also keeps the lobby's filled count honest and lets a kicked entrant who
+    // reloads see they're gone. Only touches an open tournament. ----
+    if (tournament.status === "open" && tournament.isPublic) {
+      await purgeStaleIncompleteEntries({ tournamentId: id, isPublic: true });
+    }
+
     // ---- Lazy finalize: expired + still open → resolve now, then re-read (RW). ----
     if (tournament.status !== "completed" && isExpired(tournament.expiresAt, Date.now())) {
       const outcome = await finalizePrivate(id);
@@ -72,13 +82,6 @@ export async function GET(req: NextRequest) {
       }
       const refreshed = await getPrivateTournament(id);
       if (refreshed) tournament = refreshed;
-    }
-
-    // ---- Per-entrant timeout (PUBLIC only): drop stale incomplete entries so the
-    // lobby's filled count is honest and a kicked entrant who reloads sees they're
-    // gone. Skipped when the lazy finalize above already completed the tournament. ----
-    if (tournament.status === "open" && tournament.isPublic) {
-      await purgeStaleIncompleteEntries({ tournamentId: id, isPublic: true });
     }
 
     const entries = await listPrivateEntries(id);

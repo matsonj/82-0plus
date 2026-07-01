@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
       captainSlot: hasCaptain ? captainSlot : 0,
     });
 
-    await savePrivatePartial({
+    const saved = await savePrivatePartial({
       entryId: entry.entryId,
       rosterJson: picks,
       rosterDisplay: { roster: built.roster, sixthMan: built.sixthManInfo },
@@ -107,6 +107,19 @@ export async function POST(req: NextRequest) {
       teamBoxJson: sim.teamBox,
       teamName,
     });
+    if (!saved) {
+      // The entry was purged (10-minute timeout) between the gate and this write.
+      // Report removal (410) rather than a false success so the client shows the
+      // "you were removed" state instead of pretending the draft saved.
+      return jsonWithSessionHint(
+        sessionHint,
+        {
+          error:
+            "Your 10-minute window expired — you were removed. Rejoin if there's still room.",
+        },
+        { status: 410 },
+      );
+    }
 
     return jsonWithSessionHint(sessionHint, {
       entryId: entry.entryId,

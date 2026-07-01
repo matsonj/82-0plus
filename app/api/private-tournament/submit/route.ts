@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
       queryOptions,
     );
 
-    await submitPrivateEntry({
+    const submitted = await submitPrivateEntry({
       entryId: entry.entryId,
       sixthJson: sixthPick,
       captainSlot,
@@ -137,6 +137,18 @@ export async function POST(req: NextRequest) {
       provisionalStatus: prov.status,
       teamName,
     });
+    if (!submitted) {
+      // The entry was purged (10-minute timeout) between the gate and this write.
+      // Report removal (410) and skip the eager finalize — no false success.
+      return jsonWithSessionHint(
+        sessionHint,
+        {
+          error:
+            "Your 10-minute window expired — you were removed. Rejoin if there's still room.",
+        },
+        { status: 410 },
+      );
+    }
 
     // ---- Eager finalize: if every slot is now submitted, resolve the bracket. ----
     let finalized = false;
