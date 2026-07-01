@@ -30,20 +30,13 @@ function timeLeft(expiresAt: string): string {
   return hrs < 48 ? `${hrs}h left` : `${Math.floor(hrs / 24)}d left`;
 }
 
-function PublicRow({
-  t,
-  last,
-}: {
-  t: PublicTournamentSummary;
-  last: boolean;
-}) {
+function PublicRow({ t }: { t: PublicTournamentSummary }) {
   const { text: spots, full } = formatPublicSpots(t.entryCount, t.size);
   const ranked = t.mode === "hoopiq";
   return (
     <Link
       href={`/p/${t.tournamentId}`}
-      className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-[var(--md-paper-2)]"
-      style={{ borderBottom: last ? "none" : "1px solid var(--md-paper-3)" }}
+      className="flex items-center gap-4 border-b border-[var(--md-paper-3)] px-4 py-3.5 transition-colors hover:bg-[var(--md-paper-2)]"
     >
       {/* Name + host · time left */}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -128,18 +121,23 @@ export function PublicTournamentList() {
     };
   }, []);
 
+  // Section header: Oswald label + hairline rule (matches the "Your Tournaments"
+  // section and the results page).
+  const header = (right?: React.ReactNode) => (
+    <div className="flex items-center gap-4">
+      <span className="whitespace-nowrap font-cond text-[13px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
+        Join a Public Tournament
+      </span>
+      <div className="h-px flex-1 bg-[var(--md-paper-3)]" />
+      {right}
+    </div>
+  );
+
   // Loading: a slim placeholder under the header. Empty: render nothing.
   if (rows === null) {
     return (
-      <div
-        className="border-2 border-[var(--md-ink)] bg-[var(--md-white)]"
-        style={{ boxShadow: "var(--md-shadow-md)" }}
-      >
-        <div className="px-4 py-2.5" style={{ background: "var(--md-ink)" }}>
-          <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--md-paper)]">
-            Open to everyone
-          </span>
-        </div>
+      <div className="flex flex-col gap-3">
+        {header()}
         <LoadingState
           spacingClassName="py-6"
           textClassName="font-mono text-[13px] normal-case tracking-normal"
@@ -152,24 +150,17 @@ export function PublicTournamentList() {
   if (rows.length === 0) return null;
 
   return (
-    <div
-      className="border-2 border-[var(--md-ink)] bg-[var(--md-white)]"
-      style={{ boxShadow: "var(--md-shadow-md)" }}
-    >
-      <div
-        className="flex items-center justify-between px-4 py-2.5"
-        style={{ background: "var(--md-ink)" }}
-      >
-        <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--md-paper)]">
-          Open to everyone
-        </span>
-        <span className="font-mono text-[11px] text-[var(--md-paper-3)]">
-          {rows.length} OPEN NOW
-        </span>
+    <div className="flex flex-col gap-3">
+      {header(
+        <span className="whitespace-nowrap font-mono text-[10px] text-[var(--md-ink-muted)]">
+          {rows.length} open now
+        </span>,
+      )}
+      <div style={{ borderTop: "2px solid var(--md-ink)" }}>
+        {rows.map((t) => (
+          <PublicRow key={t.tournamentId} t={t} />
+        ))}
       </div>
-      {rows.map((t, i) => (
-        <PublicRow key={t.tournamentId} t={t} last={i === rows.length - 1} />
-      ))}
     </div>
   );
 }
