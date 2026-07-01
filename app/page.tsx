@@ -35,6 +35,10 @@ import { Countdown } from "@/components/Countdown";
 import { track } from "@vercel/analytics";
 import { encodeShare } from "@/lib/shareCode";
 import { SITE_URL } from "@/lib/site";
+import {
+  formatPublicSpots,
+  type PublicTournamentSummary,
+} from "@/lib/privateTournament";
 import { fetchHomeBootstrap } from "@/lib/homeBootstrap";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import {
@@ -175,33 +179,40 @@ export default function Home() {
   // always comes fresh from the next /api/daily/results fetch rather than a
   // possibly-stale snapshot (see lib/dailyResultsCache).
   const [dailyRank, setDailyRank] = useState<DailyRank | null>(null);
-  // Count of open public tournaments — powers the entry-point enticements (the
+  // Count of joinable public tournaments — powers the entry-point enticements (the
   // sidebar TOURNAMENTS card's "X open now" and the post-daily "need more?" nudge).
   // null until the anonymous browse feed resolves; 0 (or a failed fetch) hides the
   // count affordances entirely. Fetched once on mount; cheap, no creds.
-  const [openPublicCount, setOpenPublicCount] = useState<number | null>(null);
-  // Total entrants across open public tournaments — social proof for the live bar.
-  const [openPublicEntrants, setOpenPublicEntrants] = useState(0);
-  // When exactly one public tournament is open, deep-link straight to its lobby
-  // instead of a one-row list. null when there are 0 or 2+.
-  const [soloPublicId, setSoloPublicId] = useState<string | null>(null);
+  const [joinablePublicCount, setJoinablePublicCount] = useState<number | null>(null);
+  // Total entrants across joinable public tournaments — social proof for the live bar.
+  const [joinablePublicEntrants, setJoinablePublicEntrants] = useState(0);
+  // When exactly one public tournament still has slots, deep-link straight to its
+  // lobby instead of a one-row list. null when there are 0 or 2+.
+  const [soloJoinablePublicId, setSoloJoinablePublicId] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     fetch("/api/private-tournament/public")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!active) return;
-        const list = Array.isArray(d?.tournaments) ? d.tournaments : [];
-        setOpenPublicCount(list.length);
-        setOpenPublicEntrants(
-          list.reduce(
+        const list = Array.isArray(d?.tournaments)
+          ? (d.tournaments as PublicTournamentSummary[])
+          : [];
+        const joinable = list.filter(
+          (t) => !formatPublicSpots(t.entryCount, t.size).full,
+        );
+        setJoinablePublicCount(joinable.length);
+        setJoinablePublicEntrants(
+          joinable.reduce(
             (sum: number, t: { entryCount?: number }) =>
               sum + (Number(t?.entryCount) || 0),
             0,
           ),
         );
-        setSoloPublicId(
-          list.length === 1 ? String(list[0]?.tournamentId ?? "") || null : null,
+        setSoloJoinablePublicId(
+          joinable.length === 1
+            ? String(joinable[0]?.tournamentId ?? "") || null
+            : null,
         );
       })
       .catch(() => {
@@ -211,11 +222,11 @@ export default function Home() {
       active = false;
     };
   }, []);
-  // "Join public" destination: a lone open tournament goes straight to its lobby;
-  // 2+ go to the browsable list (Tournaments tab).
+  // "Join public" destination: a lone joinable tournament goes straight to its
+  // lobby; 2+ go to the browsable list (Tournaments tab).
   const joinPublicHref =
-    openPublicCount === 1 && soloPublicId
-      ? `/p/${soloPublicId}`
+    joinablePublicCount === 1 && soloJoinablePublicId
+      ? `/p/${soloJoinablePublicId}`
       : "/tournament?tab=private&intent=public";
   // Whether today's completion has resolved (results fetched, or no account to
   // fetch for). Until then we hold a stable placeholder so the daily block can't
@@ -1037,8 +1048,8 @@ export default function Home() {
             </button>
           </div>
           {/* Caught your daily? Strong CTA toward the next hook at peak engagement:
-              open public tournaments. Only once today's result is in AND some are open. */}
-          {openPublicCount && openPublicCount > 0 ? (
+              joinable public tournaments. Only once today's result is in AND one has room. */}
+          {joinablePublicCount && joinablePublicCount > 0 ? (
             <div className="mt-4 flex flex-col gap-2 border-t border-white/16 pt-4">
               <span className="text-[13px] text-[var(--md-paper-3)]">
                 Daily&rsquo;s in the books — now go for a ring.
@@ -1058,7 +1069,7 @@ export default function Home() {
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <span className="font-mono text-[13px] font-bold">
-                    {openPublicCount} open
+                    {joinablePublicCount} open
                   </span>
                   <span aria-hidden>→</span>
                 </span>
@@ -1198,8 +1209,8 @@ export default function Home() {
           only when some are open. Strong, first thing every home visitor sees. */}
       {phase === "menu" && (
         <HomeLiveBar
-          count={openPublicCount ?? 0}
-          entrants={openPublicEntrants}
+          count={joinablePublicCount ?? 0}
+          entrants={joinablePublicEntrants}
           href={joinPublicHref}
         />
       )}
@@ -1209,7 +1220,7 @@ export default function Home() {
           dailyBody={dailyBody}
           dailyHistory={dailyHistory}
           onStartGame={(nextMode) => startGame(nextMode, "free")}
-          openPublicCount={openPublicCount}
+          joinablePublicCount={joinablePublicCount}
           joinPublicHref={joinPublicHref}
         />
       )}

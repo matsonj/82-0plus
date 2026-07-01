@@ -656,6 +656,14 @@ export function TournamentLookup({
     // "list" (no login-form flash) until openTeam resolves.
     if (initialTeam) return;
 
+    // Home's "Join private" deep-link should land returning users on the join form,
+    // not their saved My Teams list. Keep their account fields prefilled and let the
+    // initialIntent scroll effect find #tournament-join on the private landing.
+    if (initialTab === "private" && initialIntent === "join") {
+      setBootingSession(false);
+      return;
+    }
+
     const cachedLookup =
       initialTab === "private" || initialDaily
         ? null
@@ -674,7 +682,7 @@ export function TournamentLookup({
         ? loadPrivate(saved.username, saved.pin, true)
         : runLookup(saved.username, saved.pin, true);
     boot.finally(() => setBootingSession(false));
-  }, [runLookup, loadPrivate, initialTab, initialDaily, initialTeam]);
+  }, [runLookup, loadPrivate, initialTab, initialDaily, initialTeam, initialIntent]);
 
   const submitPrivateLogin = async (e: React.FormEvent) => {
     e.preventDefault();
