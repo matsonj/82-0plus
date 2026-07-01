@@ -7,7 +7,6 @@ import type {
   BracketPlayer,
   SeriesResult,
   GameResult,
-  GameBreakdown,
   PlayInResult,
 } from "@/lib/types";
 import { playInEarnedSeeds } from "@/lib/tournamentLabels";
@@ -23,96 +22,6 @@ function roundLabel(distFromFinal: number): string {
     case 4: return "Round of 32";
     default: return `Round of ${Math.pow(2, distFromFinal + 1)}`;
   }
-}
-
-function round1(n: number): string {
-  const v = Math.round(n * 10) / 10;
-  return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}`;
-}
-
-// One signed line in a per-team breakdown.
-function BreakLine({ label, value }: { label: string; value: number }) {
-  const v = Math.round(value * 10) / 10;
-  const color =
-    v > 0 ? "var(--md-teal)" : v < 0 ? "var(--md-coral)" : "var(--md-ink-muted)";
-  return (
-    <div className="flex items-baseline justify-between gap-2 font-mono text-[11px]">
-      <span className="whitespace-nowrap text-[var(--md-ink-muted)]">{label}</span>
-      <span className="shrink-0" style={{ color }}>{round1(v)}</span>
-    </div>
-  );
-}
-
-function TeamBreakdown({
-  name,
-  won,
-  b,
-}: {
-  name: string;
-  won: boolean;
-  b: GameBreakdown;
-}) {
-  return (
-    <div className="flex-1 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] p-2">
-      <div
-        className={`mb-1 truncate font-mono text-[11px] ${
-          won ? "font-bold" : "text-[var(--md-ink-muted)]"
-        }`}
-      >
-        {won ? "▸ " : ""}
-        {name}
-      </div>
-      {/* fatigue & recoveryCarry are stored positive and SUBTRACTED. */}
-      <BreakLine label="seed" value={b.seedNet} />
-      <BreakLine label="game score" value={b.gameScoreBuff} />
-      <BreakLine label="height" value={b.heightBuff} />
-      <BreakLine label="home" value={b.homeBuff} />
-      <BreakLine label="fatigue" value={-b.fatigue} />
-      <BreakLine label="recovery" value={-b.recoveryCarry} />
-      <BreakLine label="random" value={b.randomFactor} />
-      <div className="mt-1 flex items-baseline justify-between border-t-2 border-[var(--md-ink)] pt-0.5 font-mono text-[11px] font-bold">
-        <span>adj</span>
-        <span>{round1(b.adj)}</span>
-      </div>
-    </div>
-  );
-}
-
-function GameRow({
-  game,
-  nameOf,
-}: {
-  game: GameResult;
-  nameOf: (id: string) => string;
-}) {
-  const homeWon = game.winnerId === game.homeId;
-  const hb = game.breakdown?.[game.homeId];
-  const ab = game.breakdown?.[game.awayId];
-  return (
-    <div className="border-t border-[var(--md-paper-3)] pt-2">
-      <div className="flex items-baseline justify-between gap-2 font-mono text-[12px]">
-        <span>
-          <span className="text-[var(--md-ink-muted)]">G{game.gameNo}</span>{" "}
-          <span className={homeWon ? "font-bold" : "text-[var(--md-ink-muted)]"}>
-            {nameOf(game.homeId)}
-          </span>{" "}
-          <span className="text-[var(--md-ink-muted)]">vs</span>{" "}
-          <span className={!homeWon ? "font-bold" : "text-[var(--md-ink-muted)]"}>
-            {nameOf(game.awayId)}
-          </span>
-        </span>
-        <span className="shrink-0 font-mono text-[12px] font-bold tabular-nums">
-          {game.homeScore}&ndash;{game.awayScore}
-        </span>
-      </div>
-      {hb && ab && (
-        <div className="mt-1.5 flex gap-2">
-          <TeamBreakdown name={nameOf(game.homeId)} won={homeWon} b={hb} />
-          <TeamBreakdown name={nameOf(game.awayId)} won={!homeWon} b={ab} />
-        </div>
-      )}
-    </div>
-  );
 }
 
 // A stable identity for a drafted player, used to spot the same player across
@@ -307,7 +216,6 @@ function SeriesTeamRow({
         >
           {isGhost ? "🤖 " : ""}
           {name}
-          {isYou ? " ★" : ""}
         </span>
       </button>
       <span
@@ -315,6 +223,14 @@ function SeriesTeamRow({
         style={{ color: scoreColor, minWidth: scoreWidth }}
       >
         {score}
+      </span>
+      {/* Winner marker (points back at the score), Google-bracket style. */}
+      <span
+        className="shrink-0 text-center text-[8px] leading-none"
+        style={{ width: 9, color: "var(--md-coral)" }}
+        aria-hidden
+      >
+        {won ? "◀" : ""}
       </span>
     </div>
   );
@@ -339,7 +255,6 @@ function SeriesCard({
   compact?: boolean;
   size?: number;
 }) {
-  const [open, setOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState<"hi" | "lo" | null>(null);
   const hiWon = series.winnerId === series.hiId;
   const hiTeam = teamOf(series.hiId);
@@ -351,9 +266,16 @@ function SeriesCard({
   const hiIsYou = series.hiId === youId;
   const loIsYou = series.loId === youId;
 
-  // Per-row game-win count (scoreHi/scoreLo); the winner's is shown in coral.
-  const hiScore = String(series.scoreHi);
-  const loScore = String(series.scoreLo);
+  // Rows show the CLINCHING game's box score per team (winner in coral); the
+  // "<winner> wins W–L" footer carries the series result (Google-bracket style).
+  const lastGame = series.games[series.games.length - 1];
+  const boxScore = (id: string) =>
+    lastGame ? (id === lastGame.homeId ? lastGame.homeScore : lastGame.awayScore) : 0;
+  const hiScore = String(boxScore(series.hiId));
+  const loScore = String(boxScore(series.loId));
+  const winnerName = nameOf(series.winnerId);
+  const seriesW = Math.max(series.scoreHi, series.scoreLo);
+  const seriesL = Math.min(series.scoreHi, series.scoreLo);
   // Size-20 play-in survivors (resolved 7 & 8 seeds) get a conference-color seed
   // circle, tying them to the play-in mini-brackets below.
   const circleFor = (t?: BracketTeam) =>
@@ -363,9 +285,8 @@ function SeriesCard({
 
   const py = compact ? "py-1.5" : "py-2";
   const nameSize = compact ? "text-[14px]" : "text-[14px] sm:text-[15px]";
-  // Scores are a single game-win count now, so the lane can be tight — more room
-  // for the name.
-  const scoreWidth = compact ? 24 : 30;
+  // Box scores run 2–3 digits; give the lane room.
+  const scoreWidth = compact ? 30 : 34;
 
   // Every card keeps the ink border; the viewer is marked on their own row (fill),
   // not on the box. Only the final gets a subtle lift.
@@ -421,26 +342,13 @@ function SeriesCard({
         <RosterPanel team={loTeam} compareKeys={compareFor(series.loId)} />
       )}
 
-      {/* Subtle per-game scores toggle — a thin hairline strip that reveals the
-          box scores on click (kept minimal so the card stays compact). */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-end gap-1 border-t border-[var(--md-paper-3)] px-3 py-0.5 font-cond text-[9px] font-medium uppercase tracking-[0.12em] text-[var(--md-ink-muted)]"
-        style={{ cursor: "pointer" }}
-        aria-expanded={open}
-      >
-        <span>{open ? "hide scores" : "scores"}</span>
-        <span aria-hidden>{open ? "▴" : "▾"}</span>
-      </button>
-
-      {open && (
-        <div className="flex flex-col gap-2 border-t border-[var(--md-paper-3)] bg-[var(--md-paper)] p-2">
-          {series.games.map((g) => (
-            <GameRow key={g.gameNo} game={g} nameOf={nameOf} />
-          ))}
-        </div>
-      )}
+      {/* Series result — "<winner> wins W–L" + the clinching game number. */}
+      <div className="flex items-baseline justify-between gap-2 border-t border-[var(--md-paper-3)] px-3 py-0.5 font-cond text-[9px] font-medium uppercase tracking-[0.1em] text-[var(--md-ink-muted)]">
+        <span className="min-w-0 truncate">
+          {winnerName} wins {seriesW}&ndash;{seriesL}
+        </span>
+        {lastGame && <span className="shrink-0">Game {lastGame.gameNo}</span>}
+      </div>
     </div>
   );
 }
@@ -978,13 +886,19 @@ function PlayInTeamRow({ row }: { row: PlayInRowState }) {
       >
         {row.isGhost ? "🤖 " : ""}
         {row.name}
-        {row.isYou ? " ★" : ""}
       </span>
       <span
         className="shrink-0 text-right font-mono text-[12px] font-bold tabular-nums"
         style={{ color: scoreColor, minWidth: 28 }}
       >
         {row.score}
+      </span>
+      <span
+        className="shrink-0 text-center text-[8px] leading-none"
+        style={{ width: 9, color: "var(--md-coral)" }}
+        aria-hidden
+      >
+        {row.won ? "◀" : ""}
       </span>
     </div>
   );
