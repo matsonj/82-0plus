@@ -28,7 +28,7 @@ import {
   formatTournamentStatus,
   formatSignedMargin,
 } from "@/lib/tournamentLabels";
-import { Button, Capsule, EmptyState, LoadingState, Notice } from "@/components/ui";
+import { Button, EmptyState, LoadingState, Notice } from "@/components/ui";
 import {
   AccountFields,
   TournamentCredentialFields,
@@ -411,90 +411,183 @@ function TeamCard({
 }
 
 // One private-tournament row in the Private tab.
-function PrivateRow({ row }: { row: MyPrivateRow }) {
+// Section header: Oswald label + hairline rule (same rhythm as the results page).
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-4">
+      <span className="whitespace-nowrap font-cond text-[13px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
+        {label}
+      </span>
+      <div className="h-px flex-1 bg-[var(--md-paper-3)]" />
+    </div>
+  );
+}
+
+// Shared derivation for a private-tournament row/card. A completed result the
+// viewer hasn't opened yet is CLOAKED — record + outcome hidden until they open
+// it (which plays the reveal).
+function privateRowState(row: MyPrivateRow) {
   const completed = row.status === "completed";
   const isChampion = completed && row.finalStatus === "Champion";
+  const isRunnerUp = completed && row.finalStatus === "Lost Finals";
+  const cloaked = completed && row.needsAttention;
   const recW = completed ? row.finalRecordW : row.provisionalRecordW;
   const recL = completed ? row.finalRecordL : row.provisionalRecordL;
   const hasRec = recW != null && recL != null;
-  const dateText =
-    completed && row.finalizedAt
-      ? new Date(row.finalizedAt).toLocaleDateString()
-      : "Open";
+  const outcome = completed
+    ? formatTournamentStatus(row.finalStatus)
+    : formatPrivateEntryStatus(row.entryStatus);
+  return { completed, isChampion, isRunnerUp, cloaked, recW, recL, hasRec, outcome };
+}
 
+// The right-hand stamp / CTA shared by the row and card.
+function PrivateStamp({ s }: { s: ReturnType<typeof privateRowState> }) {
+  if (s.cloaked)
+    return <RowStamp fill="var(--md-coral)" text="var(--md-paper)">New Result</RowStamp>;
+  if (s.isChampion)
+    return <RowStamp fill="var(--md-yellow)" text="var(--md-ink)">♛ Champ</RowStamp>;
+  if (s.isRunnerUp)
+    return <RowStamp fill="var(--md-white)" text="var(--md-ink)">Runner-Up</RowStamp>;
+  return null;
+}
+
+// Desktop row — matches the Daily/Classic/Ranked TeamRow rhythm (crown lane, name
+// + subtitle, PLAYOFF + OUTCOME lanes, finish stamp).
+function PrivateRowDesktop({ row }: { row: MyPrivateRow }) {
+  const s = privateRowState(row);
   return (
     <Link
       href={`/p/${row.tournamentId}`}
-      className="md-card md-card--lift flex w-full flex-col gap-2 p-4 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px]"
+      className="group flex w-full items-center gap-4 border-b border-[var(--md-paper-3)] px-4 py-3.5 text-left transition-colors hover:bg-[var(--md-paper-2)]"
+      style={
+        s.cloaked
+          ? {
+              borderLeft: "3px solid var(--md-coral)",
+              background: "color-mix(in srgb, var(--md-coral) 6%, transparent)",
+            }
+          : s.isChampion
+            ? { background: "var(--md-paper-2)" }
+            : undefined
+      }
     >
-      <div className="flex items-center justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-2">
-          {row.needsAttention && (
-            <span
-              aria-label="Needs attention"
-              className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--md-ink)]"
-              style={{ background: "var(--md-coral)" }}
-            />
-          )}
-          <span
-            className="font-archivo min-w-0 truncate leading-tight"
-            style={{ fontSize: 15, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
-          >
-            {row.name}
-          </span>
-        </span>
-        <span className="font-byline text-[11px] text-[var(--md-ink-muted)] whitespace-nowrap">
-          {dateText}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Capsule
-          style={
-            row.mode === "hoopiq"
-              ? { background: "var(--md-ink)", color: "var(--md-white)" }
-              : undefined
-          }
+      {/* crown / unread-dot lane */}
+      <span className="w-5 shrink-0 text-center">
+        {s.cloaked ? (
+          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "var(--md-coral)" }} />
+        ) : s.isChampion ? (
+          <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>
+        ) : null}
+      </span>
+      {/* name + subtitle */}
+      <span className="flex min-w-0 flex-[2] flex-col">
+        <span
+          className="font-archivo truncate leading-tight"
+          style={{ fontSize: 15, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
         >
-          {row.modeLabel}
-        </Capsule>
-        <Capsule>{row.size} teams</Capsule>
-        {isChampion && (
-          <Capsule tone="press">♛ Champion</Capsule>
+          {row.name}
+        </span>
+        <span className="font-byline text-[11px] text-[var(--md-ink-muted)]">
+          {row.modeLabel} · {row.size} teams
+        </span>
+      </span>
+      {/* PLAYOFF lane */}
+      <span className="flex shrink-0 items-baseline gap-2 font-mono text-[13px]" style={{ width: 150 }}>
+        <span className="font-cond text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">
+          Playoff
+        </span>
+        {s.cloaked ? (
+          <span className="inline-block" style={{ width: 44, height: 14, borderRadius: 3, background: "var(--md-paper-3)" }} />
+        ) : s.hasRec ? (
+          <span className="font-bold text-[var(--md-ink)]">{s.recW}–{s.recL}</span>
+        ) : (
+          <span className="text-[var(--md-ink-muted)]">—</span>
         )}
-      </div>
+      </span>
+      {/* OUTCOME lane */}
+      <span className="shrink-0" style={{ width: 150 }}>
+        {s.cloaked ? (
+          <span className="inline-block" style={{ width: 96, height: 14, borderRadius: 3, background: "var(--md-paper-3)" }} />
+        ) : (
+          <span
+            className="font-mono text-[12px]"
+            style={{ color: s.isChampion ? "var(--md-ink)" : "var(--md-ink-muted)", fontWeight: s.isChampion ? 700 : 400 }}
+          >
+            {s.outcome}
+          </span>
+        )}
+      </span>
+      {/* stamp / CTA lane */}
+      <span className="flex shrink-0 flex-col items-end gap-0.5" style={{ width: 130 }}>
+        {s.cloaked ? (
+          <>
+            <PrivateStamp s={s} />
+            <span className="font-mono text-[11px] uppercase tracking-[0.04em] text-[var(--md-coral)]">reveal →</span>
+          </>
+        ) : !s.completed ? (
+          <span className="font-mono text-[11px] uppercase tracking-[0.04em] text-[var(--md-blue)]">Open lobby →</span>
+        ) : (
+          <PrivateStamp s={s} />
+        )}
+      </span>
+    </Link>
+  );
+}
 
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="font-mono text-[28px] font-bold tabular-nums">
-          {hasRec ? (
-            <>
-              {recW}&ndash;{recL}
-            </>
-          ) : (
-            "—"
-          )}
-        </span>
-        <span className="font-mono text-[11px] uppercase tracking-wide text-[var(--md-blue)]">
-          {completed ? "View results →" : "Open lobby →"}
+// Mobile card — TeamCard family (name + stamp header, record band, outcome
+// footer). Cloaked results redact the record + outcome behind "reveal →".
+function PrivateCardMobile({ row }: { row: MyPrivateRow }) {
+  const s = privateRowState(row);
+  return (
+    <Link
+      href={`/p/${row.tournamentId}`}
+      className="md-card w-full overflow-hidden p-0 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px]"
+      style={
+        s.cloaked
+          ? { borderColor: "var(--md-coral)", boxShadow: "4px 4px 0 0 var(--md-coral)" }
+          : s.isChampion
+            ? { borderColor: "var(--md-yellow)", boxShadow: "4px 4px 0 0 var(--md-yellow)" }
+            : undefined
+      }
+    >
+      <div className="flex items-start justify-between gap-3 p-4 pb-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {s.cloaked && (
+              <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "var(--md-coral)" }} />
+            )}
+            {s.isChampion && <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>}
+            <span
+              className="font-archivo truncate leading-tight"
+              style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
+            >
+              {row.name}
+            </span>
+          </div>
+          <div className="mt-0.5 font-byline text-[11px] text-[var(--md-ink-muted)]">
+            {row.modeLabel} · {row.size} teams
+          </div>
+        </div>
+        <PrivateStamp s={s} />
+      </div>
+      <div className="flex items-baseline justify-between gap-3 border-t-2 border-[var(--md-ink)] px-4 py-2.5">
+        {s.cloaked ? (
+          <span className="inline-block" style={{ width: 72, height: 22, borderRadius: 3, background: "var(--md-paper-3)" }} />
+        ) : (
+          <span className="font-mono text-[22px] font-bold tabular-nums">
+            {s.hasRec ? <>{s.recW}–{s.recL}</> : "—"}
+          </span>
+        )}
+        <span
+          className="font-mono text-[11px] uppercase tracking-wide"
+          style={{ color: s.cloaked ? "var(--md-coral)" : "var(--md-blue)" }}
+        >
+          {s.cloaked ? "reveal →" : s.completed ? "view results →" : "open lobby →"}
         </span>
       </div>
-
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.06em]">
-          {completed
-            ? formatTournamentStatus(row.finalStatus)
-            : formatPrivateEntryStatus(row.entryStatus)}
+      <div className="px-4 py-2.5" style={{ background: s.isChampion ? "var(--md-yellow)" : "var(--md-paper-2)" }}>
+        <span className="font-cond text-[12px] font-bold uppercase tracking-[0.06em] text-[var(--md-ink)]">
+          {s.cloaked ? "New result — tap to reveal" : s.outcome}
         </span>
-        {completed &&
-          (isChampion ? (
-            <span className="font-mono text-[12px] text-[var(--md-teal)]">
-              ♛ You won it all
-            </span>
-          ) : row.championName ? (
-            <span className="font-mono text-[12px] text-[var(--md-ink-muted)]">
-              Won by {row.championName}
-            </span>
-          ) : null)}
       </div>
     </Link>
   );
@@ -941,44 +1034,58 @@ export function TournamentLookup({
 
         {/* ---- Private tab ---- */}
         {tab === "private" ? (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-6">
             {showCreate ? (
               <PrivateTournamentCreate onCancel={() => setShowCreate(false)} />
             ) : (
-              <Button
-                type="button"
-                variant="teal"
-                onClick={() => setShowCreate(true)}
-              >
-                + Create tournament
-              </Button>
-            )}
-
-            {/* Public "open to everyone" browse list — anonymous, self-fetching;
-                renders nothing when no tournaments are open. */}
-            {!showCreate && (
-              <div id="tournament-public">
-                <PublicTournamentList />
-              </div>
-            )}
-
-            {!showCreate &&
-              (privateLoading ? (
-                <LoadingState
-                  spacingClassName="py-6"
-                  textClassName="font-mono text-[13px] normal-case tracking-normal"
+              <>
+                <Button
+                  type="button"
+                  variant="teal"
+                  onClick={() => setShowCreate(true)}
                 >
-                  Loading your tournaments…
-                </LoadingState>
-              ) : privateRows && privateRows.length > 0 ? (
-                privateRows.map((r) => (
-                  <PrivateRow key={r.tournamentId} row={r} />
-                ))
-              ) : (
-                <EmptyState title="No active tournaments">
-                  Create one above, or open a friend&rsquo;s invite link.
-                </EmptyState>
-              ))}
+                  + Create tournament
+                </Button>
+
+                {/* Public "open to everyone" browse list — anonymous,
+                    self-fetching; renders nothing when none are open. Shown
+                    above "Your Tournaments" for now. */}
+                <div id="tournament-public">
+                  <PublicTournamentList />
+                </div>
+
+                {/* Your tournaments — rethemed rows (desktop) / cards (mobile) */}
+                {privateLoading ? (
+                  <LoadingState
+                    spacingClassName="py-6"
+                    textClassName="font-mono text-[13px] normal-case tracking-normal"
+                  >
+                    Loading your tournaments…
+                  </LoadingState>
+                ) : privateRows && privateRows.length > 0 ? (
+                  <section className="flex flex-col gap-3">
+                    <SectionHeader label="Your Tournaments" />
+                    <div
+                      className="hidden md:block"
+                      style={{ borderTop: "2px solid var(--md-ink)" }}
+                    >
+                      {privateRows.map((r) => (
+                        <PrivateRowDesktop key={r.tournamentId} row={r} />
+                      ))}
+                    </div>
+                    <div className="flex flex-col gap-3 md:hidden">
+                      {privateRows.map((r) => (
+                        <PrivateCardMobile key={r.tournamentId} row={r} />
+                      ))}
+                    </div>
+                  </section>
+                ) : (
+                  <EmptyState title="No active tournaments">
+                    Create one above, or open a friend&rsquo;s invite link.
+                  </EmptyState>
+                )}
+              </>
+            )}
           </div>
         ) : filtered.length === 0 ? (
           <EmptyState title="No teams yet">

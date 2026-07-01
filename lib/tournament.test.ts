@@ -653,7 +653,10 @@ describe("simulateBracket: variable sizes", () => {
       for (const conf of ["East", "West"] as const) {
         const seeded = r.teams
           .filter((t) => t.conference === conf)
-          .sort((a, b) => a.seed - b.seed);
+          .sort((a, b) => a.seed - b.seed)
+          // Size 20 reassigns seeds 7-10 by PLAY-IN OUTCOME (not strength), so the
+          // strength-monotonic invariant only covers the direct seeds 1-6.
+          .filter((t) => (size === 20 ? t.seed <= 6 : true));
         for (let i = 1; i < seeded.length; i++) {
           expect(seeded[i - 1].seedNet).toBeGreaterThanOrEqual(seeded[i].seedNet);
         }
@@ -809,6 +812,19 @@ describe("simulateBracket: 20-team play-in", () => {
         for (const id of [s.hiId, s.loId])
           seedsInR1.add(r.teams.find((t) => t.id === id)!.seed);
       expect([...seedsInR1].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+  });
+
+  it("reassigns seeds 7-10 by play-in outcome, not the regular-season line", () => {
+    for (const conf of ["East", "West"] as const) {
+      const [gameA, gameB, gameC] = r.playIn!.filter((p) => p.conference === conf);
+      const seedOf = (id: string) => r.teams.find((t) => t.id === id)!.seed;
+      const loserOf = (g: { hiId: string; loId: string; winnerId: string }) =>
+        g.winnerId === g.hiId ? g.loId : g.hiId;
+      expect(seedOf(gameA.winnerId)).toBe(7); // won the 7v8
+      expect(seedOf(gameC.winnerId)).toBe(8); // won the 8-seed decider
+      expect(seedOf(loserOf(gameC))).toBe(9); // lost the decider (reached it)
+      expect(seedOf(loserOf(gameB))).toBe(10); // lost the 9v10, out first
     }
   });
 

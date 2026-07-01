@@ -11,8 +11,8 @@
 // presentation. Honors prefers-reduced-motion (renders the end state instantly).
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { TournamentRunResponse, TournamentMode } from "@/lib/types";
-import { buildRevealScript, type RevealScript, type RevealRound } from "@/lib/revealPath";
+import type { TournamentMode } from "@/lib/types";
+import { type RevealScript, type RevealRound } from "@/lib/revealPath";
 import { Button } from "@/components/ui";
 
 // Per-beat dwell times (ms). Game beats run ~30% quicker than the first pass;
@@ -242,13 +242,12 @@ function OutcomeBar({
 // ── component ───────────────────────────────────────────────────────────────
 
 export function SimulateReveal({
-  data, mode, onDismiss,
+  script, mode, onDismiss,
 }: {
-  data: TournamentRunResponse;
+  script: RevealScript;
   mode?: TournamentMode;
   onDismiss: () => void;
 }) {
-  const script = useMemo(() => buildRevealScript(data.bracket, data.you), [data]);
   const frames = useMemo(() => buildFrames(script), [script]);
 
   const [started, setStarted] = useState(false);
@@ -398,7 +397,7 @@ export function SimulateReveal({
               >
                 <span className="font-cond text-[13px] font-semibold uppercase tracking-[0.2em] text-[var(--md-ink)]">♛ daily82 ♛</span>
                 <span className="font-cover text-[46px] uppercase leading-none text-[var(--md-ink)]">Champions</span>
-                <span className="font-mono text-[11px] font-bold tracking-[0.06em] text-[var(--md-ink)]">{data.you.name}</span>
+                <span className="font-mono text-[11px] font-bold tracking-[0.06em] text-[var(--md-ink)]">{script.rounds[0]?.you.name ?? ""}</span>
               </div>
             ) : (
               <div

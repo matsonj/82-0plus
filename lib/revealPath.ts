@@ -8,7 +8,7 @@
 // The SimulateReveal component animates this; revealPath itself decides nothing
 // about timing or presentation.
 
-import type { BracketResult, TournamentYou } from "./types";
+import type { BracketResult } from "./types";
 import { regWinsFromSeedNet } from "./tier";
 
 export interface RevealTeam {
@@ -75,13 +75,15 @@ function roundName(absIndex: number, totalRounds: number): string {
 }
 
 // Placement label for a non-champion finish. `lostRound` is the 0-based round
-// index the viewer lost in; `size` is the bracket size (defaults to 16).
-function placementLabel(lostRound: number, size: number): string {
-  // Teams still alive entering the lost round = size / 2^lostRound. The viewer
-  // finished within that group.
-  const aliveEntering = Math.max(2, Math.round(size / 2 ** lostRound));
+// index the viewer lost in. Losing the last round is always Runner-Up; otherwise
+// the teams alive entering a round count back from the 2-team Final as
+// 2^(rounds remaining). The main bracket halves cleanly to the Final, so this is
+// exact even for non-power-of-2 fields (size 12 / 20, whose play-in and byes
+// resolve to a power-of-2 main bracket) — where `size / 2^round` did not.
+function placementLabel(lostRound: number, totalRounds: number): string {
   if (lostRound === 0) return "Round 1 exit";
-  if (aliveEntering <= 2) return "Runner-Up";
+  if (lostRound >= totalRounds - 1) return "Runner-Up";
+  const aliveEntering = 2 ** (totalRounds - lostRound);
   return `Top ${aliveEntering}`;
 }
 
@@ -105,14 +107,15 @@ function teamOf(
 /**
  * Build the viewer's reveal path through a bracket. Returns the ordered rounds
  * the viewer played plus the end state. Safe on any bracket: if the viewer's id
- * isn't found in a round, the path simply stops there.
+ * isn't found in a round, the path simply stops there. Only `you.id` is read, so
+ * callers without a full `TournamentYou` (e.g. a private entrant's team id) can
+ * pass `{ id }`.
  */
 export function buildRevealScript(
   bracket: BracketResult,
-  you: TournamentYou,
+  you: { id: string },
 ): RevealScript {
   const totalRounds = bracket.rounds.length;
-  const size = bracket.size ?? 16;
   const isChampion = bracket.championId === you.id;
   const rounds: RevealRound[] = [];
 
@@ -165,7 +168,7 @@ export function buildRevealScript(
         kind: "eliminated",
         finish: placementLabel(
           rounds.length > 0 ? rounds[rounds.length - 1].roundAbsIndex : 0,
-          size,
+          totalRounds,
         ),
       };
 

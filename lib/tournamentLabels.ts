@@ -31,8 +31,39 @@
 //     don't duplicate. (Re-exported here for one-stop importing.)
 
 import { privateModeLabel } from "./privateTournament";
+import type { BracketResult } from "./types";
 
 export { privateModeLabel };
+
+// ── Play-in earned seeds (size-20) ─────────────────────────────────────────────
+
+/**
+ * The seed each size-20 play-in team EARNED by outcome, derived at display time
+ * from `bracket.playIn` — so it's correct for brackets stored before the engine
+ * started writing the earned seed onto `BracketTeam.seed`.
+ *
+ * Per conference (games in push order): A = 7v8, B = 9v10 feeder, C = 8-seed
+ * decider (A-loser vs B-winner). A winner → 7, C winner → 8, C loser → 9,
+ * B loser → 10. Returns an empty map for non-size-20 brackets.
+ */
+export function playInEarnedSeeds(bracket: BracketResult): Map<string, number> {
+  const seeds = new Map<string, number>();
+  const playIn = bracket.playIn ?? [];
+  const confs = Array.from(new Set(playIn.map((p) => p.conference)));
+  for (const conf of confs) {
+    const games = playIn.filter((p) => p.conference === conf);
+    const a = games.find((g) => g.forSeed === 7);
+    const [b, c] = games.filter((g) => g.forSeed === 8);
+    if (!a || !b || !c) continue;
+    const cLoser = c.winnerId === c.hiId ? c.loId : c.hiId;
+    const bLoser = b.winnerId === b.hiId ? b.loId : b.hiId;
+    seeds.set(a.winnerId, 7);
+    seeds.set(c.winnerId, 8);
+    seeds.set(cLoser, 9);
+    seeds.set(bLoser, 10);
+  }
+  return seeds;
+}
 
 // ── reachedRound → label ──────────────────────────────────────────────────────
 

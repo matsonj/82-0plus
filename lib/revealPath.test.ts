@@ -79,7 +79,7 @@ describe("buildRevealScript", () => {
       championName: "A",
       size: 4,
     };
-    const s = buildRevealScript(bracket, { ...YOU, reachedRound: 2 });
+    const s = buildRevealScript(bracket, YOU);
     expect(s.totalRounds).toBe(2);
     expect(s.rounds.map((r) => r.roundName)).toEqual(["Conf Finals", "The Final"]);
     expect(s.rounds[0].youWonSeries).toBe(true);
@@ -141,10 +141,63 @@ describe("buildRevealScript", () => {
       championName: "B",
       size: 16,
     };
-    const s = buildRevealScript(bracket, { ...YOU, reachedRound: 2 });
+    const s = buildRevealScript(bracket, YOU);
     expect(s.rounds).toHaveLength(3);
     expect(s.rounds[2].roundName).toBe("Conf Finals");
     expect(s.rounds[2].youWonSeries).toBe(false);
+    expect(s.end).toEqual({ kind: "eliminated", finish: "Top 4" });
+  });
+
+  // A 20-team field runs a 16-team main bracket (play-in resolves seeds 7–10),
+  // so `size / 2^round` used to mislabel the runner-up as "Top 3". Placement must
+  // read off the round count, not the raw field size.
+  it("labels a 20-team runner-up 'Runner-Up' (not 'Top 3')", () => {
+    const finalLoss = [
+      game(1, "B", "A", 110, 100),
+      game(2, "B", "A", 108, 99),
+      game(3, "A", "B", 105, 100),
+      game(4, "B", "A", 112, 100),
+    ]; // B 3-1 → wins the final
+    const bracket: BracketResult = {
+      teams: [team("A", 7, 12), team("B", 1, 15)],
+      rounds: [
+        [series("A", "z1", winGames("A", "z1"))], // R16
+        [series("A", "z2", winGames("A", "z2"))], // conf semis
+        [series("A", "z3", winGames("A", "z3"))], // conf finals
+        [series("B", "A", finalLoss)], // final: A loses
+      ],
+      championId: "B",
+      championName: "B",
+      size: 20,
+    };
+    const s = buildRevealScript(bracket, YOU);
+    expect(s.rounds).toHaveLength(4);
+    expect(s.rounds[3].roundName).toBe("The Final");
+    expect(s.rounds[3].youWonSeries).toBe(false);
+    expect(s.end).toEqual({ kind: "eliminated", finish: "Runner-Up" });
+  });
+
+  it("labels a 20-team conf-finals exit 'Top 4'", () => {
+    const cfLoss = [
+      game(1, "B", "A", 110, 100),
+      game(2, "B", "A", 108, 99),
+      game(3, "A", "B", 105, 100),
+      game(4, "B", "A", 112, 100),
+    ];
+    const bracket: BracketResult = {
+      teams: [team("A", 8, 10), team("B", 2, 14)],
+      rounds: [
+        [series("A", "z1", winGames("A", "z1"))], // R16
+        [series("A", "z2", winGames("A", "z2"))], // conf semis
+        [series("B", "A", cfLoss)], // conf finals: A loses
+        [series("p", "q", winGames("p", "q"))], // final (A absent)
+      ],
+      championId: "B",
+      championName: "B",
+      size: 20,
+    };
+    const s = buildRevealScript(bracket, YOU);
+    expect(s.rounds).toHaveLength(3);
     expect(s.end).toEqual({ kind: "eliminated", finish: "Top 4" });
   });
 });

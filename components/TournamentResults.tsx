@@ -9,6 +9,7 @@ import type {
 } from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
 import { SimulateReveal } from "@/components/SimulateReveal";
+import { buildRevealScript } from "@/lib/revealPath";
 import { buildTournamentShareImage } from "@/lib/shareImage";
 import { presentShare } from "@/lib/shareActions";
 import { getSavedUser } from "@/lib/tournamentSession";
@@ -452,7 +453,7 @@ export function TournamentResults({
   if (!revealDone) {
     return (
       <SimulateReveal
-        data={data}
+        script={buildRevealScript(data.bracket, data.you)}
         mode={mode}
         onDismiss={() => setRevealDone(true)}
       />

@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   BracketResult,
   BracketTeam,
   BracketPlayer,
   SeriesResult,
   GameResult,
-  GameBreakdown,
+  PlayInResult,
 } from "@/lib/types";
+import { playInEarnedSeeds } from "@/lib/tournamentLabels";
 
 // Derives a round label from the round's distance to the final (0 = final round).
 // Used by both the desktop tree and the mobile stacked view.
@@ -21,96 +22,6 @@ function roundLabel(distFromFinal: number): string {
     case 4: return "Round of 32";
     default: return `Round of ${Math.pow(2, distFromFinal + 1)}`;
   }
-}
-
-function round1(n: number): string {
-  const v = Math.round(n * 10) / 10;
-  return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}`;
-}
-
-// One signed line in a per-team breakdown.
-function BreakLine({ label, value }: { label: string; value: number }) {
-  const v = Math.round(value * 10) / 10;
-  const color =
-    v > 0 ? "var(--md-teal)" : v < 0 ? "var(--md-coral)" : "var(--md-ink-muted)";
-  return (
-    <div className="flex items-baseline justify-between gap-2 font-mono text-[11px]">
-      <span className="whitespace-nowrap text-[var(--md-ink-muted)]">{label}</span>
-      <span className="shrink-0" style={{ color }}>{round1(v)}</span>
-    </div>
-  );
-}
-
-function TeamBreakdown({
-  name,
-  won,
-  b,
-}: {
-  name: string;
-  won: boolean;
-  b: GameBreakdown;
-}) {
-  return (
-    <div className="flex-1 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] p-2">
-      <div
-        className={`mb-1 truncate font-mono text-[11px] ${
-          won ? "font-bold" : "text-[var(--md-ink-muted)]"
-        }`}
-      >
-        {won ? "▸ " : ""}
-        {name}
-      </div>
-      {/* fatigue & recoveryCarry are stored positive and SUBTRACTED. */}
-      <BreakLine label="seed" value={b.seedNet} />
-      <BreakLine label="game score" value={b.gameScoreBuff} />
-      <BreakLine label="height" value={b.heightBuff} />
-      <BreakLine label="home" value={b.homeBuff} />
-      <BreakLine label="fatigue" value={-b.fatigue} />
-      <BreakLine label="recovery" value={-b.recoveryCarry} />
-      <BreakLine label="random" value={b.randomFactor} />
-      <div className="mt-1 flex items-baseline justify-between border-t-2 border-[var(--md-ink)] pt-0.5 font-mono text-[11px] font-bold">
-        <span>adj</span>
-        <span>{round1(b.adj)}</span>
-      </div>
-    </div>
-  );
-}
-
-function GameRow({
-  game,
-  nameOf,
-}: {
-  game: GameResult;
-  nameOf: (id: string) => string;
-}) {
-  const homeWon = game.winnerId === game.homeId;
-  const hb = game.breakdown?.[game.homeId];
-  const ab = game.breakdown?.[game.awayId];
-  return (
-    <div className="border-t border-[var(--md-paper-3)] pt-2">
-      <div className="flex items-baseline justify-between gap-2 font-mono text-[12px]">
-        <span>
-          <span className="text-[var(--md-ink-muted)]">G{game.gameNo}</span>{" "}
-          <span className={homeWon ? "font-bold" : "text-[var(--md-ink-muted)]"}>
-            {nameOf(game.homeId)}
-          </span>{" "}
-          <span className="text-[var(--md-ink-muted)]">vs</span>{" "}
-          <span className={!homeWon ? "font-bold" : "text-[var(--md-ink-muted)]"}>
-            {nameOf(game.awayId)}
-          </span>
-        </span>
-        <span className="shrink-0 font-mono text-[12px] font-bold tabular-nums">
-          {game.homeScore}&ndash;{game.awayScore}
-        </span>
-      </div>
-      {hb && ab && (
-        <div className="mt-1.5 flex gap-2">
-          <TeamBreakdown name={nameOf(game.homeId)} won={homeWon} b={hb} />
-          <TeamBreakdown name={nameOf(game.awayId)} won={!homeWon} b={ab} />
-        </div>
-      )}
-    </div>
-  );
 }
 
 // A stable identity for a drafted player, used to spot the same player across
@@ -203,12 +114,63 @@ function RosterPanel({
 // is traced in cobalt (border + offset shadow).
 // NOTE: scoreHi/scoreLo are game-win counts (not best-of-7 series wins).
 
-// One team row inside a series card. `won` drives the filled-bar treatment;
-// `isYou` swaps the bar to cobalt (the viewer's path color).
+// East = process-blue, West = court-green. Used for the size-20 play-in seed
+// badge that ties the resolved 7/8 seeds back to the play-in section below.
+function confSeedColor(conf?: string): string {
+  return conf === "West" ? "var(--md-teal)" : "var(--md-blue)";
+}
+
+// The viewer's own team is marked with a light translucent cobalt fill on just
+// its team row (never the whole matchup box) plus a ★.
+const YOUR_FILL = "color-mix(in srgb, var(--md-cobalt) 14%, transparent)";
+
+// The seed marker at the left of a team row. Normally a plain centered numeral in
+// a fixed lane; for a size-20 play-in survivor it becomes a filled conference-
+// color circle with a white number (matching the play-in mini-brackets below).
+function SeedBadge({
+  seed,
+  circleColor,
+  won,
+}: {
+  seed?: number;
+  circleColor?: string;
+  won: boolean;
+}) {
+  if (seed === undefined) return <span className="shrink-0" style={{ width: 18 }} />;
+  if (circleColor) {
+    return (
+      <span
+        className="flex shrink-0 items-center justify-center font-mono font-bold tabular-nums"
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: 999,
+          background: circleColor,
+          color: "var(--md-white)",
+          fontSize: 10,
+        }}
+      >
+        {seed}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="shrink-0 text-center font-mono text-[11px] font-bold leading-none tabular-nums"
+      style={{ width: 18, color: won ? "var(--md-ink)" : "var(--md-ink-muted)" }}
+    >
+      {seed}
+    </span>
+  );
+}
+
+// One team row inside a series card. Winner = ink-bold name + coral game-count;
+// loser is muted. The viewer (`isYou`) is tinted cobalt (the whole card is also
+// cobalt-traced). No filled bar — the card stays light.
 function SeriesTeamRow({
   seed,
   name,
-  record,
+  score,
   won,
   isYou,
   isGhost,
@@ -217,10 +179,11 @@ function SeriesTeamRow({
   py,
   nameSize,
   scoreWidth,
+  circleColor,
 }: {
   seed?: number;
   name: string;
-  record: string;
+  score: string;
   won: boolean;
   isYou: boolean;
   isGhost?: boolean;
@@ -229,34 +192,17 @@ function SeriesTeamRow({
   py: string;
   nameSize: string;
   scoreWidth: number;
+  circleColor?: string;
 }) {
-  // Winner bar: ink, or cobalt when it's the viewer. Loser: card field.
-  const barBg = won ? (isYou ? "var(--md-cobalt)" : "var(--md-ink)") : undefined;
-  const seedColor = won
-    ? isYou
-      ? "var(--md-white)"
-      : "var(--md-yellow)"
-    : "var(--md-ink-muted)";
-  const nameColor = won ? "var(--md-white)" : "var(--md-ink-muted)";
-  const scoreColor = won
-    ? isYou
-      ? "var(--md-white)"
-      : "var(--md-coral)"
-    : "var(--md-ink-muted)";
-  const toggleColor = won ? "var(--md-white)" : "var(--md-ink-muted)";
+  const nameColor = won ? "var(--md-ink)" : "var(--md-ink-muted)";
+  const scoreColor = won ? "var(--md-coral)" : "var(--md-ink-muted)";
 
   return (
     <div
       className={`flex items-center gap-2 px-3 ${py}`}
-      style={barBg ? { background: barBg } : undefined}
+      style={isYou ? { background: YOUR_FILL } : undefined}
     >
-      {/* Fixed seed lane (kept even when empty so both rows share a name lane) */}
-      <span
-        className="shrink-0 font-mono text-[11px] font-bold leading-none tabular-nums"
-        style={{ width: 16, color: seedColor }}
-      >
-        {seed ?? ""}
-      </span>
+      <SeedBadge seed={seed} circleColor={circleColor} won={won} />
       <button
         type="button"
         onClick={onToggleRoster}
@@ -265,22 +211,26 @@ function SeriesTeamRow({
         style={{ cursor: "pointer" }}
       >
         <span
-          className={`font-cond ${nameSize} uppercase tracking-[0.02em]`}
+          className={`font-cond ${nameSize} uppercase leading-none tracking-[0.02em]`}
           style={{ fontWeight: won ? 700 : 500, color: nameColor }}
         >
           {isGhost ? "🤖 " : ""}
           {name}
-          {isYou ? " ★" : ""}
-        </span>
-        <span className="ml-1 text-[9px]" style={{ color: toggleColor }}>
-          {rosterOpen ? "▴" : "▾"}
         </span>
       </button>
       <span
-        className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums"
+        className="shrink-0 text-right font-mono text-[12px] font-bold leading-none tabular-nums"
         style={{ color: scoreColor, minWidth: scoreWidth }}
       >
-        {record}
+        {score}
+      </span>
+      {/* Winner marker (points back at the score), Google-bracket style. */}
+      <span
+        className="shrink-0 text-center text-[8px] leading-none"
+        style={{ width: 9, color: "var(--md-coral)" }}
+        aria-hidden
+      >
+        {won ? "◀" : ""}
       </span>
     </div>
   );
@@ -294,6 +244,7 @@ function SeriesCard({
   youKeys,
   isFinal = false,
   compact = false,
+  size,
 }: {
   series: SeriesResult;
   nameOf: (id: string) => string;
@@ -302,12 +253,10 @@ function SeriesCard({
   youKeys?: Set<string>;
   isFinal?: boolean;
   compact?: boolean;
+  size?: number;
 }) {
-  const [open, setOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState<"hi" | "lo" | null>(null);
   const hiWon = series.winnerId === series.hiId;
-  const involvesYou =
-    youId !== undefined && (series.hiId === youId || series.loId === youId);
   const hiTeam = teamOf(series.hiId);
   const loTeam = teamOf(series.loId);
   const compareFor = (id: string) => (id === youId ? undefined : youKeys);
@@ -317,29 +266,38 @@ function SeriesCard({
   const hiIsYou = series.hiId === youId;
   const loIsYou = series.loId === youId;
 
-  // "4–0 W" / "0–4 L". scoreHi/scoreLo are game-win counts for each side.
-  const hiRecord = `${series.scoreHi}–${series.scoreLo} ${hiWon ? "W" : "L"}`;
-  const loRecord = `${series.scoreLo}–${series.scoreHi} ${hiWon ? "L" : "W"}`;
-
-  const py = compact ? "py-1.5" : "py-2";
-  const nameSize = compact ? "text-[14px]" : "text-[14px] sm:text-[15px]";
-  const scoreWidth = compact ? 50 : 56;
-
-  // The viewer's path is traced in cobalt — border + offset shadow on the
-  // whole card. Non-viewer cards keep the ink border; only the final gets a lift.
-  const accent = involvesYou ? "var(--md-cobalt)" : "var(--md-ink)";
-  const shadow = involvesYou
-    ? "3px 3px 0 0 var(--md-cobalt)"
-    : isFinal
-      ? "var(--md-shadow-sm)"
+  // Rows show the CLINCHING game's box score per team (winner in coral); the
+  // "<winner> wins W–L" footer carries the series result (Google-bracket style).
+  const lastGame = series.games[series.games.length - 1];
+  const boxScore = (id: string) =>
+    lastGame ? (id === lastGame.homeId ? lastGame.homeScore : lastGame.awayScore) : 0;
+  const hiScore = String(boxScore(series.hiId));
+  const loScore = String(boxScore(series.loId));
+  const winnerName = nameOf(series.winnerId);
+  const seriesW = Math.max(series.scoreHi, series.scoreLo);
+  const seriesL = Math.min(series.scoreHi, series.scoreLo);
+  // Size-20 play-in survivors (resolved 7 & 8 seeds) get a conference-color seed
+  // circle, tying them to the play-in mini-brackets below.
+  const circleFor = (t?: BracketTeam) =>
+    size === 20 && t && (t.seed === 7 || t.seed === 8) && !t.lostPlayIn
+      ? confSeedColor(t.conference)
       : undefined;
+
+  const py = compact ? "py-1" : "py-2";
+  const nameSize = compact ? "text-[14px]" : "text-[14px] sm:text-[15px]";
+  // Box scores run 2–3 digits; give the lane room.
+  const scoreWidth = compact ? 30 : 34;
+
+  // Every card keeps the ink border; the viewer is marked on their own row (fill),
+  // not on the box. Only the final gets a subtle lift.
+  const shadow = isFinal ? "var(--md-shadow-sm)" : undefined;
 
   return (
     <div
       className="flex flex-col"
       style={{
         background: "var(--md-white)",
-        border: `2px solid ${accent}`,
+        border: "2px solid var(--md-ink)",
         boxShadow: shadow,
       }}
     >
@@ -347,7 +305,8 @@ function SeriesCard({
       <SeriesTeamRow
         seed={hiTeam?.seed}
         name={nameOf(series.hiId)}
-        record={hiRecord}
+        score={hiScore}
+        circleColor={circleFor(hiTeam)}
         won={hiWon}
         isYou={hiIsYou}
         isGhost={hiTeam?.isGhost}
@@ -361,11 +320,15 @@ function SeriesCard({
         <RosterPanel team={hiTeam} compareKeys={compareFor(series.hiId)} />
       )}
 
+      {/* Hairline between the two team rows */}
+      <div className="h-px" style={{ background: "var(--md-paper-3)" }} />
+
       {/* Lo team row */}
       <SeriesTeamRow
         seed={loTeam?.seed}
         name={nameOf(series.loId)}
-        record={loRecord}
+        score={loScore}
+        circleColor={circleFor(loTeam)}
         won={!hiWon}
         isYou={loIsYou}
         isGhost={loTeam?.isGhost}
@@ -379,25 +342,13 @@ function SeriesCard({
         <RosterPanel team={loTeam} compareKeys={compareFor(series.loId)} />
       )}
 
-      {/* Per-game scores rail — BEST OF N / SEE SCORES */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between border-t border-[var(--md-paper-3)] px-3 py-1 text-left font-cond text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]"
-        style={{ cursor: "pointer" }}
-        aria-expanded={open}
-      >
-        <span>best of {series.bestOf}</span>
-        <span>{open ? "hide ▴" : "see scores ▾"}</span>
-      </button>
-
-      {open && (
-        <div className="flex flex-col gap-2 border-t-2 border-[var(--md-ink)] bg-[var(--md-paper)] p-2">
-          {series.games.map((g) => (
-            <GameRow key={g.gameNo} game={g} nameOf={nameOf} />
-          ))}
-        </div>
-      )}
+      {/* Series result — "<winner> wins W–L" + the clinching game number. */}
+      <div className="flex items-baseline justify-between gap-2 border-t border-[var(--md-paper-3)] px-3 py-1 font-cond text-[9px] font-medium uppercase leading-none tracking-[0.1em] text-[var(--md-ink-muted)]">
+        <span className="min-w-0 truncate">
+          {winnerName} wins {seriesW}&ndash;{seriesL}
+        </span>
+        {lastGame && <span className="shrink-0">Game {lastGame.gameNo}</span>}
+      </div>
     </div>
   );
 }
@@ -422,6 +373,7 @@ function RoundSection({
   teamOf,
   youId,
   youKeys,
+  size,
 }: {
   label: string;
   series: SeriesResult[];
@@ -429,6 +381,7 @@ function RoundSection({
   teamOf: (id: string) => BracketTeam | undefined;
   youId?: string;
   youKeys?: Set<string>;
+  size?: number;
 }) {
   if (series.length === 0) return null;
   return (
@@ -455,6 +408,7 @@ function RoundSection({
                 teamOf={teamOf}
                 youId={youId}
                 youKeys={youKeys}
+                size={size}
               />
             </div>
           );
@@ -487,6 +441,7 @@ function TreeSlot({
   youId,
   youKeys,
   isFinal,
+  size,
   // Whether to draw connector lines on the right side of this slot.
   // true for all rounds except the final (which feeds into the champion box).
   drawConnectorRight,
@@ -503,6 +458,7 @@ function TreeSlot({
   youId?: string;
   youKeys?: Set<string>;
   isFinal?: boolean;
+  size?: number;
   drawConnectorRight: boolean;
   drawConnectorLeft: boolean;
   isTopOfPair: boolean;
@@ -539,6 +495,7 @@ function TreeSlot({
           youKeys={youKeys}
           isFinal={isFinal}
           compact
+          size={size}
         />
       </div>
 
@@ -592,6 +549,7 @@ function TreeColumn({
   isFirst,
   isLast,
   width,
+  size,
 }: {
   label: string;
   isFinalLabel?: boolean;
@@ -603,6 +561,7 @@ function TreeColumn({
   isFirst: boolean;
   isLast: boolean;
   width: number;
+  size?: number;
 }) {
   return (
     <div className="flex flex-col" style={{ width, flexShrink: 0 }}>
@@ -626,6 +585,7 @@ function TreeColumn({
             youId={youId}
             youKeys={youKeys}
             isFinal={isLast}
+            size={size}
             drawConnectorLeft={!isFirst}
             drawConnectorRight={!isLast}
             // Within each round, pairs are indexed: slot 0 is top-of-pair 0,
@@ -721,7 +681,14 @@ function HorizontalBracketTree({
   youId?: string;
   youKeys?: Set<string>;
 }) {
-  const byId = new Map(bracket.teams.map((t) => [t.id, t]));
+  // Apply earned play-in seeds so survivors show their earned 7/8 (not the stored
+  // reg-season seed) even on brackets stored before the engine wrote it back.
+  const earned = playInEarnedSeeds(bracket);
+  const byId = new Map(
+    bracket.teams.map(
+      (t) => [t.id, earned.has(t.id) ? { ...t, seed: earned.get(t.id)! } : t] as const,
+    ),
+  );
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
   const teamOf = (id: string) => byId.get(id);
 
@@ -733,20 +700,26 @@ function HorizontalBracketTree({
     return roundLabel(numRounds - 1 - i);
   }
 
-  // Column widths: all rounds get 220px, last round (Final) gets 200px.
-  // These are minimum widths; the tree may be wider than the viewport.
-  const colWidth = (i: number) => (i === numRounds - 1 ? 200 : 220);
+  // Cards are a fixed width so names fit without truncation; each column is that
+  // width plus a connector arm on whichever sides have connectors. The card
+  // itself always renders at CARD_W regardless of column.
+  const ARM = 24;
+  const CARD_W = 240;
+  const colWidth = (i: number) =>
+    CARD_W + (i > 0 ? ARM : 0) + (i < numRounds - 1 ? ARM : 0);
 
-  // Minimum tree height: enough to show all QF matchups without crowding.
-  // Each matchup card is ~56px; we want at least 32px gap between cards.
+  // Minimum tree height: enough vertical air for a ~66px 2-row card plus a clean
+  // gap between each. Grows on demand when a roster is expanded.
   const qfCount = rounds[0]?.length ?? 1;
-  const minTreeHeight = Math.max(320, qfCount * 88);
+  const minTreeHeight = Math.max(360, qfCount * 96);
+  const treeMinWidth =
+    rounds.reduce((sum, _s, i) => sum + colWidth(i), 0) + 210; // + champion col
 
   return (
     <div className="overflow-x-auto">
       <div
         className="flex gap-0 items-stretch"
-        style={{ minWidth: numRounds * 220 + 200, minHeight: minTreeHeight }}
+        style={{ minWidth: treeMinWidth, minHeight: minTreeHeight }}
       >
         {rounds.map((series, i) => (
           <TreeColumn
@@ -761,6 +734,7 @@ function HorizontalBracketTree({
             isFirst={i === 0}
             isLast={i === numRounds - 1}
             width={colWidth(i)}
+            size={bracket.size}
           />
         ))}
         {/* Champion box */}
@@ -786,7 +760,12 @@ function MobileStackedBracket({
   youId?: string;
   youKeys?: Set<string>;
 }) {
-  const byId = new Map(bracket.teams.map((t) => [t.id, t]));
+  const earned = playInEarnedSeeds(bracket);
+  const byId = new Map(
+    bracket.teams.map(
+      (t) => [t.id, earned.has(t.id) ? { ...t, seed: earned.get(t.id)! } : t] as const,
+    ),
+  );
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
   const teamOf = (id: string) => byId.get(id);
 
@@ -819,6 +798,7 @@ function MobileStackedBracket({
                     youId={youId}
                     youKeys={youKeys}
                     isFinal
+                    size={bracket.size}
                   />
                 ))}
               </div>
@@ -863,9 +843,299 @@ function MobileStackedBracket({
             teamOf={teamOf}
             youId={youId}
             youKeys={youKeys}
+            size={bracket.size}
           />
         );
       })}
+    </div>
+  );
+}
+
+// ─── PLAY-IN (size-20 only) ─────────────────────────────────────────────────
+//
+// The NBA-style play-in for seeds 7–10, rendered as two per-conference mini-
+// brackets below the main tree. Each conference has three single games:
+//   A (7v8)   winner → clinches the 7 seed (blue/green stamp), advances
+//   B (9v10)  winner → advances to the decider; loser eliminated (seed 10)
+//   C (decider: A-loser vs B-winner) winner → clinches the 8 seed, advances;
+//             loser eliminated (seed 9)
+// Advancers carry a conference-color seed stamp that ties them back to the 7/8
+// seed circles in the bracket above. Eliminated names are struck through; the
+// A-loser (who drops to the decider, not out) is merely muted.
+
+type PlayInRowState = {
+  name: string;
+  isGhost?: boolean;
+  won: boolean; // won this game → ink-bold; otherwise muted
+  eliminated: boolean; // knocked out → strike-through
+  isYou: boolean;
+  score: string; // this team's box score in the single play-in game
+};
+
+function PlayInTeamRow({ row }: { row: PlayInRowState }) {
+  const nameColor = row.won ? "var(--md-ink)" : "var(--md-ink-muted)";
+  const scoreColor = row.won ? "var(--md-coral)" : "var(--md-ink-muted)";
+  return (
+    <div
+      className="flex items-center gap-2 px-3 py-1.5"
+      style={row.isYou ? { background: YOUR_FILL } : undefined}
+    >
+      <span
+        className={`min-w-0 flex-1 truncate font-cond text-[13px] uppercase tracking-[0.02em] ${row.eliminated ? "line-through" : ""}`}
+        style={{ fontWeight: row.won ? 700 : 500, color: nameColor }}
+      >
+        {row.isGhost ? "🤖 " : ""}
+        {row.name}
+      </span>
+      <span
+        className="shrink-0 text-right font-mono text-[12px] font-bold tabular-nums"
+        style={{ color: scoreColor, minWidth: 28 }}
+      >
+        {row.score}
+      </span>
+      <span
+        className="shrink-0 text-center text-[8px] leading-none"
+        style={{ width: 9, color: "var(--md-coral)" }}
+        aria-hidden
+      >
+        {row.won ? "◀" : ""}
+      </span>
+    </div>
+  );
+}
+
+// A play-in card. The seed it seats (7 for the 7v8 game, 8 for the decider) is a
+// conference-color corner stamp — on top of the box, not inside a row.
+function PlayInCard({
+  label,
+  hi,
+  lo,
+  stampSeed,
+  stampColor,
+}: {
+  label: string;
+  hi: PlayInRowState;
+  lo: PlayInRowState;
+  stampSeed?: number;
+  stampColor?: string;
+}) {
+  return (
+    <div
+      className="relative flex flex-col"
+      style={{ background: "var(--md-white)", border: "2px solid var(--md-ink)" }}
+    >
+      {stampSeed !== undefined && stampColor && (
+        <span
+          className="absolute flex items-center justify-center font-mono font-bold tabular-nums"
+          style={{
+            top: -10,
+            right: -10,
+            width: 22,
+            height: 22,
+            borderRadius: 999,
+            background: stampColor,
+            color: "var(--md-white)",
+            fontSize: 11,
+            border: "2px solid var(--md-white)",
+            zIndex: 2,
+          }}
+        >
+          {stampSeed}
+        </span>
+      )}
+      <div className="border-b border-[var(--md-paper-3)] px-3 py-1 font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">
+        {label}
+      </div>
+      <PlayInTeamRow row={hi} />
+      <div className="h-px" style={{ background: "var(--md-paper-3)" }} />
+      <PlayInTeamRow row={lo} />
+    </div>
+  );
+}
+
+// A single feeder slot (game A or B) with a right connector arm + half-spine, so
+// the two feeders join a vertical spine that feeds the decider — same geometry as
+// the main tree's TreeSlot.
+function PlayInFeederSlot({
+  children,
+  isTop,
+}: {
+  children: ReactNode;
+  isTop: boolean;
+}) {
+  return (
+    <div className="relative flex flex-1 flex-col items-stretch justify-center">
+      <div style={{ marginRight: 24 }}>{children}</div>
+      <div
+        className="pointer-events-none absolute"
+        style={{
+          top: "50%",
+          right: 0,
+          width: 24,
+          height: 1,
+          background: "var(--md-ink)",
+          transform: "translateY(-0.5px)",
+        }}
+      />
+      <div
+        className="pointer-events-none absolute"
+        style={{
+          right: 0,
+          width: 1,
+          background: "var(--md-ink)",
+          top: isTop ? "50%" : 0,
+          bottom: isTop ? 0 : "50%",
+        }}
+      />
+    </div>
+  );
+}
+
+// One conference's play-in mini-bracket: [A over B] feeders → C decider.
+function PlayInMiniBracket({
+  a,
+  b,
+  c,
+  confColor,
+  nameOf,
+  teamOf,
+  youId,
+}: {
+  a: PlayInResult;
+  b: PlayInResult;
+  c: PlayInResult;
+  confColor: string;
+  nameOf: (id: string) => string;
+  teamOf: (id: string) => BracketTeam | undefined;
+  youId?: string;
+}) {
+  const scoreOf = (g: GameResult, id: string) =>
+    id === g.homeId ? g.homeScore : g.awayScore;
+  const row = (
+    game: PlayInResult,
+    id: string,
+    won: boolean,
+    eliminated: boolean,
+  ): PlayInRowState => ({
+    name: nameOf(id),
+    isGhost: teamOf(id)?.isGhost,
+    won,
+    eliminated,
+    isYou: id === youId,
+    score: String(scoreOf(game.game, id)),
+  });
+
+  // Same tile width as the main bracket cards.
+  const CARD_W = 240;
+
+  return (
+    <div className="flex" style={{ minHeight: 200 }}>
+      {/* Feeders: A over B */}
+      <div className="flex flex-col" style={{ width: CARD_W + 24 }}>
+        <PlayInFeederSlot isTop>
+          <PlayInCard
+            label="Seeds 7 – 8"
+            stampSeed={7}
+            stampColor={confColor}
+            hi={row(a, a.hiId, a.winnerId === a.hiId, false)}
+            lo={row(a, a.loId, a.winnerId === a.loId, false)}
+          />
+        </PlayInFeederSlot>
+        <PlayInFeederSlot isTop={false}>
+          <PlayInCard
+            label="Seeds 9 – 10"
+            hi={row(b, b.hiId, b.winnerId === b.hiId, b.winnerId !== b.hiId)}
+            lo={row(b, b.loId, b.winnerId === b.loId, b.winnerId !== b.loId)}
+          />
+        </PlayInFeederSlot>
+      </div>
+      {/* Decider */}
+      <div className="flex flex-col" style={{ width: CARD_W + 24 }}>
+        <div className="relative flex flex-1 flex-col items-stretch justify-center">
+          <div
+            className="pointer-events-none absolute"
+            style={{
+              top: "50%",
+              left: 0,
+              width: 24,
+              height: 1,
+              background: "var(--md-ink)",
+              transform: "translateY(-0.5px)",
+            }}
+          />
+          <div style={{ marginLeft: 24 }}>
+            <PlayInCard
+              label="8-Seed Game"
+              stampSeed={8}
+              stampColor={confColor}
+              hi={row(c, c.hiId, c.winnerId === c.hiId, c.winnerId !== c.hiId)}
+              lo={row(c, c.loId, c.winnerId === c.loId, c.winnerId !== c.loId)}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The full play-in section: a header rule + both conferences' mini-brackets.
+// No East/West labels (the conference-color stamps carry the tie-in). Stacked on
+// mobile, side by side on desktop.
+function PlayInSection({
+  bracket,
+  youId,
+}: {
+  bracket: BracketResult;
+  youId?: string;
+}) {
+  const playIn = bracket.playIn ?? [];
+  if (playIn.length === 0) return null;
+
+  const byId = new Map(bracket.teams.map((t) => [t.id, t]));
+  const nameOf = (id: string) => byId.get(id)?.name ?? id;
+  const teamOf = (id: string) => byId.get(id);
+
+  // Group by conference; within a conference, A = the 7v8 game (forSeed 7), then
+  // the two forSeed-8 games in push order: [feeder (9v10), decider].
+  const confs = Array.from(new Set(playIn.map((p) => p.conference)));
+  const groups = confs
+    .map((conf) => {
+      const games = playIn.filter((p) => p.conference === conf);
+      const a = games.find((g) => g.forSeed === 7);
+      const eights = games.filter((g) => g.forSeed === 8);
+      const [b, c] = eights;
+      return a && b && c
+        ? { conf, a, b, c, color: confSeedColor(conf) }
+        : null;
+    })
+    .filter((g): g is NonNullable<typeof g> => g !== null);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="mt-8 flex flex-col gap-4">
+      {/* Section header */}
+      <div className="flex items-center gap-3">
+        <span className="font-cond text-[13px] font-bold uppercase tracking-[0.16em] text-[var(--md-ink)]">
+          Play-In — Seeds 7 thru 10
+        </span>
+        <div className="flex-1 border-t border-[var(--md-paper-3)]" />
+      </div>
+      {/* Conferences: stacked on mobile, side by side + centered on desktop */}
+      <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start lg:justify-center lg:gap-14">
+        {groups.map((g) => (
+          <PlayInMiniBracket
+            key={g.conf}
+            a={g.a}
+            b={g.b}
+            c={g.c}
+            confColor={g.color}
+            nameOf={nameOf}
+            teamOf={teamOf}
+            youId={youId}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -903,6 +1173,10 @@ export function BracketView({
       <div className="hidden lg:block">
         <HorizontalBracketTree bracket={bracket} youId={youId} youKeys={youKeys} />
       </div>
+      {/* Size-20 play-in — below the tree, shared by both layouts */}
+      {bracket.size === 20 && (bracket.playIn?.length ?? 0) > 0 && (
+        <PlayInSection bracket={bracket} youId={youId} />
+      )}
     </>
   );
 }
