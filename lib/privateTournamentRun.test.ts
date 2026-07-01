@@ -74,6 +74,18 @@ describe("planFinalField", () => {
     ]);
   });
 
+  it("tolerates purge-emptied slots: one submitted human + generic-bot fill", () => {
+    // After the 10-minute completion purge frees slots (public tournaments),
+    // finalize can see FEWER entries than the field size. planFinalField must still
+    // return exactly `size` slots, padding gaps with generic bots — so a public
+    // tournament with kicked entrants still finalizes into a valid bracket.
+    const size: PrivateSize = 4;
+    const plan = planFinalField([entry({ status: "submitted" })], size);
+    expect(plan).toHaveLength(size);
+    expect(plan[0]).toMatchObject({ kind: "human" });
+    expect(plan.filter((s) => s.kind === "genericBot")).toHaveLength(3);
+  });
+
   it("ordering is submitted humans → reserved bots → generic bots, deterministic", () => {
     const size: PrivateSize = 8;
     const subA = entry({ userName: "A", status: "submitted" });

@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { authenticate } from "@/lib/dailyResults";
-import { isExpired } from "@/lib/privateTournament";
+import { entryDeadlineISO, isExpired } from "@/lib/privateTournament";
 import {
   getPrivateEntry,
   getPrivateTournament,
   listPrivateEntries,
   registerPrivateEntry,
+  registerWithPurgeTx,
 } from "@/lib/privateTournamentQueries";
 import { getDraftRosters } from "@/lib/draftSourceRosters";
 
@@ -17,7 +18,13 @@ export const dynamic = "force-dynamic";
 // draft. Body: { name, pin, tournamentId }. authenticate (create-or-match). Block
 // if completed/expired or full (submitted+registered+partial >= size). Idempotent:
 // an existing entry returns its current state. On success returns the entry + the
-// board (the player needs it to draft). UUID-guarded.
+// board (the player needs it to draft) + entryExpiresAt (the per-entry 10-minute
+// deadline for PUBLIC tournaments; null for private). UUID-guarded.
+//
+// PUBLIC tournaments enforce a per-entrant completion window: registerWithPurgeTx
+// purges stale incomplete entries, re-checks full, and inserts atomically, so an
+// abandoned join can't hold a slot forever and a kicked user rejoins with a fresh
+// clock. PRIVATE tournaments keep the original idempotent register (no timeout).
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -65,7 +72,39 @@ export async function POST(req: NextRequest) {
       );
     }
     const sources = [...tournament.board.slots, tournament.board.benchSlot];
+    const rosters = await getDraftRosters(sources, tournament.mode, queryOptions);
 
+    // ---- PUBLIC: enforce the 10-minute completion window atomically. ----
+    if (tournament.isPublic) {
+      const reg = await registerWithPurgeTx({
+        tournamentId,
+        userId: auth.userId,
+        userName: auth.name,
+        size: tournament.size,
+      });
+      if (!reg.ok) {
+        return jsonWithSessionHint(
+          sessionHint,
+          { error: "this tournament is full" },
+          { status: 400 },
+        );
+      }
+      return jsonWithSessionHint(sessionHint, {
+        entryId: reg.entryId,
+        status: reg.status,
+        board: tournament.board,
+        rosters,
+        size: tournament.size,
+        mode: tournament.mode,
+        entryExpiresAt: entryDeadlineISO({
+          createdAtISO: reg.createdAtISO,
+          isPublic: true,
+          status: reg.status,
+        }),
+      });
+    }
+
+    // ---- PRIVATE: original idempotent register (no per-entry timeout). ----
     // Idempotent: if this account already has an entry, return it as-is (don't
     // re-reserve / change the slot count). The board is included so a returning
     // entrant can resume drafting.
@@ -75,9 +114,10 @@ export async function POST(req: NextRequest) {
         entryId: existing.entryId,
         status: existing.status,
         board: tournament.board,
-        rosters: await getDraftRosters(sources, tournament.mode, queryOptions),
+        rosters,
         size: tournament.size,
         mode: tournament.mode,
+        entryExpiresAt: null,
       });
     }
 
@@ -93,7 +133,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const rosters = await getDraftRosters(sources, tournament.mode, queryOptions);
     const entryId = await registerPrivateEntry({
       tournamentId,
       userId: auth.userId,
@@ -107,6 +146,7 @@ export async function POST(req: NextRequest) {
       rosters,
       size: tournament.size,
       mode: tournament.mode,
+      entryExpiresAt: null,
     });
   } catch (err) {
     console.error("[/api/private-tournament/register]", err);

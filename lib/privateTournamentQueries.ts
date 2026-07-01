@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { PrivateBoard } from "./privateBoard";
 import type {
   PrivateBoardMode,
+  PrivateEntryStatus,
   PrivateMode,
   PrivateResultLabel,
   PrivateSize,
 } from "./privateTournament";
+import { ENTRY_COMPLETION_MINUTES } from "./privateTournament";
 import {
   type EntryDbRow,
   type EntryForUserDbRow,
@@ -20,7 +22,7 @@ import {
   type PrivateTournamentRow,
   type TournamentDbRow,
 } from "./privateTournamentRows";
-import { ensureSchema, queryRW } from "./oltpDb";
+import { ensureSchema, queryRW, withTx } from "./oltpDb";
 
 // Private (invite-only) tournament WRITE helpers. Mirror tournamentQueries.ts:
 // ensureSchema() is awaited before every write; UUIDs are generated in app code
@@ -211,6 +213,141 @@ export async function registerPrivateEntry(
   // its id so the caller stays idempotent.
   const existing = await getPrivateEntry(args.tournamentId, args.userId);
   return existing?.entryId ?? entryId;
+}
+
+/**
+ * Purge stale incomplete entries for ONE tournament — the per-entrant completion
+ * timeout. Deletes only registered|partial rows older than the completion window,
+ * freeing their slots; NEVER touches submitted|bot_replaced. Gated to PUBLIC
+ * tournaments by the CALLER's `isPublic` arg (private behaviour is unchanged).
+ * Returns the number of rows purged (0 is common and cheap). RETURNING is required
+ * to count — a bare DELETE yields no rows.
+ */
+export async function purgeStaleIncompleteEntries(args: {
+  tournamentId: string;
+  isPublic: boolean;
+}): Promise<number> {
+  if (!args.isPublic) return 0;
+  await ensureSchema();
+  const purged = await queryRW<{ entry_id: string }>(
+    `DELETE FROM ${TDB}.private_entries
+      WHERE tournament_id = $1
+        AND status IN ('registered', 'partial')
+        AND created_at < now() - interval '${ENTRY_COMPLETION_MINUTES} minutes'
+      RETURNING entry_id`,
+    [args.tournamentId],
+  );
+  return purged.length;
+}
+
+export interface RegisterWithPurgeArgs {
+  tournamentId: string;
+  userId: string;
+  userName: string;
+  size: number;
+}
+
+export type RegisterWithPurgeResult =
+  | {
+      ok: true;
+      entryId: string;
+      created: boolean; // true = fresh insert this call; false = idempotent re-join
+      createdAtISO: string; // the entry's registration instant (drives the deadline)
+      status: PrivateEntryStatus;
+    }
+  | { ok: false; reason: "full" };
+
+/**
+ * Atomic register-with-purge for PUBLIC tournaments. In ONE transaction (pinned to
+ * a single backend by withTx, safe under PgBouncer transaction pooling):
+ *   1. take a per-tournament advisory xact lock so concurrent registers serialize
+ *      (kills the last-freed-slot over-fill race across backends);
+ *   2. purge stale incomplete entries, freeing dead slots;
+ *   3. idempotent re-join — a surviving (non-stale) entry for this user is returned
+ *      AS-IS, so reloading register never resets an active window;
+ *   4. re-count and reject if full;
+ *   5. else insert a fresh 'registered' row.
+ * A previously-kicked user's stale row is purged in step 2, so step 5 gives them a
+ * brand-new created_at (fresh 10-minute window) for free. The advisory lock is
+ * transaction-scoped (released at COMMIT), so it is compatible with transaction-
+ * mode pooling. Private tournaments must NOT use this path (see register route).
+ */
+export async function registerWithPurgeTx(
+  args: RegisterWithPurgeArgs,
+): Promise<RegisterWithPurgeResult> {
+  await ensureSchema();
+  return withTx(async (client) => {
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+      args.tournamentId,
+    ]);
+    await client.query(
+      `DELETE FROM ${TDB}.private_entries
+        WHERE tournament_id = $1
+          AND status IN ('registered', 'partial')
+          AND created_at < now() - interval '${ENTRY_COMPLETION_MINUTES} minutes'`,
+      [args.tournamentId],
+    );
+    const mine = await client.query(
+      `SELECT entry_id, status, created_at
+         FROM ${TDB}.private_entries
+        WHERE tournament_id = $1 AND user_id = $2
+        LIMIT 1`,
+      [args.tournamentId, args.userId],
+    );
+    if (mine.rows[0]) {
+      return {
+        ok: true as const,
+        entryId: String(mine.rows[0].entry_id),
+        created: false,
+        createdAtISO: new Date(mine.rows[0].created_at).toISOString(),
+        status: mine.rows[0].status as PrivateEntryStatus,
+      };
+    }
+    const counted = await client.query(
+      `SELECT count(*)::int AS n
+         FROM ${TDB}.private_entries
+        WHERE tournament_id = $1`,
+      [args.tournamentId],
+    );
+    if ((counted.rows[0]?.n ?? 0) >= args.size) {
+      return { ok: false as const, reason: "full" };
+    }
+    const entryId = randomUUID();
+    const inserted = await client.query(
+      `INSERT INTO ${TDB}.private_entries
+         (entry_id, tournament_id, user_id, user_name, status)
+       VALUES ($1, $2, $3, $4, 'registered')
+       ON CONFLICT (tournament_id, user_id) DO NOTHING
+       RETURNING created_at`,
+      [entryId, args.tournamentId, args.userId, args.userName],
+    );
+    if (inserted.rows[0]) {
+      return {
+        ok: true as const,
+        entryId,
+        created: true,
+        createdAtISO: new Date(inserted.rows[0].created_at).toISOString(),
+        status: "registered" as PrivateEntryStatus,
+      };
+    }
+    // Should be unreachable under the advisory lock, but stay idempotent: another
+    // writer won the (tournament, user) row — return it rather than surface a 500.
+    const raced = await client.query(
+      `SELECT entry_id, status, created_at
+         FROM ${TDB}.private_entries
+        WHERE tournament_id = $1 AND user_id = $2
+        LIMIT 1`,
+      [args.tournamentId, args.userId],
+    );
+    const row = raced.rows[0];
+    return {
+      ok: true as const,
+      entryId: row ? String(row.entry_id) : entryId,
+      created: false,
+      createdAtISO: new Date(row?.created_at ?? new Date()).toISOString(),
+      status: (row?.status as PrivateEntryStatus) ?? "registered",
+    };
+  });
 }
 
 export interface SavePrivatePartialArgs {

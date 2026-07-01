@@ -221,6 +221,63 @@ export function isExpired(expiresAtISO: string, nowMs: number): boolean {
   return nowMs > Date.parse(expiresAtISO);
 }
 
+// ── Per-entry completion window (PUBLIC tournaments only) ─────────────────────
+
+/** Minutes a PUBLIC-tournament entrant has, measured from register (created_at),
+ *  to lock in a full six before their slot is freed and the entry removed. Private
+ *  tournaments have NO per-entry limit — this is unused for them. Kept as a single
+ *  constant so the pure helpers, the purge SQL, and the browse-count SQL never
+ *  drift. */
+export const ENTRY_COMPLETION_MINUTES = 10;
+
+/** The ISO instant an entry's completion window closes: created_at + N minutes.
+ *  Returns null when there is NO active window — i.e. the tournament isn't public,
+ *  or the entry is already submitted/bot_replaced (a locked entry can never be
+ *  kicked). This is the value the client counts down to; null hides the countdown
+ *  entirely (and encodes "public + still open" without shipping a separate flag). */
+export function entryDeadlineISO(args: {
+  createdAtISO: string;
+  isPublic: boolean;
+  status: PrivateEntryStatus;
+}): string | null {
+  if (!args.isPublic) return null;
+  if (args.status !== "registered" && args.status !== "partial") return null;
+  return new Date(
+    Date.parse(args.createdAtISO) + ENTRY_COMPLETION_MINUTES * 60_000,
+  ).toISOString();
+}
+
+/** True iff a PUBLIC entrant blew their completion window: `nowMs` is past
+ *  created_at + N minutes AND the entry is still incomplete (registered|partial).
+ *  submitted|bot_replaced are NEVER expired. Boundary is EXCLUSIVE, mirroring
+ *  isExpired (exactly at the deadline is NOT yet expired). Callers gate on public
+ *  BEFORE calling — this helper only reasons about time + status. */
+export function isEntryExpired(
+  createdAtISO: string,
+  nowMs: number,
+  status: PrivateEntryStatus,
+): boolean {
+  if (status !== "registered" && status !== "partial") return false;
+  return nowMs > Date.parse(createdAtISO) + ENTRY_COMPLETION_MINUTES * 60_000;
+}
+
+/** Whether an entry occupies a slot for the PUBLIC browse count — the pure twin of
+ *  the SQL FILTER in PUBLIC_TOURNAMENT_LIST_COLS (privateTournamentRows.ts). A slot
+ *  is occupied iff the entry is locked (submitted|bot_replaced) OR still inside its
+ *  live completion window; stale incomplete entries drop out (they're about to be
+ *  purged). Keep this predicate and that SQL structurally identical. */
+export function countsTowardPublicSpots(args: {
+  status: PrivateEntryStatus;
+  createdAtISO: string;
+  nowMs: number;
+}): boolean {
+  if (args.status === "submitted" || args.status === "bot_replaced") return true;
+  return (
+    args.nowMs <=
+    Date.parse(args.createdAtISO) + ENTRY_COMPLETION_MINUTES * 60_000
+  );
+}
+
 // ── Notifications ────────────────────────────────────────────────────────────
 
 /** The minimal shape needsAttention reasons about (a subset of the summaries). */

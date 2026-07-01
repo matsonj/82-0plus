@@ -10,33 +10,13 @@ import {
 import { privateModeLabel } from "@/lib/privateTournament";
 import { SITE_URL } from "@/lib/site";
 import { PrivateTournamentDraft } from "@/components/private/PrivateTournamentDraft";
+import { EntryCountdown } from "@/components/private/EntryCountdown";
 import { DeleteTournamentControl } from "@/components/private/DeleteTournamentControl";
 import { Button, Capsule, CopyLinkField, NameField, Notice, PinField } from "@/components/ui";
 import type {
   PrivateLobbyResponse,
   PrivateRegisterResponse,
 } from "@/components/private/types";
-
-// Countdown to a fixed ISO instant (the tournament's expires_at). Mirrors the
-// daily Countdown's tick style but targets an arbitrary timestamp.
-function ExpiryCountdown({ expiresAt }: { expiresAt: string }) {
-  const [left, setLeft] = useState("");
-  useEffect(() => {
-    const target = Date.parse(expiresAt);
-    const tick = () => {
-      const ms = Math.max(0, target - Date.now());
-      const h = Math.floor(ms / 3_600_000);
-      const m = Math.floor((ms % 3_600_000) / 60_000);
-      const s = Math.floor((ms % 60_000) / 1000);
-      const pad = (n: number) => String(n).padStart(2, "0");
-      setLeft(`${pad(h)}:${pad(m)}:${pad(s)}`);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-  return <span className="tabular-nums">{left}</span>;
-}
 
 export function PrivateTournamentLobby({
   data,
@@ -124,6 +104,7 @@ export function PrivateTournamentLobby({
           name={name}
           pin={pin}
           rosters={session.rosters}
+          entryExpiresAt={session.entryExpiresAt}
           onComplete={() => {
             setSession(null);
             onRefresh();
@@ -169,7 +150,7 @@ export function PrivateTournamentLobby({
           {data.filled} of {data.size} Entered
         </span>
         <span className="font-cond text-[14px] font-semibold uppercase tracking-wide text-[var(--md-coral)]">
-          · Locks in <ExpiryCountdown expiresAt={data.expiresAt} />
+          · Locks in <EntryCountdown expiresAt={data.expiresAt} />
         </span>
       </div>
 
@@ -338,6 +319,21 @@ export function PrivateTournamentLobby({
                   <Notice tone="error" textClassName="font-display text-sm">
                     {error}
                   </Notice>
+                )}
+
+                {/* Per-entry timeout (PUBLIC only): a mid-draft entrant sees their
+                    10-minute clock; when it hits zero we re-fetch and the server
+                    (which purged them) reverts this CTA to "Register & draft". */}
+                {midDraft && you?.entryExpiresAt && (
+                  <div className="font-cond text-[12px] font-semibold uppercase tracking-[0.1em] text-[var(--md-coral)]">
+                    ⏱{" "}
+                    <EntryCountdown
+                      expiresAt={you.entryExpiresAt}
+                      onExpire={onRefresh}
+                      compact
+                    />{" "}
+                    left to finish your entry
+                  </div>
                 )}
 
                 <Button

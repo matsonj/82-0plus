@@ -1,11 +1,17 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { jsonPublicCacheable } from "@/lib/publicCache";
-import { isExpired, needsAttention } from "@/lib/privateTournament";
+import {
+  entryDeadlineISO,
+  isEntryExpired,
+  isExpired,
+  needsAttention,
+} from "@/lib/privateTournament";
 import {
   getPrivateEntry,
   getPrivateTournament,
   listPrivateEntries,
+  purgeStaleIncompleteEntries,
 } from "@/lib/privateTournamentQueries";
 import { findExistingUserByCredentials } from "@/lib/dailyResults";
 import { finalizePrivate } from "@/lib/privateTournamentFinalize";
@@ -66,6 +72,13 @@ export async function GET(req: NextRequest) {
       }
       const refreshed = await getPrivateTournament(id);
       if (refreshed) tournament = refreshed;
+    }
+
+    // ---- Per-entrant timeout (PUBLIC only): drop stale incomplete entries so the
+    // lobby's filled count is honest and a kicked entrant who reloads sees they're
+    // gone. Skipped when the lazy finalize above already completed the tournament. ----
+    if (tournament.status === "open" && tournament.isPublic) {
+      await purgeStaleIncompleteEntries({ tournamentId: id, isPublic: true });
     }
 
     const entries = await listPrivateEntries(id);
@@ -167,26 +180,45 @@ export async function POST(req: NextRequest) {
     const isAdmin = tournament.adminUserId === viewerUserId;
     const myEntry = await getPrivateEntry(id, viewerUserId);
 
-    if (myEntry) {
+    // PUBLIC per-entrant timeout: if the viewer's own entry blew its 10-minute
+    // window, treat them as removed — purge the dead row and don't return an entry
+    // `you` (they fall through to the host stub below if they also host). This keeps
+    // `you` consistent with the freed slot even if GET and POST interleave oddly.
+    const myEntryLive =
+      myEntry &&
+      tournament.isPublic &&
+      isEntryExpired(myEntry.createdAt, Date.now(), myEntry.status)
+        ? null
+        : myEntry;
+    if (myEntry && !myEntryLive) {
+      await purgeStaleIncompleteEntries({ tournamentId: id, isPublic: true });
+    }
+
+    if (myEntryLive) {
       return jsonWithSessionHint(sessionHint, {
         you: {
-          entryId: myEntry.entryId,
-          status: myEntry.status,
-          teamId: `entry:${myEntry.entryId}`,
-          regW: myEntry.regW,
-          regL: myEntry.regL,
-          seedNet: myEntry.seedNet,
-          provisionalRecordW: myEntry.provisionalRecordW,
-          provisionalRecordL: myEntry.provisionalRecordL,
-          provisionalStatus: myEntry.provisionalStatus,
-          finalRecordW: myEntry.finalRecordW,
-          finalRecordL: myEntry.finalRecordL,
-          finalStatus: myEntry.finalStatus,
+          entryId: myEntryLive.entryId,
+          status: myEntryLive.status,
+          teamId: `entry:${myEntryLive.entryId}`,
+          regW: myEntryLive.regW,
+          regL: myEntryLive.regL,
+          seedNet: myEntryLive.seedNet,
+          provisionalRecordW: myEntryLive.provisionalRecordW,
+          provisionalRecordL: myEntryLive.provisionalRecordL,
+          provisionalStatus: myEntryLive.provisionalStatus,
+          finalRecordW: myEntryLive.finalRecordW,
+          finalRecordL: myEntryLive.finalRecordL,
+          finalStatus: myEntryLive.finalStatus,
           isAdmin,
+          entryExpiresAt: entryDeadlineISO({
+            createdAtISO: myEntryLive.createdAt,
+            isPublic: tournament.isPublic,
+            status: myEntryLive.status,
+          }),
           needsAttention: needsAttention({
             tournamentStatus: tournament.status,
-            entryStatus: myEntry.status,
-            viewedFinalAt: myEntry.viewedFinalAt,
+            entryStatus: myEntryLive.status,
+            viewedFinalAt: myEntryLive.viewedFinalAt,
           }),
         },
       });
@@ -210,6 +242,7 @@ export async function POST(req: NextRequest) {
           finalRecordL: null,
           finalStatus: null,
           isAdmin: true,
+          entryExpiresAt: null,
           needsAttention: false,
         },
       });

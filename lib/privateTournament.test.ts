@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  countsTowardPublicSpots,
+  ENTRY_COMPLETION_MINUTES,
+  entryDeadlineISO,
   EXPIRY_HOURS,
   formatPublicSpots,
+  isEntryExpired,
   isExpired,
   needsAttention,
   normalizeTournamentName,
@@ -154,5 +158,98 @@ describe("formatPublicSpots", () => {
 
   it("clamps a negative count to 0", () => {
     expect(formatPublicSpots(-3, 16)).toEqual({ text: "0 / 16", full: false });
+  });
+});
+
+describe("ENTRY_COMPLETION_MINUTES", () => {
+  it("is 10 — the SQL intervals in the purge + browse-count queries assume this", () => {
+    // A guard so the constant and the hardcoded `interval 'N minutes'` in
+    // privateTournamentQueries.ts / privateTournamentRows.ts never silently drift.
+    expect(ENTRY_COMPLETION_MINUTES).toBe(10);
+  });
+});
+
+describe("isEntryExpired", () => {
+  const created = Date.parse("2026-06-09T00:00:00.000Z");
+  const deadline = created + ENTRY_COMPLETION_MINUTES * 60_000;
+  const createdISO = new Date(created).toISOString();
+
+  it("is not expired exactly at the deadline (exclusive)", () => {
+    expect(isEntryExpired(createdISO, deadline, "registered")).toBe(false);
+  });
+
+  it("is expired one millisecond past the deadline", () => {
+    expect(isEntryExpired(createdISO, deadline + 1, "registered")).toBe(true);
+    expect(isEntryExpired(createdISO, deadline + 1, "partial")).toBe(true);
+  });
+
+  it("is not expired one millisecond before the deadline", () => {
+    expect(isEntryExpired(createdISO, deadline - 1, "partial")).toBe(false);
+  });
+
+  it("is NEVER expired once locked (submitted / bot_replaced), even long after", () => {
+    expect(isEntryExpired(createdISO, deadline + 3_600_000, "submitted")).toBe(false);
+    expect(isEntryExpired(createdISO, deadline + 3_600_000, "bot_replaced")).toBe(false);
+  });
+});
+
+describe("entryDeadlineISO", () => {
+  const createdISO = "2026-06-09T00:00:00.000Z";
+  const expected = new Date(
+    Date.parse(createdISO) + ENTRY_COMPLETION_MINUTES * 60_000,
+  ).toISOString();
+
+  it("returns created_at + window for a public incomplete entry", () => {
+    expect(
+      entryDeadlineISO({ createdAtISO: createdISO, isPublic: true, status: "registered" }),
+    ).toBe(expected);
+    expect(
+      entryDeadlineISO({ createdAtISO: createdISO, isPublic: true, status: "partial" }),
+    ).toBe(expected);
+  });
+
+  it("is null for private tournaments (no per-entry window)", () => {
+    expect(
+      entryDeadlineISO({ createdAtISO: createdISO, isPublic: false, status: "registered" }),
+    ).toBeNull();
+  });
+
+  it("is null once locked (submitted / bot_replaced)", () => {
+    expect(
+      entryDeadlineISO({ createdAtISO: createdISO, isPublic: true, status: "submitted" }),
+    ).toBeNull();
+    expect(
+      entryDeadlineISO({ createdAtISO: createdISO, isPublic: true, status: "bot_replaced" }),
+    ).toBeNull();
+  });
+});
+
+describe("countsTowardPublicSpots", () => {
+  const created = Date.parse("2026-06-09T00:00:00.000Z");
+  const deadline = created + ENTRY_COMPLETION_MINUTES * 60_000;
+  const createdISO = new Date(created).toISOString();
+
+  it("counts locked entries regardless of age", () => {
+    expect(
+      countsTowardPublicSpots({ status: "submitted", createdAtISO: createdISO, nowMs: deadline + 1 }),
+    ).toBe(true);
+    expect(
+      countsTowardPublicSpots({ status: "bot_replaced", createdAtISO: createdISO, nowMs: deadline + 1 }),
+    ).toBe(true);
+  });
+
+  it("counts an incomplete entry still inside its window", () => {
+    expect(
+      countsTowardPublicSpots({ status: "registered", createdAtISO: createdISO, nowMs: deadline }),
+    ).toBe(true);
+  });
+
+  it("drops a stale incomplete entry (mirrors the purge / browse FILTER)", () => {
+    expect(
+      countsTowardPublicSpots({ status: "registered", createdAtISO: createdISO, nowMs: deadline + 1 }),
+    ).toBe(false);
+    expect(
+      countsTowardPublicSpots({ status: "partial", createdAtISO: createdISO, nowMs: deadline + 1 }),
+    ).toBe(false);
   });
 });
