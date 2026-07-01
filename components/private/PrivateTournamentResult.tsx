@@ -11,6 +11,7 @@ import {
   formatTournamentStatus,
   formatRecord,
   formatSignedMargin,
+  playInEarnedSeeds,
 } from "@/lib/tournamentLabels";
 import type { PrivateCompletedEntry } from "@/components/private/types";
 import { copyText } from "@/lib/copyText";
@@ -168,10 +169,11 @@ function StandingRow({
     : t.resultMuted
       ? "var(--md-ink-muted)"
       : "var(--md-ink)";
-  const nameColor = mine && tier !== "champion" ? "var(--md-cobalt)" : t.nameColor;
+  const nameColor = t.nameColor;
 
   // Row chrome: champion = gold hero; everyone else = hairline-separated. The
-  // viewer's own row (when not champion) is tinted cobalt — never yellow.
+  // viewer's own row (when not champion) gets a light translucent cobalt fill —
+  // never yellow.
   const rowStyle: React.CSSProperties =
     tier === "champion"
       ? {
@@ -181,8 +183,9 @@ function StandingRow({
         }
       : {
           borderBottom: "1px solid var(--md-paper-3)",
-          background: mine ? "color-mix(in srgb, var(--md-cobalt) 8%, transparent)" : undefined,
-          borderLeft: mine ? "3px solid var(--md-cobalt)" : undefined,
+          background: mine
+            ? "color-mix(in srgb, var(--md-cobalt) 14%, transparent)"
+            : undefined,
         };
 
   return (
@@ -287,7 +290,17 @@ export function PrivateTournamentResult({
 
   // Join each entry to its bracket team (id = `entry:<entryId>`) for conference +
   // seed, and to sub-order play-in losers (decider loser seed 9 above 9v10 seed 10).
-  const teamByEntry = new Map((data.bracket?.teams ?? []).map((t) => [t.id, t]));
+  // Earned play-in seeds are applied so survivors read their earned 7/8 (and losers
+  // 9/10) even on brackets stored before the engine wrote it back.
+  const earnedSeeds = data.bracket
+    ? playInEarnedSeeds(data.bracket)
+    : new Map<string, number>();
+  const teamByEntry = new Map(
+    (data.bracket?.teams ?? []).map(
+      (t) =>
+        [t.id, earnedSeeds.has(t.id) ? { ...t, seed: earnedSeeds.get(t.id)! } : t] as const,
+    ),
+  );
   const teamOf = (e: PrivateCompletedEntry) => teamByEntry.get(`entry:${e.entryId}`);
 
   // Rank: deeper run first, then playoff record, then net margin. Timed-out bots
