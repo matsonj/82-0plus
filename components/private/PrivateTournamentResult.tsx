@@ -422,35 +422,9 @@ export function PrivateTournamentResult({
         )}
       </div>
 
-      {/* The bracket — BracketView handles horizontal-desktop / stacked-mobile */}
-      {data.bracket ? (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
-              The Bracket
-            </span>
-            <div className="flex-1 border-t border-[var(--md-paper-3)]" />
-            <span className="font-mono text-[10px] text-[var(--md-ink-muted)]">
-              Seed · Record
-            </span>
-          </div>
-          {/* Private tournaments share one board, so grey+italicise an opponent's
-              players that you also drafted — same as daily. */}
-          <BracketView bracket={data.bracket} youId={youId} sharedBoard />
-        </div>
-      ) : (
-        <div
-          className="border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-4 text-center font-mono text-[13px] text-[var(--md-ink-muted)]"
-        >
-          The bracket isn&rsquo;t available for this tournament.
-        </div>
-      )}
-
-      {/* Viewer's own result callout + share button */}
-      <div
-        className="flex flex-wrap items-center justify-between gap-4 border-t-2 border-[var(--md-ink)] pt-5"
-      >
-        <div className="flex items-baseline gap-2 flex-wrap">
+      {/* Viewer's own result callout + share — sits above the bracket. */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-t-2 border-[var(--md-ink)] pt-5">
+        <div className="flex flex-wrap items-baseline gap-2">
           {myRank != null && myEntry && (
             <>
               <span
@@ -464,9 +438,7 @@ export function PrivateTournamentResult({
                 Top {myRank}
               </span>
               {myStatus && (
-                <span className="font-display text-[13px] text-[var(--md-ink-muted)]">
-                  · {myStatus}
-                </span>
+                <span className="font-display text-[13px] text-[var(--md-ink-muted)]">· {myStatus}</span>
               )}
             </>
           )}
@@ -493,6 +465,27 @@ export function PrivateTournamentResult({
           {shareCopied ? "Copied!" : "Share the Bracket"}
         </Button>
       </div>
+
+      {/* The bracket — BracketView handles horizontal-desktop / stacked-mobile */}
+      {data.bracket ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <span className="font-cond text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
+              The Bracket
+            </span>
+            <div className="flex-1 border-t border-[var(--md-paper-3)]" />
+          </div>
+          {/* Private tournaments share one board, so grey+italicise an opponent's
+              players that you also drafted — same as daily. */}
+          <BracketView bracket={data.bracket} youId={youId} sharedBoard />
+        </div>
+      ) : (
+        <div
+          className="border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-4 text-center font-mono text-[13px] text-[var(--md-ink-muted)]"
+        >
+          The bracket isn&rsquo;t available for this tournament.
+        </div>
+      )}
 
       {/* Host-only teardown — quiet, confirm-gated. */}
       {you?.isAdmin && (

@@ -364,7 +364,9 @@ function SeriesCard({
 
   const py = compact ? "py-1.5" : "py-2";
   const nameSize = compact ? "text-[14px]" : "text-[14px] sm:text-[15px]";
-  const scoreWidth = compact ? 50 : 56;
+  // Scores are a single game-win count now, so the lane can be tight — more room
+  // for the name.
+  const scoreWidth = compact ? 24 : 30;
 
   // The viewer's path is traced in cobalt — border + offset shadow on the
   // whole card. Non-viewer cards keep the ink border; only the final gets a lift.
@@ -425,24 +427,30 @@ function SeriesCard({
         <RosterPanel team={loTeam} compareKeys={compareFor(series.loId)} />
       )}
 
-      {/* Per-game scores rail — BEST OF N / SEE SCORES */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between border-t border-[var(--md-paper-3)] px-3 py-1 text-left font-cond text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]"
-        style={{ cursor: "pointer" }}
-        aria-expanded={open}
-      >
-        <span>best of {series.bestOf}</span>
-        <span>{open ? "hide ▴" : "see scores ▾"}</span>
-      </button>
+      {/* Per-game scores rail — BEST OF N / SEE SCORES. Hidden in the compact
+          desktop tree (2-row cards, matching the design); shown in the mobile
+          stacked view where there's room. */}
+      {!compact && (
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="flex w-full items-center justify-between border-t border-[var(--md-paper-3)] px-3 py-1 text-left font-cond text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]"
+            style={{ cursor: "pointer" }}
+            aria-expanded={open}
+          >
+            <span>best of {series.bestOf}</span>
+            <span>{open ? "hide ▴" : "see scores ▾"}</span>
+          </button>
 
-      {open && (
-        <div className="flex flex-col gap-2 border-t-2 border-[var(--md-ink)] bg-[var(--md-paper)] p-2">
-          {series.games.map((g) => (
-            <GameRow key={g.gameNo} game={g} nameOf={nameOf} />
-          ))}
-        </div>
+          {open && (
+            <div className="flex flex-col gap-2 border-t-2 border-[var(--md-ink)] bg-[var(--md-paper)] p-2">
+              {series.games.map((g) => (
+                <GameRow key={g.gameNo} game={g} nameOf={nameOf} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -788,20 +796,26 @@ function HorizontalBracketTree({
     return roundLabel(numRounds - 1 - i);
   }
 
-  // Column widths: all rounds get 220px, last round (Final) gets 200px.
-  // These are minimum widths; the tree may be wider than the viewport.
-  const colWidth = (i: number) => (i === numRounds - 1 ? 200 : 220);
+  // Cards are a fixed width so names fit without truncation; each column is that
+  // width plus a connector arm on whichever sides have connectors. The card
+  // itself always renders at CARD_W regardless of column.
+  const ARM = 24;
+  const CARD_W = 240;
+  const colWidth = (i: number) =>
+    CARD_W + (i > 0 ? ARM : 0) + (i < numRounds - 1 ? ARM : 0);
 
-  // Minimum tree height: enough to show all QF matchups without crowding.
-  // Each matchup card is ~56px; we want at least 32px gap between cards.
+  // Minimum tree height: enough vertical air for a ~66px 2-row card plus a clean
+  // gap between each. Grows on demand when a roster is expanded.
   const qfCount = rounds[0]?.length ?? 1;
-  const minTreeHeight = Math.max(320, qfCount * 88);
+  const minTreeHeight = Math.max(360, qfCount * 96);
+  const treeMinWidth =
+    rounds.reduce((sum, _s, i) => sum + colWidth(i), 0) + 210; // + champion col
 
   return (
     <div className="overflow-x-auto">
       <div
         className="flex gap-0 items-stretch"
-        style={{ minWidth: numRounds * 220 + 200, minHeight: minTreeHeight }}
+        style={{ minWidth: treeMinWidth, minHeight: minTreeHeight }}
       >
         {rounds.map((series, i) => (
           <TreeColumn
