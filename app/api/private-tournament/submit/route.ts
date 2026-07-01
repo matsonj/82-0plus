@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
       queryOptions,
     );
 
-    await submitPrivateEntry({
+    const submitted = await submitPrivateEntry({
       entryId: entry.entryId,
       sixthJson: sixthPick,
       captainSlot,
@@ -137,6 +137,26 @@ export async function POST(req: NextRequest) {
       provisionalStatus: prov.status,
       teamName,
     });
+    if (!submitted.ok) {
+      // The write matched no in-progress row; skip the eager finalize. `gone` =
+      // purged (10-min timeout) → removed (410); `locked` = a concurrent submit or
+      // finalize already advanced this entry → conflict (409). Never clobbers a
+      // submitted/bot_replaced row, never false-succeeds.
+      return submitted.reason === "gone"
+        ? jsonWithSessionHint(
+            sessionHint,
+            {
+              error:
+                "Your 10-minute window expired — you were removed. Rejoin if there's still room.",
+            },
+            { status: 410 },
+          )
+        : jsonWithSessionHint(
+            sessionHint,
+            { error: "This entry is already locked in." },
+            { status: 409 },
+          );
+    }
 
     // ---- Eager finalize: if every slot is now submitted, resolve the bracket. ----
     let finalized = false;

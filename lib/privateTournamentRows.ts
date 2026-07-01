@@ -8,6 +8,7 @@ import type {
   PrivateStatus,
   PublicTournamentSummary,
 } from "./privateTournament";
+import { ENTRY_COMPLETION_MINUTES } from "./privateTournament";
 
 // SHARED private-tournament row contract: the single source of truth for the
 // raw DB row shapes, the camelCase mapped types, the SELECT column lists, the
@@ -318,11 +319,21 @@ export interface PublicTournamentDbRow {
 }
 
 /** SELECT list for the public browse query. Aliased off `t` (tournaments) joined
- *  with `e` (entries); pair with `GROUP BY t.tournament_id`. No PIN columns. */
+ *  with `e` (entries); pair with `GROUP BY t.tournament_id`. No PIN columns.
+ *
+ *  entry_count counts a slot as occupied iff the entry is locked (submitted; also
+ *  bot_replaced, which can't appear while open but is harmless/defensive) OR still
+ *  inside its per-entry completion window. Stale incomplete entries (registered/
+ *  partial past the window) drop out — mirroring what the purge would DELETE, but
+ *  read-only, so the RO browse count matches reality without a write. Keep this
+ *  FILTER structurally identical to countsTowardPublicSpots() in privateTournament.ts. */
 export const PUBLIC_TOURNAMENT_LIST_COLS = `t.tournament_id AS tournament_id, t.name AS name,
             t.admin_name AS admin_name, t.mode AS mode, t.size AS size,
             t.board_mode AS board_mode, t.expires_at AS expires_at,
-            COUNT(e.entry_id)::int AS entry_count`;
+            COUNT(e.entry_id) FILTER (
+              WHERE e.status IN ('submitted', 'bot_replaced')
+                 OR e.created_at > now() - interval '${ENTRY_COMPLETION_MINUTES} minutes'
+            )::int AS entry_count`;
 
 export function mapPublicTournamentRow(
   r: PublicTournamentDbRow,

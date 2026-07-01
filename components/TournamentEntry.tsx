@@ -65,6 +65,10 @@ export function TournamentEntry({
     name: string;
     pin: string;
     onSubmitted: () => void;
+    // Called when the private submit returns 410 — the entrant's 10-minute window
+    // expired and their slot was freed. Lets the parent show the "removed" state
+    // instead of a generic submit error. (PUBLIC tournaments only; optional.)
+    onRemoved?: () => void;
   } | null;
   preloadedRosters?: DraftRosterMap;
   onBack: () => void;
@@ -330,6 +334,12 @@ export function TournamentEntry({
           }),
         });
         if (!res.ok) {
+          // 410 = the 10-minute window expired and the slot was freed. Route it to
+          // the parent's "removed" flow rather than showing an inline error.
+          if (res.status === 410 && privateConfig.onRemoved) {
+            privateConfig.onRemoved();
+            return;
+          }
           const data = await res.json().catch(() => ({}));
           setSubmitError(data?.error ?? "Couldn't submit your team.");
           return;

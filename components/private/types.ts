@@ -24,6 +24,10 @@ export interface PrivateYou {
   finalRecordL: number | null;
   finalStatus: string | null;
   needsAttention: boolean;
+  // ISO deadline for this entry's 10-minute completion window (PUBLIC tournaments
+  // only). null when there's no active window — private, already submitted, or the
+  // host stub. The client counts down to it and shows the "removed" state on zero.
+  entryExpiresAt: string | null;
   // True only when the viewer's creds identify them as the tournament's host —
   // gates the host-only "Delete tournament" control. Absent/false otherwise.
   isAdmin?: boolean;
@@ -95,6 +99,9 @@ export interface PrivateRegisterResponse {
   rosters?: DraftRosterMap;
   size: number;
   mode: PrivateMode;
+  // ISO deadline for the 10-minute completion window (PUBLIC only; null for
+  // private or an already-submitted re-join). Drives the draft countdown.
+  entryExpiresAt: string | null;
 }
 
 // POST /partial response (the interstitial reg-season record). `result` + `roster`

@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
       captainSlot: hasCaptain ? captainSlot : 0,
     });
 
-    await savePrivatePartial({
+    const saved = await savePrivatePartial({
       entryId: entry.entryId,
       rosterJson: picks,
       rosterDisplay: { roster: built.roster, sixthMan: built.sixthManInfo },
@@ -107,6 +107,25 @@ export async function POST(req: NextRequest) {
       teamBoxJson: sim.teamBox,
       teamName,
     });
+    if (!saved.ok) {
+      // The write matched no in-progress row. `gone` = purged (10-min timeout) →
+      // removed (410); `locked` = a concurrent submit/finalize already advanced this
+      // entry → conflict (409). Either way we never clobber and never false-succeed.
+      return saved.reason === "gone"
+        ? jsonWithSessionHint(
+            sessionHint,
+            {
+              error:
+                "Your 10-minute window expired — you were removed. Rejoin if there's still room.",
+            },
+            { status: 410 },
+          )
+        : jsonWithSessionHint(
+            sessionHint,
+            { error: "This entry is already locked in." },
+            { status: 409 },
+          );
+    }
 
     return jsonWithSessionHint(sessionHint, {
       entryId: entry.entryId,

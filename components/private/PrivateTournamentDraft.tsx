@@ -13,6 +13,7 @@ import { LineupDraftBoard } from "@/components/LineupDraftBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { TournamentEntry } from "@/components/TournamentEntry";
 import { Button, ButtonLink, Capsule } from "@/components/ui";
+import { EntryCountdown } from "@/components/private/EntryCountdown";
 import { SITE_URL } from "@/lib/site";
 import type { PrivateBoard } from "@/lib/privateBoard";
 import type { PrivateMode } from "@/lib/privateTournament";
@@ -58,6 +59,7 @@ export function PrivateTournamentDraft({
   name,
   pin,
   rosters,
+  entryExpiresAt,
   onComplete,
 }: {
   tournamentId: string;
@@ -67,6 +69,9 @@ export function PrivateTournamentDraft({
   name: string;
   pin: string;
   rosters?: DraftRosterMap;
+  // ISO deadline for the 10-minute completion window (PUBLIC only; null/undefined
+  // for private tournaments → no countdown, no auto-kick).
+  entryExpiresAt?: string | null;
   onComplete: () => void;
 }) {
   const gameMode = listMode(mode);
@@ -87,9 +92,34 @@ export function PrivateTournamentDraft({
   } | null>(null);
   const [savingPartial, setSavingPartial] = useState(false);
   const [partialError, setPartialError] = useState<string | null>(null);
+  // Flipped when the per-entry 10-minute window closes (PUBLIC only) — the entrant
+  // was kicked and their slot freed. Server is the source of truth; this drives the
+  // in-tab "you were removed" screen.
+  const [removed, setRemoved] = useState(false);
 
   // Don't persist before the initial IndexedDB load resolves.
   const hydrated = useRef(false);
+
+  // ---- Per-entry completion deadline. ---- Runs across EVERY step (draft,
+  // interstitial, finalize) so a slow drafter is caught even mid-TournamentEntry,
+  // unlike a countdown that only lives in one subtree. entryExpiresAt is null for
+  // private tournaments, so this is a no-op there.
+  useEffect(() => {
+    if (!entryExpiresAt) return;
+    const ms = Date.parse(entryExpiresAt) - Date.now();
+    if (ms <= 0) {
+      setRemoved(true);
+      return;
+    }
+    const id = setTimeout(() => setRemoved(true), ms);
+    return () => clearTimeout(id);
+  }, [entryExpiresAt]);
+
+  // Discard the local draft once removed (hygiene — a rejoin mints a new entryId
+  // and draft key anyway, so the dead draft is already orphaned).
+  useEffect(() => {
+    if (removed) void clearPrivateDraft(draftKey);
+  }, [removed, draftKey]);
 
   // ---- Resume from IndexedDB on mount. ----
   useEffect(() => {
@@ -230,6 +260,11 @@ export function PrivateTournamentDraft({
         }),
       });
       if (!res.ok) {
+        // 410 Gone = the 10-minute window expired and the server removed us.
+        if (res.status === 410) {
+          setRemoved(true);
+          return;
+        }
         const d = await res.json().catch(() => ({}));
         setPartialError(d?.error ?? "Couldn't save your draft.");
         return;
@@ -254,6 +289,19 @@ export function PrivateTournamentDraft({
 
   // ===================== render =====================
 
+  // A compact per-entry countdown, shown atop every drafting step (PUBLIC only).
+  const deadlineBanner = entryExpiresAt ? (
+    <div className="flex items-center justify-between gap-3 border-2 border-[var(--md-coral)] bg-[var(--md-white)] px-3 py-2">
+      <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">
+        Lock in your six before the clock runs out
+      </span>
+      <span className="font-cond text-[14px] font-bold tabular-nums text-[var(--md-coral)]">
+        ⏱ <EntryCountdown expiresAt={entryExpiresAt} compact />
+      </span>
+    </div>
+  ) : null;
+
+  // Successful submit wins over a just-crossed deadline.
   if (step === "done") {
     return (
       <div className="md-card md-card--lift mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
@@ -268,22 +316,41 @@ export function PrivateTournamentDraft({
     );
   }
 
+  // ---- REMOVED: the 10-minute window closed and the slot was freed. ----
+  if (removed) {
+    return (
+      <div className="md-card md-card--lift mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
+        <Capsule tone="coral">Time&rsquo;s up</Capsule>
+        <p className="font-display text-sm text-[var(--md-ink-muted)]">
+          Your 10-minute window closed and your slot was freed. If there&rsquo;s
+          still room, you can rejoin and draft again.
+        </p>
+        <Button size="lg" variant="teal" onClick={onComplete}>
+          Back to the tournament
+        </Button>
+      </div>
+    );
+  }
+
   // ---- INTERSTITIAL: the shared post-selection screen, with a "continue" CTA. ----
   if (step === "interstitial" && partial) {
     return (
-      <ResultsPanel
-        roster={partial.roster}
-        result={partial.result}
-        shareText={`Daily82 🏀 my ${partial.result.wins}-${partial.result.losses} private-tournament five`}
-        shareLink={`${SITE_URL}/p/${tournamentId}`}
-        modeLabel={mode === "hoopiq" ? "Private - Ranked" : "Private - Classic"}
-        mode={gameMode}
-        onReset={() => setStep("draft")}
-        onEnterTournament={() => setStep("finalize")}
-        entryCtaLabel="Add sixth man & captain"
-        entryRequiresEligible={false}
-        entryOnly
-      />
+      <div className="flex flex-col gap-4">
+        {deadlineBanner}
+        <ResultsPanel
+          roster={partial.roster}
+          result={partial.result}
+          shareText={`Daily82 🏀 my ${partial.result.wins}-${partial.result.losses} private-tournament five`}
+          shareLink={`${SITE_URL}/p/${tournamentId}`}
+          modeLabel={mode === "hoopiq" ? "Private - Ranked" : "Private - Classic"}
+          mode={gameMode}
+          onReset={() => setStep("draft")}
+          onEnterTournament={() => setStep("finalize")}
+          entryCtaLabel="Add sixth man & captain"
+          entryRequiresEligible={false}
+          entryOnly
+        />
+      </div>
     );
   }
 
@@ -293,19 +360,25 @@ export function PrivateTournamentDraft({
   // are fully placed by the time we reach finalize. ----
   if (step === "finalize") {
     return (
-      <TournamentEntry
-        initialLineup={lineup}
-        mode={mode}
-        dailyBench={board.benchSlot}
-        preloadedRosters={rosters}
-        privateConfig={{
-          tournamentId,
-          name,
-          pin,
-          onSubmitted: handleSubmitted,
-        }}
-        onBack={() => setStep("interstitial")}
-      />
+      <div className="flex flex-col gap-4">
+        {deadlineBanner}
+        <TournamentEntry
+          initialLineup={lineup}
+          mode={mode}
+          dailyBench={board.benchSlot}
+          preloadedRosters={rosters}
+          privateConfig={{
+            tournamentId,
+            name,
+            pin,
+            onSubmitted: handleSubmitted,
+            // A submit past the 10-minute window returns 410 → show the removed
+            // state (same terminal screen as the countdown expiry / partial 410).
+            onRemoved: () => setRemoved(true),
+          }}
+          onBack={() => setStep("interstitial")}
+        />
+      </div>
     );
   }
 
@@ -314,6 +387,7 @@ export function PrivateTournamentDraft({
   // chosen player can't be swapped for a different one (rearrange-only). ----
   return (
     <div className="flex flex-col gap-5">
+      {deadlineBanner}
       <LineupDraftBoard
         kinds={KINDS}
         lineup={lineup}

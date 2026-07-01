@@ -21,11 +21,12 @@ import { getOfferedIds } from "./queries";
 import { simulateRoster } from "./scoring";
 import { KINDS } from "./rosterParse";
 import type { SixthPick } from "./rosterParse";
-import { isExpired } from "./privateTournament";
+import { isEntryExpired, isExpired } from "./privateTournament";
 import { startersMatchBoard } from "./privateTournamentRun";
 import {
   getPrivateEntry,
   getPrivateTournament,
+  purgeStaleIncompleteEntries,
   type PrivateEntryRow,
   type PrivateTournamentRow,
 } from "./privateTournamentQueries";
@@ -56,6 +57,7 @@ export type LoadOpenPrivateEntryResult =
  *   • not expired                            (400 "this tournament's entry window has closed")
  *   • the user has an entry                  (400 "register for this tournament first")
  *   • the entry is still in progress         (400 "your entry is already locked in")
+ *   • (PUBLIC) still within the 10-min window (410 "Your 10-minute window expired…")
  * Returns the loaded rows on success, else { ok: false, error, status }.
  */
 export async function loadOpenPrivateEntry(
@@ -90,6 +92,26 @@ export async function loadOpenPrivateEntry(
   }
   if (entry.status === "submitted" || entry.status === "bot_replaced") {
     return { ok: false, error: "your entry is already locked in", status: 400 };
+  }
+  // Per-entrant completion window (PUBLIC only): a registered/partial entry past
+  // its 10-minute deadline is kicked. Purge the dead row so the freed slot is real,
+  // then reject deterministically — this is the authoritative decision even when no
+  // read/register purge fired first (e.g. a submit attempt at 10:30). Private
+  // tournaments skip this entirely (isPublic gate) so their behaviour is unchanged.
+  if (
+    tournament.isPublic &&
+    isEntryExpired(entry.createdAt, Date.now(), entry.status)
+  ) {
+    await purgeStaleIncompleteEntries({
+      tournamentId: args.tournamentId,
+      isPublic: true,
+    });
+    return {
+      ok: false,
+      error:
+        "Your 10-minute window expired — you were removed. Rejoin if there's still room.",
+      status: 410,
+    };
   }
 
   return { ok: true, tournament, entry };

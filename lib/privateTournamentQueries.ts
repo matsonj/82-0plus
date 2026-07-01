@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { PrivateBoard } from "./privateBoard";
 import type {
   PrivateBoardMode,
+  PrivateEntryStatus,
   PrivateMode,
   PrivateResultLabel,
   PrivateSize,
 } from "./privateTournament";
+import { ENTRY_COMPLETION_MINUTES } from "./privateTournament";
 import {
   type EntryDbRow,
   type EntryForUserDbRow,
@@ -20,7 +22,7 @@ import {
   type PrivateTournamentRow,
   type TournamentDbRow,
 } from "./privateTournamentRows";
-import { ensureSchema, queryRW } from "./oltpDb";
+import { ensureSchema, queryRW, withTx } from "./oltpDb";
 
 // Private (invite-only) tournament WRITE helpers. Mirror tournamentQueries.ts:
 // ensureSchema() is awaited before every write; UUIDs are generated in app code
@@ -213,6 +215,163 @@ export async function registerPrivateEntry(
   return existing?.entryId ?? entryId;
 }
 
+/**
+ * Purge stale incomplete entries for ONE tournament — the per-entrant completion
+ * timeout. Deletes only registered|partial rows older than the completion window,
+ * freeing their slots; NEVER touches submitted|bot_replaced. Gated to PUBLIC
+ * tournaments by the CALLER's `isPublic` arg (private behaviour is unchanged).
+ * Returns the number of rows purged (0 is common and cheap). RETURNING is required
+ * to count — a bare DELETE yields no rows.
+ */
+export async function purgeStaleIncompleteEntries(args: {
+  tournamentId: string;
+  isPublic: boolean;
+}): Promise<number> {
+  if (!args.isPublic) return 0;
+  await ensureSchema();
+  const purged = await queryRW<{ entry_id: string }>(
+    `DELETE FROM ${TDB}.private_entries
+      WHERE tournament_id = $1
+        AND status IN ('registered', 'partial')
+        AND created_at < now() - interval '${ENTRY_COMPLETION_MINUTES} minutes'
+      RETURNING entry_id`,
+    [args.tournamentId],
+  );
+  return purged.length;
+}
+
+export interface RegisterWithPurgeArgs {
+  tournamentId: string;
+  userId: string;
+  userName: string;
+  size: number;
+}
+
+export type RegisterWithPurgeResult =
+  | {
+      ok: true;
+      entryId: string;
+      created: boolean; // true = fresh insert this call; false = idempotent re-join
+      createdAtISO: string; // the entry's registration instant (drives the deadline)
+      status: PrivateEntryStatus;
+    }
+  | { ok: false; reason: "full" };
+
+/**
+ * Atomic register-with-purge for PUBLIC tournaments. In ONE transaction (pinned to
+ * a single backend by withTx, safe under PgBouncer transaction pooling):
+ *   1. take a per-tournament advisory xact lock so concurrent registers serialize
+ *      (kills the last-freed-slot over-fill race across backends);
+ *   2. purge stale incomplete entries, freeing dead slots;
+ *   3. idempotent re-join — a surviving (non-stale) entry for this user is returned
+ *      AS-IS, so reloading register never resets an active window;
+ *   4. re-count and reject if full;
+ *   5. else insert a fresh 'registered' row.
+ * A previously-kicked user's stale row is purged in step 2, so step 5 gives them a
+ * brand-new created_at (fresh 10-minute window) for free. The advisory lock is
+ * transaction-scoped (released at COMMIT), so it is compatible with transaction-
+ * mode pooling. Private tournaments must NOT use this path (see register route).
+ */
+export async function registerWithPurgeTx(
+  args: RegisterWithPurgeArgs,
+): Promise<RegisterWithPurgeResult> {
+  await ensureSchema();
+  return withTx(async (client) => {
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+      args.tournamentId,
+    ]);
+    await client.query(
+      `DELETE FROM ${TDB}.private_entries
+        WHERE tournament_id = $1
+          AND status IN ('registered', 'partial')
+          AND created_at < now() - interval '${ENTRY_COMPLETION_MINUTES} minutes'`,
+      [args.tournamentId],
+    );
+    const mine = await client.query(
+      `SELECT entry_id, status, created_at
+         FROM ${TDB}.private_entries
+        WHERE tournament_id = $1 AND user_id = $2
+        LIMIT 1`,
+      [args.tournamentId, args.userId],
+    );
+    if (mine.rows[0]) {
+      return {
+        ok: true as const,
+        entryId: String(mine.rows[0].entry_id),
+        created: false,
+        createdAtISO: new Date(mine.rows[0].created_at).toISOString(),
+        status: mine.rows[0].status as PrivateEntryStatus,
+      };
+    }
+    const counted = await client.query(
+      `SELECT count(*)::int AS n
+         FROM ${TDB}.private_entries
+        WHERE tournament_id = $1`,
+      [args.tournamentId],
+    );
+    if ((counted.rows[0]?.n ?? 0) >= args.size) {
+      return { ok: false as const, reason: "full" };
+    }
+    const entryId = randomUUID();
+    const inserted = await client.query(
+      `INSERT INTO ${TDB}.private_entries
+         (entry_id, tournament_id, user_id, user_name, status)
+       VALUES ($1, $2, $3, $4, 'registered')
+       ON CONFLICT (tournament_id, user_id) DO NOTHING
+       RETURNING created_at`,
+      [entryId, args.tournamentId, args.userId, args.userName],
+    );
+    if (inserted.rows[0]) {
+      return {
+        ok: true as const,
+        entryId,
+        created: true,
+        createdAtISO: new Date(inserted.rows[0].created_at).toISOString(),
+        status: "registered" as PrivateEntryStatus,
+      };
+    }
+    // Should be unreachable under the advisory lock, but stay idempotent: another
+    // writer won the (tournament, user) row — return it rather than surface a 500.
+    const raced = await client.query(
+      `SELECT entry_id, status, created_at
+         FROM ${TDB}.private_entries
+        WHERE tournament_id = $1 AND user_id = $2
+        LIMIT 1`,
+      [args.tournamentId, args.userId],
+    );
+    const row = raced.rows[0];
+    return {
+      ok: true as const,
+      entryId: row ? String(row.entry_id) : entryId,
+      created: false,
+      createdAtISO: new Date(row?.created_at ?? new Date()).toISOString(),
+      status: (row?.status as PrivateEntryStatus) ?? "registered",
+    };
+  });
+}
+
+/** Result of a partial/submit write. `gone` = the row was deleted (purged by the
+ *  10-minute timeout / removed) between the caller's gate and the write; `locked` =
+ *  the row survives but already advanced past in-progress (a concurrent submit or a
+ *  finalize flipped it to submitted/bot_replaced). Both are 0-row UPDATEs, but the
+ *  caller reports them differently (410 removed vs 409 already-locked). */
+export type EntryWriteOutcome =
+  | { ok: true }
+  | { ok: false; reason: "gone" | "locked" };
+
+/** Classify why an in-progress UPDATE matched 0 rows. Best-effort and only used for
+ *  the caller's error message — the UPDATE's own `status IN ('registered','partial')`
+ *  predicate is what actually prevents clobbering a submitted/bot_replaced row. */
+async function classifyEntryWriteMiss(
+  entryId: string,
+): Promise<{ ok: false; reason: "gone" | "locked" }> {
+  const rows = await queryRW<{ status: string }>(
+    `SELECT status FROM ${TDB}.private_entries WHERE entry_id = $1 LIMIT 1`,
+    [entryId],
+  );
+  return { ok: false, reason: rows.length === 0 ? "gone" : "locked" };
+}
+
 export interface SavePrivatePartialArgs {
   entryId: string;
   rosterJson: unknown; // SimPick[] — the five starters
@@ -228,12 +387,19 @@ export interface SavePrivatePartialArgs {
  * Save the interstitial 5-player draft as a 'partial' entry: just the starters,
  * the reg-season record + seed, and the share box. The sixth man, captain and
  * final bracket fields are filled later (submit / finalize).
+ *
+ * Only updates an IN-PROGRESS row (status registered|partial). Between the caller's
+ * loadOpenPrivateEntry gate and this write the entry can be purged (10-minute
+ * timeout) OR advanced by a concurrent submit/finalize; without the status
+ * predicate a slow /partial would clobber a submitted/bot_replaced row, regressing
+ * finalized state. On a 0-row UPDATE we classify the miss (gone vs locked) so the
+ * caller reports it correctly instead of a false success.
  */
 export async function savePrivatePartial(
   args: SavePrivatePartialArgs,
-): Promise<void> {
+): Promise<EntryWriteOutcome> {
   await ensureSchema();
-  await queryRW(
+  const updated = await queryRW<{ entry_id: string }>(
     `UPDATE ${TDB}.private_entries
         SET status = 'partial',
             roster_json = $2,
@@ -243,7 +409,9 @@ export async function savePrivatePartial(
             reg_l = $6,
             team_box_json = $7,
             team_name = COALESCE($8, team_name)
-      WHERE entry_id = $1`,
+      WHERE entry_id = $1
+        AND status IN ('registered', 'partial')
+      RETURNING entry_id`,
     [
       args.entryId,
       JSON.stringify(args.rosterJson),
@@ -255,6 +423,8 @@ export async function savePrivatePartial(
       args.teamName ?? null,
     ],
   );
+  if (updated.length > 0) return { ok: true };
+  return classifyEntryWriteMiss(args.entryId);
 }
 
 export interface SubmitPrivateEntryArgs {
@@ -272,12 +442,18 @@ export interface SubmitPrivateEntryArgs {
  * Lock in a complete six as a 'submitted' entry: the sixth man, captain slot,
  * final roster display, and the provisional bracket standing computed at submit
  * time. The final_* playoff fields are written only at finalization.
+ *
+ * Only updates an IN-PROGRESS row (status registered|partial). Guards the same race
+ * as savePrivatePartial: a slow /submit must NOT overwrite a row that a concurrent
+ * submit already locked in or that finalize turned into bot_replaced. On a 0-row
+ * UPDATE the miss is classified (gone vs locked) so the caller reports removal /
+ * conflict instead of a false success (and skips the eager finalize).
  */
 export async function submitPrivateEntry(
   args: SubmitPrivateEntryArgs,
-): Promise<void> {
+): Promise<EntryWriteOutcome> {
   await ensureSchema();
-  await queryRW(
+  const updated = await queryRW<{ entry_id: string }>(
     `UPDATE ${TDB}.private_entries
         SET status = 'submitted',
             sixth_json = $2,
@@ -288,7 +464,9 @@ export async function submitPrivateEntry(
             provisional_status = $7,
             team_name = COALESCE($8, team_name),
             submitted_at = now()
-      WHERE entry_id = $1`,
+      WHERE entry_id = $1
+        AND status IN ('registered', 'partial')
+      RETURNING entry_id`,
     [
       args.entryId,
       JSON.stringify(args.sixthJson),
@@ -300,6 +478,8 @@ export async function submitPrivateEntry(
       args.teamName ?? null,
     ],
   );
+  if (updated.length > 0) return { ok: true };
+  return classifyEntryWriteMiss(args.entryId);
 }
 
 // ── Finalization persistence (MATH lives elsewhere) ───────────────────────────
