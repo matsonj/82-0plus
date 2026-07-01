@@ -211,7 +211,7 @@ function SeriesTeamRow({
         style={{ cursor: "pointer" }}
       >
         <span
-          className={`font-cond ${nameSize} uppercase tracking-[0.02em]`}
+          className={`font-cond ${nameSize} uppercase leading-none tracking-[0.02em]`}
           style={{ fontWeight: won ? 700 : 500, color: nameColor }}
         >
           {isGhost ? "🤖 " : ""}
@@ -219,7 +219,7 @@ function SeriesTeamRow({
         </span>
       </button>
       <span
-        className="shrink-0 text-right font-mono text-[12px] font-bold tabular-nums"
+        className="shrink-0 text-right font-mono text-[12px] font-bold leading-none tabular-nums"
         style={{ color: scoreColor, minWidth: scoreWidth }}
       >
         {score}
@@ -283,7 +283,7 @@ function SeriesCard({
       ? confSeedColor(t.conference)
       : undefined;
 
-  const py = compact ? "py-1.5" : "py-2";
+  const py = compact ? "py-1" : "py-2";
   const nameSize = compact ? "text-[14px]" : "text-[14px] sm:text-[15px]";
   // Box scores run 2–3 digits; give the lane room.
   const scoreWidth = compact ? 30 : 34;
@@ -343,7 +343,7 @@ function SeriesCard({
       )}
 
       {/* Series result — "<winner> wins W–L" + the clinching game number. */}
-      <div className="flex items-baseline justify-between gap-2 border-t border-[var(--md-paper-3)] px-3 py-0.5 font-cond text-[9px] font-medium uppercase tracking-[0.1em] text-[var(--md-ink-muted)]">
+      <div className="flex items-baseline justify-between gap-2 border-t border-[var(--md-paper-3)] px-3 py-1 font-cond text-[9px] font-medium uppercase leading-none tracking-[0.1em] text-[var(--md-ink-muted)]">
         <span className="min-w-0 truncate">
           {winnerName} wins {seriesW}&ndash;{seriesL}
         </span>
