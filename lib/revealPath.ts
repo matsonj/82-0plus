@@ -8,7 +8,7 @@
 // The SimulateReveal component animates this; revealPath itself decides nothing
 // about timing or presentation.
 
-import type { BracketResult, TournamentYou } from "./types";
+import type { BracketResult } from "./types";
 import { regWinsFromSeedNet } from "./tier";
 
 export interface RevealTeam {
@@ -105,11 +105,13 @@ function teamOf(
 /**
  * Build the viewer's reveal path through a bracket. Returns the ordered rounds
  * the viewer played plus the end state. Safe on any bracket: if the viewer's id
- * isn't found in a round, the path simply stops there.
+ * isn't found in a round, the path simply stops there. Only `you.id` is read, so
+ * callers without a full `TournamentYou` (e.g. a private entrant's team id) can
+ * pass `{ id }`.
  */
 export function buildRevealScript(
   bracket: BracketResult,
-  you: TournamentYou,
+  you: { id: string },
 ): RevealScript {
   const totalRounds = bracket.rounds.length;
   const size = bracket.size ?? 16;

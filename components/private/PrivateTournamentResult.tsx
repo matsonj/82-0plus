@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BracketView } from "@/components/BracketView";
+import { SimulateReveal } from "@/components/SimulateReveal";
+import { buildRevealScript } from "@/lib/revealPath";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { DeleteTournamentControl } from "@/components/private/DeleteTournamentControl";
 import type { PrivateCompletedResponse } from "@/components/private/types";
@@ -269,11 +271,21 @@ export function PrivateTournamentResult({
   const [shareCopied, setShareCopied] = useState(false);
   const fullShare = `${SITE_URL}/p/${data.tournamentId}`;
 
-  // On open, if the viewer is an entrant with an unviewed final, clear the badge.
+  // The viewer's game-by-game path through this bracket (their team's run).
+  const revealScript = useMemo(
+    () => (data.bracket && youId ? buildRevealScript(data.bracket, { id: youId }) : null),
+    [data.bracket, youId],
+  );
+  // An unviewed completed result the viewer played → play the SIMULATE reveal
+  // first, then fall through to the summary (same as daily/classic/ranked).
+  const shouldReveal = !!you?.needsAttention && (revealScript?.rounds.length ?? 0) > 0;
+  const [revealDone, setRevealDone] = useState(!shouldReveal);
+
+  // Clear the unread badge. Fired on reveal dismiss when the reveal plays; else on
+  // mount (already-viewed re-opens; non-entrants never have needsAttention).
   const marked = useRef(false);
-  useEffect(() => {
+  const markViewed = useCallback(() => {
     if (marked.current) return;
-    if (!you || !you.needsAttention) return;
     const u = getSavedUser();
     if (!u) return;
     marked.current = true;
@@ -286,7 +298,11 @@ export function PrivateTournamentResult({
         tournamentId: data.tournamentId,
       }),
     }).catch(() => {});
-  }, [you, data.tournamentId]);
+  }, [data.tournamentId]);
+  useEffect(() => {
+    if (!you?.needsAttention || shouldReveal) return;
+    markViewed();
+  }, [you, shouldReveal, markViewed]);
 
   // Join each entry to its bracket team (id = `entry:<entryId>`) for conference +
   // seed, and to sub-order play-in losers (decider loser seed 9 above 9v10 seed 10).
@@ -336,6 +352,21 @@ export function PrivateTournamentResult({
     ? sortedEntries.indexOf(myEntry) + 1
     : undefined;
   const myStatus = myEntry ? formatTournamentStatus(myEntry.finalStatus) : undefined;
+
+  // Fresh, unviewed result the viewer played: play the SIMULATE reveal first, then
+  // dismiss into the summary below (and clear the unread badge).
+  if (!revealDone && revealScript) {
+    return (
+      <SimulateReveal
+        script={revealScript}
+        mode={data.mode === "hoopiq" ? "hoopiq" : "classic"}
+        onDismiss={() => {
+          setRevealDone(true);
+          markViewed();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">

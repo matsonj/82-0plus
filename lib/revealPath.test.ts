@@ -79,7 +79,7 @@ describe("buildRevealScript", () => {
       championName: "A",
       size: 4,
     };
-    const s = buildRevealScript(bracket, { ...YOU, reachedRound: 2 });
+    const s = buildRevealScript(bracket, YOU);
     expect(s.totalRounds).toBe(2);
     expect(s.rounds.map((r) => r.roundName)).toEqual(["Conf Finals", "The Final"]);
     expect(s.rounds[0].youWonSeries).toBe(true);
@@ -141,7 +141,7 @@ describe("buildRevealScript", () => {
       championName: "B",
       size: 16,
     };
-    const s = buildRevealScript(bracket, { ...YOU, reachedRound: 2 });
+    const s = buildRevealScript(bracket, YOU);
     expect(s.rounds).toHaveLength(3);
     expect(s.rounds[2].roundName).toBe("Conf Finals");
     expect(s.rounds[2].youWonSeries).toBe(false);
