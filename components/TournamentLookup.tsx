@@ -1047,6 +1047,13 @@ export function TournamentLookup({
                   + Create tournament
                 </Button>
 
+                {/* Public "open to everyone" browse list — anonymous,
+                    self-fetching; renders nothing when none are open. Shown
+                    above "Your Tournaments" for now. */}
+                <div id="tournament-public">
+                  <PublicTournamentList />
+                </div>
+
                 {/* Your tournaments — rethemed rows (desktop) / cards (mobile) */}
                 {privateLoading ? (
                   <LoadingState
@@ -1077,12 +1084,6 @@ export function TournamentLookup({
                     Create one above, or open a friend&rsquo;s invite link.
                   </EmptyState>
                 )}
-
-                {/* Public "open to everyone" browse list — anonymous,
-                    self-fetching; renders nothing when none are open. */}
-                <div id="tournament-public">
-                  <PublicTournamentList />
-                </div>
               </>
             )}
           </div>
