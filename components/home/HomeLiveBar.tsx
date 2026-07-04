@@ -4,8 +4,9 @@ import Link from "next/link";
 // home menu. Flame red is THE SLAM live-beacon / CTA ink (type on flame is cream);
 // the JOIN chip is a press-yellow stamp (ink type). Renders nothing when no listed
 // tournaments still have room, so it never shows a dead "0 open" bar. A signed-in
-// user already in an open tournament sees "You're in …" + a bracket link instead
-// of the join hook (`entered`).
+// user already in an open tournament sees their own entry instead of the join hook
+// (`entered`) — a push to finish an unsubmitted lineup, or a pointer at the field
+// once submitted.
 //
 // Full-bleed trick (same as GlobalHeader): width:100vw + marginLeft:calc(50% - 50vw)
 // breaks it out of the PageShell max-width; body has overflow-x:hidden to absorb
@@ -22,9 +23,15 @@ export function HomeLiveBar({
   // lobby (/p/<id>); 2+ go to the browsable list. Computed by the caller.
   href: string;
   // The signed-in user's own open entries (from the home bootstrap). When set, the
-  // bar stops selling the join hook and points at their bracket instead — name for
-  // a lone entry, count for several. null/undefined = signed out or not entered.
-  entered?: { count: number; name: string | null; href: string } | null;
+  // bar stops selling the join hook and points at their own entry instead — name
+  // for a lone entry, count for several. `needsFinish` = an entry's lineup isn't
+  // submitted yet (href targets it). null/undefined = signed out or not entered.
+  entered?: {
+    count: number;
+    name: string | null;
+    href: string;
+    needsFinish: boolean;
+  } | null;
 }) {
   if (count <= 0) return null;
   return (
@@ -56,14 +63,20 @@ export function HomeLiveBar({
             style={{ fontVariationSettings: '"wdth" 100' }}
           >
             {entered ? (
-              <>You&rsquo;re in {entered.name ?? `${entered.count} tournaments`}</>
+              entered.needsFinish ? (
+                <>Finish your entry in {entered.name}</>
+              ) : (
+                <>You&rsquo;re in {entered.name ?? `${entered.count} tournaments`}</>
+              )
             ) : (
               <>
                 {count} public tournament{count === 1 ? "" : "s"} open now
               </>
             )}
           </span>
-          {entrants > 0 && (
+          {/* Social proof for the join hook only — `entrants` counts the joinable
+              public tournaments, not the user's own, so it'd mislead when entered. */}
+          {!entered && entrants > 0 && (
             <span className="hidden font-mono text-[12px] text-[var(--md-paper)] sm:inline">
               · {entrants} in the field
             </span>
@@ -75,7 +88,13 @@ export function HomeLiveBar({
           style={{ background: "var(--md-yellow)", boxShadow: "var(--md-shadow-sm)" }}
         >
           {entered ? (
-            <>Check your bracket{entered.count === 1 ? "" : "s"}</>
+            entered.needsFinish ? (
+              <>Finish your lineup</>
+            ) : entered.count === 1 ? (
+              <>See the field</>
+            ) : (
+              <>See your tournaments</>
+            )
           ) : (
             <>Join the field</>
           )}{" "}
