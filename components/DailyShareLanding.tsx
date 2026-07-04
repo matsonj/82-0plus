@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { DailySignIn } from "@/components/DailySignIn";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -10,6 +9,7 @@ import { normalizeName } from "@/lib/tournamentValidation";
 import { pickKey, decadeLabel, gqDiffView, slotWinner } from "@/lib/rosterCompare";
 import { SITE_URL } from "@/lib/site";
 import { presentShare } from "@/lib/shareActions";
+import { Button, ButtonLink, buttonClassName } from "@/components/ui";
 import type { DailyResult } from "@/lib/dailyResults";
 import type { TournamentLookupResponse } from "@/lib/types";
 
@@ -332,7 +332,10 @@ export function DailyShareLanding({
                 ({sign(sharer.margin)}). The same five team/era rolls are waiting for you.
               </p>
             )}
-            <a href={playHref} className="md-btn md-btn--lg block w-full text-center sm:inline-flex sm:w-auto">
+            <a
+              href={playHref}
+              className={buttonClassName({ size: "lg", className: "block w-full text-center sm:inline-flex sm:w-auto" })}
+            >
               Play the {prettyDate(date)} challenge →
             </a>
           </div>
@@ -342,9 +345,9 @@ export function DailyShareLanding({
         {state.kind === "result" && (
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <ShareLink date={date} you={state.you} />
-            <Link href="/" className="md-btn md-btn--secondary">
+            <ButtonLink href="/" variant="secondary">
               Back to daily82
-            </Link>
+            </ButtonLink>
           </div>
         )}
       </div>
@@ -866,9 +869,8 @@ function ShareLink({ date, you }: { date: string; you: DailyResult }) {
   };
 
   return (
-    <button
-      type="button"
-      className="md-btn md-btn--lg"
+    <Button
+      size="lg"
       disabled={status === "loading"}
       onClick={onClick}
     >
@@ -879,7 +881,7 @@ function ShareLink({ date, you }: { date: string; you: DailyResult }) {
           : status === "error"
             ? "↻ Try again"
             : "↑ Share your result"}
-    </button>
+    </Button>
   );
 }
 

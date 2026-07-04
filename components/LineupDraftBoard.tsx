@@ -7,7 +7,7 @@ import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { LineupBoard, type LineupEntry } from "@/components/LineupBoard";
 import { RosterCard } from "@/components/RosterCard";
-import { Button } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
 
 // The SHARED draft engine for the five starters. Both the main game (which ROLLS
 // random team/era sources, with skips) and a private tournament (which REVEALS a
@@ -421,7 +421,7 @@ export function LineupDraftBoard({
   // ── Pending card (shared between layouts) ────────────────────────────────
   const PendingCard = () =>
     pending ? (
-      <div className="md-card md-card--lift flex flex-col items-center gap-3 p-4">
+      <Card lift className="flex flex-col items-center gap-3 p-4">
         <div className="text-sm">
           Where does{" "}
           <span className="font-archivo font-bold" style={{ fontVariationSettings: '"wdth" 90' }}>
@@ -441,7 +441,7 @@ export function LineupDraftBoard({
             Cancel pick
           </Button>
         )}
-      </div>
+      </Card>
     ) : null;
 
   // ── Desktop right column: drafted count + simulate ghost ─────────────────

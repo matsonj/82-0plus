@@ -27,7 +27,7 @@ import {
   formatTournamentStatus,
   formatSignedMargin,
 } from "@/lib/tournamentLabels";
-import { Button, Crown, EmptyState, LoadingState, Notice, Stamp } from "@/components/ui";
+import { Button, Card, Crown, EmptyState, LoadingState, Notice, Stamp } from "@/components/ui";
 import { LobbyRow, LobbyCard } from "@/components/LobbyRow";
 import {
   AccountFields,
@@ -1137,7 +1137,7 @@ export function TournamentLookup({
           <PrivateTournamentCreate onCancel={() => setShowCreate(false)} />
         ) : (
           <>
-            <div className="md-card md-card--lift flex flex-col gap-3 p-5">
+            <Card lift className="flex flex-col gap-3 p-5">
               <div>
                 <div
                   className="font-archivo leading-tight"
@@ -1157,7 +1157,7 @@ export function TournamentLookup({
               >
                 + Create tournament
               </Button>
-            </div>
+            </Card>
 
             {/* Public "open to everyone" browse list — anonymous; renders nothing
                 when no public tournaments are open. */}

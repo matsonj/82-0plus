@@ -12,7 +12,7 @@ import { type LineupEntry } from "@/components/LineupBoard";
 import { LineupDraftBoard } from "@/components/LineupDraftBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { TournamentEntry } from "@/components/TournamentEntry";
-import { Button, ButtonLink, Capsule } from "@/components/ui";
+import { Button, ButtonLink, Capsule, Card } from "@/components/ui";
 import { EntryCountdown } from "@/components/private/EntryCountdown";
 import { SITE_URL } from "@/lib/site";
 import type { PrivateBoard } from "@/lib/privateBoard";
@@ -301,7 +301,7 @@ export function PrivateTournamentDraft({
   // Successful submit wins over a just-crossed deadline.
   if (step === "done") {
     return (
-      <div className="md-card md-card--lift mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
+      <Card lift className="mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
         <Capsule tone="teal">Team submitted</Capsule>
         <p className="font-display text-sm text-[var(--md-ink-muted)]">
           Your six are locked in. Watch this tournament for the final bracket.
@@ -309,14 +309,14 @@ export function PrivateTournamentDraft({
         <ButtonLink href={`/p/${tournamentId}`} size="lg" variant="teal">
           Back to the tournament
         </ButtonLink>
-      </div>
+      </Card>
     );
   }
 
   // ---- REMOVED: the 10-minute window closed and the slot was freed. ----
   if (removed) {
     return (
-      <div className="md-card md-card--lift mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
+      <Card lift className="mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
         <Capsule tone="coral">Time&rsquo;s up</Capsule>
         <p className="font-display text-sm text-[var(--md-ink-muted)]">
           Your 10-minute window closed and your slot was freed. If there&rsquo;s
@@ -325,7 +325,7 @@ export function PrivateTournamentDraft({
         <Button size="lg" variant="teal" onClick={onComplete}>
           Back to the tournament
         </Button>
-      </div>
+      </Card>
     );
   }
 
@@ -403,7 +403,7 @@ export function PrivateTournamentDraft({
       />
 
       {allPlaced && (
-        <div className="md-card md-card--lift flex flex-col items-center gap-3 p-5 text-center">
+        <Card lift className="flex flex-col items-center gap-3 p-5 text-center">
           <div className="font-display text-base font-bold">Starting five locked.</div>
           {partialError && (
             <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
@@ -418,7 +418,7 @@ export function PrivateTournamentDraft({
           >
             {savingPartial ? "Saving…" : "See your record"}
           </Button>
-        </div>
+        </Card>
       )}
     </div>
   );
