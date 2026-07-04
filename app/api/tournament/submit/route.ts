@@ -1,5 +1,6 @@
-import { scryptSync, randomBytes, randomUUID, timingSafeEqual } from "crypto";
+import { randomUUID } from "crypto";
 import { NextRequest } from "next/server";
+import { requireAuth } from "@/lib/apiAuth";
 import { simulateRoster } from "@/lib/scoring";
 import { canPlay } from "@/lib/positions";
 import { getOfferedIds } from "@/lib/queries";
@@ -18,8 +19,6 @@ import {
   getStatNorms,
   drawOpponents,
   buildTournamentTeam,
-  getUsersByName,
-  insertUser,
   insertTeam,
 } from "@/lib/tournamentQueries";
 import { simulateBracket } from "@/lib/tournament";
@@ -230,26 +229,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ---- Identity = the (name, PIN) PAIR (90s arcade auth). The same name with
-    // a DIFFERENT PIN is a separate account; the same name + same PIN reuses the
-    // existing account so its teams accumulate. No name is ever "taken". ----
-    const pinMatches = (row: { pin_hash: string; pin_salt: string }): boolean => {
-      const candidate = scryptSync(pin, row.pin_salt, 32);
-      const stored = Buffer.from(row.pin_hash, "hex");
-      return candidate.length === stored.length && timingSafeEqual(candidate, stored);
-    };
-    let userId: string | null = null;
-    for (const u of await getUsersByName(nameNorm)) {
-      if (pinMatches(u)) {
-        userId = u.user_id;
-        break;
-      }
-    }
-    if (!userId) {
-      const salt = randomBytes(16).toString("hex");
-      const pinHash = scryptSync(pin, salt, 32).toString("hex");
-      userId = await insertUser({ name, nameNorm, pinHash, pinSalt: salt });
-    }
+    // ---- Identity = the (name, PIN) PAIR (90s arcade auth). Resolved through the
+    // canonical authenticate() (via requireAuth): the same name + same PIN reuses
+    // the existing account so its teams accumulate; a different PIN is a separate
+    // account; no name is ever "taken". This is the SAME create-or-match the daily
+    // /private paths use — the inline scrypt reimplementation that used to live
+    // here is gone (#113), and the shared per-account/per-IP throttle (#107) now
+    // covers this route too. Name + PIN shape were already 400-validated above, so
+    // this only fails on a throttle lockout (429). ----
+    const auth = await requireAuth(req, sessionHint, body.name, pin);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
 
     // ---- Hydrate roster (six players) ----
     let hydrated;

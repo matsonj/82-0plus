@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { authenticate } from "@/lib/dailyResults";
+import { requireAuth } from "@/lib/apiAuth";
 import { getPrivateNotifications } from "@/lib/privateNotifications";
 
 export const runtime = "nodejs";
@@ -15,10 +15,8 @@ export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   try {
     const body = await req.json();
-    const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
-    if (!auth.ok) {
-      return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
-    }
+    const auth = await requireAuth(req, sessionHint, body?.name, body?.pin);
+    if (!auth.ok) return auth.response;
     const notif = await getPrivateNotifications(auth.userId);
     return jsonWithSessionHint(sessionHint, notif);
   } catch (err) {

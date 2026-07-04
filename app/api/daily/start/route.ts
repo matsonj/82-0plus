@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import { computeDailyBoard } from "@/lib/daily";
-import { authenticate, getDailyResult, getDailyTeamId } from "@/lib/dailyResults";
+import { getDailyResult, getDailyTeamId } from "@/lib/dailyResults";
+import { requireAuth } from "@/lib/apiAuth";
 import { getDraftRosters } from "@/lib/draftSourceRosters";
 
 export const runtime = "nodejs";
@@ -28,10 +29,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
-    if (!auth.ok) {
-      return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
-    }
+    const auth = await requireAuth(req, sessionHint, body?.name, body?.pin);
+    if (!auth.ok) return auth.response;
 
     const result = await getDailyResult(auth.userId, date);
     if (result) {

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { authenticate, getDailyResult } from "@/lib/dailyResults";
+import { getDailyResult } from "@/lib/dailyResults";
+import { requireAuth } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,10 +17,8 @@ export async function POST(req: NextRequest) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return jsonWithSessionHint(sessionHint, { error: "invalid date" }, { status: 400 });
     }
-    const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
-    if (!auth.ok) {
-      return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
-    }
+    const auth = await requireAuth(req, sessionHint, body?.name, body?.pin);
+    if (!auth.ok) return auth.response;
     const result = await getDailyResult(auth.userId, date);
     return jsonWithSessionHint(sessionHint, { result });
   } catch (err) {

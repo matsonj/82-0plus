@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { authenticate, listDailyResults, getDailyRank } from "@/lib/dailyResults";
+import { listDailyResults, getDailyRank } from "@/lib/dailyResults";
+import { requireAuth } from "@/lib/apiAuth";
 import { recentDailyDates } from "@/lib/dailyDate";
 import { getPrivateNotifications } from "@/lib/privateNotifications";
 
@@ -17,10 +18,8 @@ export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   try {
     const body = await req.json();
-    const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
-    if (!auth.ok) {
-      return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
-    }
+    const auth = await requireAuth(req, sessionHint, body?.name, body?.pin);
+    if (!auth.ok) return auth.response;
     // window[0] is today (Pacific); window[last] is the oldest replayable date.
     const window = recentDailyDates();
     const since = window[window.length - 1];

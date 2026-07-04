@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { authenticate } from "@/lib/dailyResults";
+import { requireAuth } from "@/lib/apiAuth";
 import { parsePicks, parseSixth } from "@/lib/rosterParse";
 import {
   listPrivateEntries,
@@ -70,10 +70,8 @@ export async function POST(req: NextRequest) {
     }
     const teamName = normalizeTeamName(String(body.teamName));
 
-    const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
-    if (!auth.ok) {
-      return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
-    }
+    const auth = await requireAuth(req, sessionHint, body?.name, body?.pin);
+    if (!auth.ok) return auth.response;
 
     // ---- Tournament-open + entry-in-progress gate (shared with partial). ----
     const loaded = await loadOpenPrivateEntry({ tournamentId, userId: auth.userId });

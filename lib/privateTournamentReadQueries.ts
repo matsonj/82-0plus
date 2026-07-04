@@ -63,6 +63,25 @@ export async function listPrivateEntriesRO(
   return rows.map(mapEntryRow);
 }
 
+/**
+ * All private tournaments sharing a normalized name (for the PUBLIC name+PIN
+ * lookup). Read-pool twin of getPrivateTournamentsByNameNorm — no ensureSchema
+ * (RO never runs DDL), so the public /lookup route can't trigger DDL. The route
+ * picks the row whose PIN verifies. Oldest first (stable).
+ */
+export async function getPrivateTournamentsByNameNormRO(
+  nameNorm: string,
+): Promise<PrivateTournamentRow[]> {
+  const rows = await queryTournamentRO<TournamentDbRow>(
+    `SELECT ${PRIVATE_TOURNAMENT_COLS}
+       FROM ${RO_DB}.private_tournaments
+      WHERE name_norm = $1
+      ORDER BY created_at ASC`,
+    [nameNorm],
+  );
+  return rows.map(mapTournamentRow);
+}
+
 /** One entrant's row (entrant-specific highlight when creds are provided). */
 export async function getPrivateEntryRO(
   tournamentId: string,

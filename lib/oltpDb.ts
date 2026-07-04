@@ -189,6 +189,18 @@ const SCHEMA_DDL: string[] = [
      UNIQUE (tournament_id, user_id))`,
   `CREATE INDEX IF NOT EXISTS pe_tournament_idx ON ${TDB}.private_entries (tournament_id)`,
   `CREATE INDEX IF NOT EXISTS pe_user_idx ON ${TDB}.private_entries (user_id)`,
+
+  // Failed-credential throttle (#107). One row per throttle key (an account name
+  // or a client IP). Durable + cross-instance so Fluid Compute's multiple
+  // instances share one counter (see lib/authRateLimit). Timestamps are stored as
+  // epoch-ms bigints, not timestamptz, so the counter uses the SAME clock the app
+  // passes in (Date.now()) rather than mixing app time with the DB's now().
+  `CREATE TABLE IF NOT EXISTS ${TDB}.auth_throttle (
+     throttle_key text PRIMARY KEY,
+     fail_count integer NOT NULL DEFAULT 0,
+     window_start_ms bigint NOT NULL,
+     locked_until_ms bigint,
+     updated_at timestamptz NOT NULL DEFAULT now())`,
 ];
 
 /**
