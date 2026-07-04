@@ -13,7 +13,7 @@
 import type { QueryOptions } from "./motherduck";
 import { canPlay, type SlotKind } from "./positions";
 import { getPlayerIndex, type IndexedPlayer } from "./queries";
-import { simulateRoster, type ScoringPlayer } from "./scoring";
+import { simulateRoster, toScoring } from "./scoring";
 import { hashSeed, mulberry32 } from "./tournament";
 import { queryRW, TDB } from "./oltpDb";
 import type { DailyBoard } from "./daily";
@@ -53,20 +53,6 @@ const NAME_POOL = [
   "CLOCKWORK", "DAILY GRIND", "MORNING SHIFT", "HIGH NOON", "GOLDEN HOUR",
   "TODAY'S SPECIAL", "FRESH BATCH", "PRIME TIME", "LATE SHOW", "OVERNIGHT",
 ] as const;
-
-/** Map an indexed player into the scoring shape (mirrors hydrateRoster). */
-function toScoring(p: IndexedPlayer): ScoringPlayer {
-  return {
-    gq: p.value, season: p.best_season, mpg: p.mpg,
-    pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
-    fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
-    fgm: p.fgm, ftm: p.ftm,
-    tsplus: Number.isFinite(p.tsplus) ? p.tsplus : 1,
-    height_in: Number.isFinite(p.height_in) ? p.height_in : 79,
-    pos: p.pos ?? null,
-    allDef: p.all_def ?? 0,
-  };
-}
 
 export interface GeneratedDailyGhost {
   ghostId: number;
