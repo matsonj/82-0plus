@@ -7,7 +7,7 @@ import type {
   SimResult,
   SimRosterLine,
 } from "@/lib/types";
-import { type SlotKind } from "@/lib/positions";
+import { LINEUP_KINDS as KINDS } from "@/lib/lineup";
 import { type LineupEntry } from "@/components/LineupBoard";
 import { LineupDraftBoard } from "@/components/LineupDraftBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
@@ -27,9 +27,6 @@ import {
 } from "@/lib/privateDraftStorage";
 import type { PrivatePartialResponse } from "@/components/private/types";
 import { draftSourceKey, type DraftRosterMap } from "@/lib/draftSources";
-
-// The five lineup positions, board order [G,FLEX,W,FLEX,B].
-const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 
 type Step = "draft" | "interstitial" | "finalize" | "done";
 

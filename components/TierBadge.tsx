@@ -1,4 +1,5 @@
 import { tierForSeedNet, tierForWins } from "@/lib/tier";
+import { Stamp } from "@/components/ui/Stamp";
 
 // A small tier chip (S / AA / A / B / C / D), colored per lib/tier. Derived from
 // either the finished regular-season win total or an unrounded tournament seedNet.
@@ -14,32 +15,18 @@ type TierBadgeProps = {
   size?: "sm" | "capsule";
 } & ({ wins: number; seedNet?: never } | { seedNet: number; wins?: never });
 
-// Map tier label → SLAM-appropriate stamp style. S-tier = champion gold,
-// AA/A = flame, B/C/D = ink. Press-yellow text is ink; all others cream.
-function tierStampStyle(label: string): React.CSSProperties {
+// Map tier label → SLAM-appropriate stamp field color. S-tier = champion gold,
+// AA/A = flame, B/C/D = ink. Press-yellow text is ink; all others cream. The
+// border + misregistration double-shadow chrome itself lives in ui/Stamp.
+function tierStampColors(label: string): { background: string; color: string } {
   if (label === "S") {
-    return {
-      background: "var(--md-yellow)",
-      color: "var(--md-ink)",
-      border: "2px solid var(--md-ink)",
-      boxShadow: "3px 3px 0 var(--md-magenta), 5px 5px 0 var(--md-ink)",
-    };
+    return { background: "var(--md-yellow)", color: "var(--md-ink)" };
   }
   if (label === "AA" || label === "A") {
-    return {
-      background: "var(--md-coral)",
-      color: "var(--md-white)",
-      border: "2px solid var(--md-ink)",
-      boxShadow: "3px 3px 0 var(--md-magenta), 5px 5px 0 var(--md-ink)",
-    };
+    return { background: "var(--md-coral)", color: "var(--md-white)" };
   }
   // B / C / D
-  return {
-    background: "var(--md-ink)",
-    color: "var(--md-white)",
-    border: "2px solid var(--md-ink)",
-    boxShadow: "3px 3px 0 var(--md-magenta), 5px 5px 0 var(--md-ink)",
-  };
+  return { background: "var(--md-ink)", color: "var(--md-white)" };
 }
 
 export function TierBadge(props: TierBadgeProps) {
@@ -52,18 +39,17 @@ export function TierBadge(props: TierBadgeProps) {
 
   if (size === "capsule") {
     // Stamp treatment: slight rotation, misregistration double-shadow.
+    const { background, color } = tierStampColors(tier.label);
     return (
-      <span
-        className={`md-stamp inline-flex items-center justify-center px-2 py-0.5 font-cond text-[11px] font-bold uppercase tracking-[0.04em] ${className}`}
-        style={{
-          ...tierStampStyle(tier.label),
-          transform: "rotate(2deg)",
-          minWidth: 52,
-        }}
+      <Stamp
+        background={background}
+        color={color}
+        minWidth={52}
         title={`${tier.label}-tier`}
+        className={`px-2 py-0.5 font-cond text-[11px] font-bold uppercase tracking-[0.04em] ${className}`}
       >
         TIER {tier.label}
-      </span>
+      </Stamp>
     );
   }
 

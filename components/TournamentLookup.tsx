@@ -27,7 +27,7 @@ import {
   formatTournamentStatus,
   formatSignedMargin,
 } from "@/lib/tournamentLabels";
-import { Button, EmptyState, LoadingState, Notice } from "@/components/ui";
+import { Button, Crown, EmptyState, LoadingState, Notice, Stamp } from "@/components/ui";
 import { LobbyRow, LobbyCard } from "@/components/LobbyRow";
 import {
   AccountFields,
@@ -61,10 +61,11 @@ function regSeasonRecord(team: TournamentTeamSummary): { w: number; l: number } 
   return { w, l: 82 - w };
 }
 
-// Shared "press stamp" chrome for the TIER lane. Matches TierBadge exactly (same
-// border, misregistration double-shadow, +2° tilt, size) so the outcome stamps
-// (champ / runner-up), the daily rank, and the season tier all read as ONE family
-// — and a stacked outcome + rank reads as a single tilted stamp stack.
+// Shared "press stamp" chrome for the TIER lane, via the ui/Stamp primitive
+// (same border, misregistration double-shadow, +2° tilt as TierBadge's
+// capsule) so the outcome stamps (champ / runner-up), the daily rank, and the
+// season tier all read as ONE family — and a stacked outcome + rank reads as
+// a single tilted stamp stack.
 function RowStamp({
   fill,
   text,
@@ -77,13 +78,15 @@ function RowStamp({
   children: React.ReactNode;
 }) {
   return (
-    <span
-      className="md-stamp inline-flex items-center justify-center gap-1 px-2 py-0.5 font-cond text-[11px] font-bold uppercase tracking-[0.04em]"
-      style={{ background: fill, color: text, transform: "rotate(2deg)", minWidth: 60 }}
+    <Stamp
+      background={fill}
+      color={text}
+      minWidth={60}
       title={title}
+      className="gap-1 px-2 py-0.5 font-cond text-[11px] font-bold uppercase tracking-[0.04em]"
     >
       {children}
-    </span>
+    </Stamp>
   );
 }
 
@@ -169,7 +172,7 @@ function TeamRow({
       onClick={onOpen}
       disabled={loading}
       highlight={isChampion ? "champion" : "none"}
-      leading={isChampion && <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>}
+      leading={isChampion && <Crown variant="glyph" size={16} color="var(--md-yellow)" />}
       title={team.teamName}
       subtitle={modeLabel}
       run={
@@ -227,7 +230,7 @@ function TeamRow({
             className="font-cond text-[12px] font-bold uppercase tracking-[0.06em]"
             style={{ width: 130, flexShrink: 0, whiteSpace: "nowrap", color: outcomeColor }}
           >
-            {isChampion && <span className="mr-1">♛</span>}
+            {isChampion && <Crown variant="glyph" className="mr-1" />}
             {outcomeText}
           </span>
         </span>
@@ -294,7 +297,7 @@ function TeamCard({
       onClick={onOpen}
       disabled={loading}
       highlight={isChampion ? "champion" : "none"}
-      leading={isChampion && <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>}
+      leading={isChampion && <Crown variant="glyph" size={16} color="var(--md-yellow)" />}
       title={team.teamName}
       subtitle={modeLabel}
       stamp={
@@ -424,7 +427,7 @@ function PrivateRowDesktop({ row }: { row: MyPrivateRow }) {
         s.cloaked ? (
           <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "var(--md-coral)" }} />
         ) : s.isChampion ? (
-          <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>
+          <Crown variant="glyph" size={16} color="var(--md-yellow)" />
         ) : null
       }
       title={row.name}
@@ -495,7 +498,7 @@ function PrivateCardMobile({ row }: { row: MyPrivateRow }) {
           {s.cloaked && (
             <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "var(--md-coral)" }} />
           )}
-          {s.isChampion && <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>}
+          {s.isChampion && <Crown variant="glyph" size={16} color="var(--md-yellow)" />}
         </>
       }
       title={row.name}

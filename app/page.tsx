@@ -9,7 +9,7 @@ import type {
   SimRosterLine,
 } from "@/lib/types";
 import { draftSourceKey, type DraftRosterMap } from "@/lib/draftSources";
-import { type SlotKind } from "@/lib/positions";
+import { LINEUP_KINDS as KINDS } from "@/lib/lineup";
 import type { LineupEntry } from "@/components/LineupBoard";
 import { LineupDraftBoard } from "@/components/LineupDraftBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
@@ -48,7 +48,6 @@ import {
   listOwnedPendingDailies,
 } from "@/lib/dailyPending";
 
-const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play" | "tournament";
 type GameType = "free" | "daily";
 

@@ -1,4 +1,5 @@
 import type { TierInfo } from "@/lib/tier";
+import { Stamp } from "@/components/ui/Stamp";
 
 // A letter-grade badge for a team's QUALITY tier (S/AA/A/B/C/D), driven by
 // projected wins (see lib/tier.ts). This is NOT the My-Teams placement badge —
@@ -29,9 +30,12 @@ export function TeamGradeBadge({
   const fg = foregroundFor(tier);
   if (stamp) {
     return (
-      <span
-        className="inline-flex shrink-0 items-center gap-1.5 border-2 border-[var(--md-ink)] px-2 py-1"
-        style={{ background: tier.color, color: fg, boxShadow: "var(--md-shadow-sm)" }}
+      <Stamp
+        background={tier.color}
+        color={fg}
+        shadow="sm"
+        tilt={false}
+        className="shrink-0 gap-1.5 px-2 py-1"
       >
         <span className="font-cond text-[8px] font-bold uppercase tracking-[0.12em] leading-none">
           Grade
@@ -39,7 +43,7 @@ export function TeamGradeBadge({
         <span className="font-mono text-[15px] font-bold leading-none tabular-nums">
           {tier.label}
         </span>
-      </span>
+      </Stamp>
     );
   }
   return (

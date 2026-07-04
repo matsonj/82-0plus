@@ -7,7 +7,7 @@ import type {
   TournamentMode,
   TournamentRunResponse,
 } from "@/lib/types";
-import { type SlotKind } from "@/lib/positions";
+import { LINEUP_KINDS as KINDS } from "@/lib/lineup";
 import { SlotMachine } from "@/components/SlotMachine";
 import { PlayerList } from "@/components/PlayerList";
 import { type LineupEntry } from "@/components/LineupBoard";
@@ -28,9 +28,6 @@ import { draftSourceKey, type DraftRosterMap } from "@/lib/draftSources";
 import { suggestTeamName } from "@/lib/teamNameSuggest";
 
 const HOWTO_KEY = "md820-seen-tournament-howto";
-
-// The starting five board — identical to the main game.
-const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 
 // Down-weight a decade each time it's used so the bench roll lands in a fresh era.
 function pickWeightedDecade(

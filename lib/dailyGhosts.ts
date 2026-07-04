@@ -11,16 +11,14 @@
 // players; there's no cross-slot dedup to worry about.
 
 import type { QueryOptions } from "./motherduck";
-import { canPlay, type SlotKind } from "./positions";
+import { canPlay } from "./positions";
 import { getPlayerIndex, type IndexedPlayer } from "./queries";
 import { simulateRoster, toScoring } from "./scoring";
 import { hashSeed, mulberry32 } from "./tournament";
 import { queryRW, TDB } from "./oltpDb";
 import type { DailyBoard } from "./daily";
 import type { SimPick } from "./types";
-
-// Lineup positions for the five starter slots, in board order.
-const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
+import { LINEUP_KINDS as KINDS } from "./lineup";
 
 export const DAILY_GHOST_COUNT = 15;
 

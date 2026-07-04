@@ -16,7 +16,7 @@ import { getSavedUser } from "@/lib/tournamentSession";
 import { SITE_URL } from "@/lib/site";
 import { regWinsFromSeedNet, tierForSeedNet } from "@/lib/tier";
 import { TeamGradeBadge } from "@/components/TeamGradeBadge";
-import { Button } from "@/components/ui";
+import { Button, Crown } from "@/components/ui";
 import { ShareAssetDialog } from "@/components/ui/ShareAssetDialog";
 import {
   reachedRoundLabelPlain,
@@ -152,7 +152,7 @@ function YourTeamCard({
           : { background: "var(--md-paper-2)", boxShadow: "inset 4px 0 0 var(--md-cobalt)" }}
       >
         <div className="flex min-w-0 items-center gap-2">
-          {isChampion && <span style={{ fontSize: 16, color: "var(--md-ink)" }}>♛</span>}
+          {isChampion && <Crown variant="glyph" size={16} color="var(--md-ink)" />}
           {team.seed !== undefined && (
             <span
               className="inline-flex shrink-0 items-center justify-center font-mono text-[10px] leading-none"
@@ -387,7 +387,7 @@ export function TournamentResults({
         boxShadow: "var(--md-shadow-sm)",
       }}
     >
-      <span style={{ fontSize: 20 }}>♛</span>
+      <Crown variant="glyph" size={20} />
       <div>
         <div
           className="font-archivo font-bold leading-tight"

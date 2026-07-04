@@ -20,7 +20,8 @@
 
 import { buildTeamDecadeBoard } from "./boardGen";
 import type { QueryOptions } from "./motherduck";
-import { canPlay, type SlotKind } from "./positions";
+import { canPlay } from "./positions";
+import { LINEUP_KINDS as KINDS } from "./lineup";
 import {
   getDecades,
   getPlayableTeams,
@@ -48,10 +49,6 @@ export {
   validateManualBoard,
 } from "./privateBoardRules";
 export type { PrivateSlot, PrivateBoard } from "./privateBoardRules";
-
-// Lineup positions for the five starter slots, in board order — same as the
-// daily ghosts' KINDS. The 6th slot is the bench (no lineup position).
-const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 
 // A combo must have at least this many drafted-eligible players to be a legal
 // manual pick. Mirrors queries.ts MIN_PLAYERS_PER_COMBO (not exported there, so

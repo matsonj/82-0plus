@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { BracketResult } from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
 import { PageShell } from "@/components/layout/PageShell";
+import { Crown } from "@/components/ui";
 
 type Status = "loading" | "ok" | "error";
 
@@ -101,7 +102,7 @@ export default function PublicBracketPage({
                 className="mt-3 flex shrink-0 items-center gap-3 self-start border-2 border-[var(--md-ink)] px-4 py-3 md:mt-0"
                 style={{ background: "var(--md-yellow)", boxShadow: "var(--md-shadow-sm)" }}
               >
-                <span className="text-[22px]">♛</span>
+                <Crown variant="glyph" size={22} />
                 <div>
                   <div className="font-cond text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
                     Champion

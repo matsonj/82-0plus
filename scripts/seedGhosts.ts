@@ -36,9 +36,7 @@ import { simulateRoster, type ScoringPlayer } from "../lib/scoring";
 import { hashSeed, mulberry32 } from "../lib/tournament";
 import { ensureSchema, queryRW, TDB } from "../lib/oltpDb";
 import type { SimPick } from "../lib/types";
-
-// The fixed lineup board: 5 starters in slot order [G, FLEX, W, FLEX, B].
-const SLOT_ORDER: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
+import { LINEUP_KINDS as SLOT_ORDER } from "../lib/lineup";
 
 // How many ghosts to seed.
 const GHOST_COUNT = 60;
