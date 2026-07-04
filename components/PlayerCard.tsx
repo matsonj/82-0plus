@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import type { PlayerSeasonRow } from "@/lib/queries";
 import type { Role } from "@/lib/positions";
 import { loadPlayerSeasons, prefetchPlayerSeasons } from "@/lib/playerSeasons";
-import { Button, PositionChipGroup } from "@/components/ui";
+import { Button, Card, PositionChipGroup } from "@/components/ui";
 
 type Status = "loading" | "ok" | "error";
 
@@ -393,7 +393,7 @@ function FullCard({
   })();
 
   return (
-    <div className="md-card flex max-h-[86vh] w-full flex-col overflow-hidden p-0" style={{ boxShadow: "var(--md-shadow-md)" }}>
+    <Card className="flex max-h-[86vh] w-full flex-col overflow-hidden p-0" style={{ boxShadow: "var(--md-shadow-md)" }}>
       {/* ── CAREER CARD header bar — flame accent strip ── */}
       <div
         className="flex items-center justify-between border-b-2 border-[var(--md-ink)] px-4 py-2"
@@ -677,7 +677,7 @@ function FullCard({
           </div>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 

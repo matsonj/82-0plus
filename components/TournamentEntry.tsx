@@ -15,7 +15,7 @@ import { TournamentResults } from "@/components/TournamentResults";
 import { TournamentProgress, type EntryStep } from "@/components/TournamentProgress";
 import { TournamentRoster } from "@/components/TournamentRoster";
 import { HowToPlay } from "@/components/HowToPlay";
-import { Button, NameField, Notice, PinField } from "@/components/ui";
+import { Button, Card, NameField, Notice, PinField } from "@/components/ui";
 import {
   validateName,
   validateTeamName,
@@ -423,7 +423,7 @@ export function TournamentEntry({
 
   if (loadError && decades.length === 0) {
     return (
-      <div className="md-card md-card--lift mx-auto max-w-md p-5 text-center">
+      <Card lift className="mx-auto max-w-md p-5 text-center">
         <p className="font-archivo font-bold leading-tight" style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 88' }}>
           Couldn&rsquo;t start the playoffs.
         </p>
@@ -431,7 +431,7 @@ export function TournamentEntry({
         <Button size="sm" variant="secondary" className="mt-4" onClick={onBack}>
           Back
         </Button>
-      </div>
+      </Card>
     );
   }
 
