@@ -234,6 +234,13 @@ describe("runFinal — a malformed stored roster degrades to a bot", () => {
     const roster = validPicks.map((p, i) => (i === 1 ? { team: "NYK", decade: 1990, slot: 1 } : p));
     await expectDegraded(roster); // missing entity_id
   });
+
+  it("degrades when a stored roster has a duplicate slot", async () => {
+    // Two picks share slot 0 (parsePicks rejects a repeated slot), so the roster
+    // never covers [G,FLEX,W,FLEX,B] — an unresolvable shape → degrade.
+    const roster = validPicks.map((p, i) => (i === 1 ? { ...p, slot: 0 } : p));
+    await expectDegraded(roster);
+  });
 });
 
 // ── Typed-error boundary: only UnresolvedRosterError degrades ─────────────────
