@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
   TournamentLookupResponse,
@@ -604,6 +604,13 @@ export function TournamentLookup({
   const pinOk = validatePin(pin);
   const canSubmit = nameCheck.ok && pinOk && !submitting;
 
+  // Tournaments the user is already in (public + private — the /my feed has
+  // both), so the public browse list can flag rows they've entered.
+  const enteredIds = useMemo(
+    () => new Set((privateRows ?? []).map((r) => r.tournamentId)),
+    [privateRows],
+  );
+
   const runLookup = useCallback(
     async (uname: string, upin: string, silent = false) => {
       setSubmitting(true);
@@ -987,7 +994,7 @@ export function TournamentLookup({
                     self-fetching; renders nothing when none are open. Shown
                     above "Your Tournaments" for now. */}
                 <div id="tournament-public">
-                  <PublicTournamentList />
+                  <PublicTournamentList enteredIds={enteredIds} />
                 </div>
 
                 {/* Your tournaments — rethemed rows (desktop) / cards (mobile) */}
@@ -1162,7 +1169,7 @@ export function TournamentLookup({
             {/* Public "open to everyone" browse list — anonymous; renders nothing
                 when no public tournaments are open. */}
             <div id="tournament-public">
-              <PublicTournamentList />
+              <PublicTournamentList enteredIds={enteredIds} />
             </div>
 
             <form

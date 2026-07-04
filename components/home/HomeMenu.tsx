@@ -10,6 +10,7 @@ export function HomeMenu({
   onStartGame,
   joinablePublicCount,
   joinPublicHref,
+  entered,
 }: {
   dateline: string | null;
   dailyBody: ReactNode;
@@ -21,6 +22,16 @@ export function HomeMenu({
   // "Join public" destination — a lone joinable tournament links to its lobby, 2+ to
   // the list (computed by the page from the live count).
   joinPublicHref: string;
+  // The signed-in user's own open entries (from the home bootstrap). When set, the
+  // primary yellow cell drops the join hook and points at their own entry instead.
+  // `needsFinish` = an entry's lineup isn't submitted yet (href targets it).
+  // null/undefined = signed out or not entered.
+  entered?: {
+    count: number;
+    name: string | null;
+    href: string;
+    needsFinish: boolean;
+  } | null;
 }) {
   return (
     <section className="relative z-10 grid gap-6 md:grid-cols-[1.6fr_1fr]">
@@ -115,13 +126,21 @@ export function HomeMenu({
 
           <div className="flex flex-1 flex-col gap-2">
             {/* Primary: Join public — fills the height, count when available.
-                One open tournament → its lobby; 2+ → the browsable list. */}
+                One open tournament → its lobby; 2+ → the browsable list. Already
+                entered → the cell points at the user's own entry instead
+                (finish an unsubmitted lineup, or see the field once submitted). */}
             <Link
-              href={joinPublicHref}
+              href={entered ? entered.href : joinPublicHref}
               className="flex flex-1 items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-yellow)] px-4 py-2 text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
             >
               <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em]">
-                {joinablePublicCount && joinablePublicCount > 0 ? (
+                {entered ? (
+                  entered.needsFinish ? (
+                    <>Finish your lineup</>
+                  ) : (
+                    <>You&rsquo;re in · See the field</>
+                  )
+                ) : joinablePublicCount && joinablePublicCount > 0 ? (
                   <>{joinablePublicCount} open · Join public</>
                 ) : (
                   <>Join public</>
