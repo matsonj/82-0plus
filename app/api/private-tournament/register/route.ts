@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { requireAuth } from "@/lib/apiAuth";
+import { isUuid } from "@/lib/uuid";
 import { entryDeadlineISO, isExpired } from "@/lib/privateTournament";
 import {
   getPrivateEntry,
@@ -26,9 +27,6 @@ export const dynamic = "force-dynamic";
 // abandoned join can't hold a slot forever and a kicked user rejoins with a fresh
 // clock. PRIVATE tournaments keep the original idempotent register (no timeout).
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   const queryOptions = { sessionHint: sessionHint.value };
@@ -36,7 +34,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const tournamentId = String(body?.tournamentId ?? "");
-    if (!UUID_RE.test(tournamentId)) {
+    if (!isUuid(tournamentId)) {
       return jsonWithSessionHint(
         sessionHint,
         { error: "invalid tournament id" },

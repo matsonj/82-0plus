@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { jsonPublicCacheable } from "@/lib/publicCache";
+import { isUuid } from "@/lib/uuid";
 import { getTeamBracketRO } from "@/lib/tournamentReadQueries";
 import { deriveYou, stripBreakdown } from "@/lib/tournamentRun";
 import { isDebugEnabled } from "@/lib/debugFlag";
@@ -16,14 +17,11 @@ const DEBUG = isDebugEnabled();
 // Public, no-PIN endpoint: a team's bracket isn't secret (the PIN only gates the
 // user's list of teams). GET /api/tournament/team?id=<team_id>. Reads through the
 // read-scaling pool (never the RW pool) and runs no schema DDL.
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function GET(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   try {
     const id = req.nextUrl.searchParams.get("id") ?? "";
-    if (!UUID_RE.test(id)) {
+    if (!isUuid(id)) {
       return jsonWithSessionHint(
         sessionHint,
         { error: "invalid team id" },

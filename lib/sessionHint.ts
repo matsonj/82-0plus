@@ -1,10 +1,9 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { isUuidStrict } from "./uuid";
 
 const COOKIE_NAME = "md820_session_hint";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface SessionHint {
   value: string;
@@ -13,7 +12,11 @@ export interface SessionHint {
 
 export function getSessionHint(req: NextRequest): SessionHint {
   const existing = req.cookies.get(COOKIE_NAME)?.value;
-  if (existing && UUID_RE.test(existing)) {
+  // Use the STRICT check here (version + variant nibble constrained), not the
+  // loose isUuid() used elsewhere: this value came back from the client in a
+  // cookie, so it's untrusted input we're about to trust as a session
+  // identifier. See lib/uuid.ts for why the two checks intentionally differ.
+  if (existing && isUuidStrict(existing)) {
     return { value: existing, isNew: false };
   }
   return { value: randomUUID(), isNew: true };

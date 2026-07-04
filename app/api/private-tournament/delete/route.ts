@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { requireAuth } from "@/lib/apiAuth";
+import { isUuid } from "@/lib/uuid";
 import {
   deletePrivateTournament,
   getPrivateTournament,
@@ -15,16 +16,13 @@ export const dynamic = "force-dynamic";
 // AUTHORIZE — only the account that owns admin_user_id may delete. A non-host (or
 // an unknown id) never mutates anything. UUID-guarded. Returns { ok: true }.
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   try {
     const body = await req.json();
 
     const tournamentId = String(body?.tournamentId ?? "");
-    if (!UUID_RE.test(tournamentId)) {
+    if (!isUuid(tournamentId)) {
       return jsonWithSessionHint(
         sessionHint,
         { error: "invalid tournament id" },

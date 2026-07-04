@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { requireAuth } from "@/lib/apiAuth";
+import { isUuid } from "@/lib/uuid";
 import { parsePicks, parseSixth } from "@/lib/rosterParse";
 import {
   listPrivateEntries,
@@ -32,9 +33,6 @@ export const dynamic = "force-dynamic";
 // The validate→hydrate→sim pipeline is shared with partial via lib/privateRoster;
 // this route ORCHESTRATES it for the full six and then runs the provisional.
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   const queryOptions = { sessionHint: sessionHint.value };
@@ -42,7 +40,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const tournamentId = String(body?.tournamentId ?? "");
-    if (!UUID_RE.test(tournamentId)) {
+    if (!isUuid(tournamentId)) {
       return jsonWithSessionHint(sessionHint, { error: "invalid tournament id" }, { status: 400 });
     }
 
