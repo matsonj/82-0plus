@@ -34,8 +34,13 @@ describe("clientIp (trusted source = x-real-ip; XFF ignored)", () => {
     expect(clientIp(req({ "x-real-ip": "999.999.999.999" }))).toBeNull();
   });
 
-  it("accepts and lowercases IPv6", () => {
+  it("validates with net.isIP: accepts + lowercases IPv6, rejects malformed IPv6", () => {
     expect(clientIp(req({ "x-real-ip": "2001:DB8::1" }))).toBe("2001:db8::1");
+    // Malformed IPv6 (triple colon / trailing junk / embedded space) → null.
+    expect(clientIp(req({ "x-real-ip": "2001:db8:::1" }))).toBeNull();
+    expect(clientIp(req({ "x-real-ip": "2001:db8::1::2" }))).toBeNull();
+    expect(clientIp(req({ "x-real-ip": "::1 ; drop" }))).toBeNull();
+    expect(clientIp(req({ "x-real-ip": "1.2.3.4.5" }))).toBeNull();
   });
 });
 

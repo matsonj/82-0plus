@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   InMemoryThrottleStore,
   attemptKeys,
+  attemptDelayMs,
+  guardAttempt,
   checkThrottle,
   recordFailure,
   recordSuccess,
@@ -9,6 +11,7 @@ import {
   lockRemainingMs,
   DEFAULT_THROTTLE,
   type ThrottleConfig,
+  type DelayConfig,
 } from "./authRateLimit";
 
 // A tight config so the tests read clearly: lock after 3 fails, 1s base lock,
@@ -19,6 +22,8 @@ const CFG: ThrottleConfig = {
   baseLockMs: 1_000,
   maxLockMs: 4_000,
 };
+// No-op sleep so guardAttempt never actually waits in tests.
+const noSleep = async () => {};
 
 describe("nextStateOnFailure (pure window/cap/escalation logic)", () => {
   it("starts a fresh window on the first failure", () => {
@@ -78,50 +83,63 @@ describe("lockRemainingMs", () => {
   });
 });
 
-describe("attemptKeys (anti-grief keying)", () => {
-  it("with an IP: gates on the (subject+IP) composite AND the per-IP key; success clears only the composite", () => {
+describe("attemptKeys (layered, anti-grief keying)", () => {
+  it("with an IP: hard-locks per-IP + (subject+IP); delays the global name; clears subject (not IP) on success", () => {
     const k = attemptKeys("user:bob", "1.2.3.4");
-    expect(k.gate).toEqual(["user:bob|ip:1.2.3.4", "ip:1.2.3.4"]);
-    expect(k.subject).toEqual(["user:bob|ip:1.2.3.4"]);
-    // The shared IP bucket is NOT in the subject set, so a success never clears it.
+    expect(k.hardGate).toEqual(["user:bob|ip:1.2.3.4", "ip:1.2.3.4"]);
+    expect(k.delayKey).toBe("user:bob");
+    expect(k.fail).toEqual(["user:bob|ip:1.2.3.4", "ip:1.2.3.4", "user:bob"]);
+    expect(k.subject).toEqual(["user:bob|ip:1.2.3.4", "user:bob"]);
+    // The shared IP bucket is NOT in the subject set → a success never clears it.
     expect(k.subject).not.toContain("ip:1.2.3.4");
   });
 
-  it("without an IP: falls back to a bare per-name key (documented residual grief)", () => {
+  it("without an IP: NO hard lock (grief-free) — only the per-name delay key", () => {
     const k = attemptKeys("user:bob", null);
-    expect(k.gate).toEqual(["user:bob"]);
+    expect(k.hardGate).toEqual([]);
+    expect(k.delayKey).toBe("user:bob");
+    expect(k.fail).toEqual(["user:bob"]);
     expect(k.subject).toEqual(["user:bob"]);
   });
 
-  it("scopes the name to the attacker's IP so a REMOTE attacker can't lock a victim", () => {
-    const attacker = attemptKeys("user:victim", "9.9.9.9");
-    const victim = attemptKeys("user:victim", "1.1.1.1");
-    // The victim's own composite key is different from the attacker's, so
-    // failures the attacker racks up never appear in the victim's bucket.
-    expect(attacker.gate[0]).not.toBe(victim.gate[0]);
+  it("the global-name key is present in every attempt so a rotated IP can't dodge it", () => {
+    // Two different IPs guessing the same name share the SAME delayKey/global fail
+    // key, so the escalating per-name delay accumulates regardless of the IP.
+    const a = attemptKeys("user:victim", "9.9.9.9");
+    const b = attemptKeys("user:victim", "1.1.1.1");
+    expect(a.delayKey).toBe(b.delayKey);
+    expect(a.fail).toContain("user:victim");
+    expect(b.fail).toContain("user:victim");
+    // …but the hard-lock composites differ, so a remote attacker can't hard-lock
+    // the victim's IP-scoped bucket.
+    expect(a.hardGate[0]).not.toBe(b.hardGate[0]);
+  });
+});
+
+describe("attemptDelayMs (grief-free per-name brake)", () => {
+  const DCFG: DelayConfig = { freeAttempts: 2, baseDelayMs: 100, maxDelayMs: 800 };
+  it("is 0 within the free-attempt budget", () => {
+    expect(attemptDelayMs(null, DCFG)).toBe(0);
+    expect(attemptDelayMs({ failCount: 2, windowStartMs: 0, lockedUntilMs: null }, DCFG)).toBe(0);
+  });
+  it("escalates (doubles) past the budget and caps at maxDelayMs", () => {
+    const at = (n: number) =>
+      attemptDelayMs({ failCount: n, windowStartMs: 0, lockedUntilMs: null }, DCFG);
+    expect(at(3)).toBe(100); // 1st over
+    expect(at(4)).toBe(200);
+    expect(at(5)).toBe(400);
+    expect(at(6)).toBe(800);
+    expect(at(7)).toBe(800); // capped
   });
 });
 
 describe("throttle store contract (atomic increment / cap enforcement)", () => {
-  it("allows attempts until the cap, then locks (lockout after N fails)", async () => {
-    const store = new InMemoryThrottleStore();
-    const keys = ["user:bob"];
-    await recordFailure(store, keys, 0, CFG);
-    await recordFailure(store, keys, 0, CFG);
-    expect((await checkThrottle(store, keys, 0)).allowed).toBe(true);
-    await recordFailure(store, keys, 0, CFG);
-    const gate = await checkThrottle(store, keys, 0);
-    expect(gate.allowed).toBe(false);
-    expect(gate.retryAfterMs).toBe(CFG.baseLockMs);
-  });
-
   it("cap enforcement uses the returned count from the atomic increment", async () => {
     const store = new InMemoryThrottleStore();
-    // registerFailure RETURNS the post-increment state; the lock is decided from it.
     let last = await store.registerFailure("k", 0, CFG); // 1
     expect(last.failCount).toBe(1);
     expect(last.lockedUntilMs).toBeNull();
-    last = await store.registerFailure("k", 0, CFG); // 2
+    await store.registerFailure("k", 0, CFG); // 2
     last = await store.registerFailure("k", 0, CFG); // 3 == cap
     expect(last.failCount).toBe(3);
     expect(last.lockedUntilMs).not.toBeNull();
@@ -129,48 +147,81 @@ describe("throttle store contract (atomic increment / cap enforcement)", () => {
 
   it("concurrent first-inserts do NOT collapse the count (race-safe increment)", async () => {
     const store = new InMemoryThrottleStore();
-    // Fire N failures at a brand-new key simultaneously. A lockless
-    // read-modify-write would undercount (all read 0 → all write 1). The atomic
-    // contract must land at exactly N. (The PG store meets this via an
+    // A lockless read-modify-write would undercount (all read 0 → all write 1).
+    // The atomic contract must land at exactly N. (The PG store meets this via an
     // `ON CONFLICT DO UPDATE SET fail_count = fail_count + 1` upsert.)
     await Promise.all(
       Array.from({ length: 5 }, () => store.registerFailure("fresh", 0, CFG)),
     );
-    const state = await store.peek("fresh");
-    expect(state?.failCount).toBe(5);
+    expect((await store.peek("fresh"))?.failCount).toBe(5);
   });
 
   it("resets the SUBJECT on success but LEAVES the shared IP bucket (P1#3)", async () => {
     const store = new InMemoryThrottleStore();
-    const { gate, subject } = attemptKeys("user:bob", "1.2.3.4");
-    // Two misses hit both the composite and the IP key.
-    await recordFailure(store, gate, 0, CFG);
-    await recordFailure(store, gate, 0, CFG);
-    // A good login clears only the subject (composite)…
-    await recordSuccess(store, subject);
+    const keys = attemptKeys("user:bob", "1.2.3.4");
+    await recordFailure(store, keys.fail, 0, CFG);
+    await recordFailure(store, keys.fail, 0, CFG);
+    await recordSuccess(store, keys.subject);
     expect(await store.peek("user:bob|ip:1.2.3.4")).toBeNull();
-    // …the IP anti-spray history survives to age out on its own window.
+    expect(await store.peek("user:bob")).toBeNull();
+    // The IP anti-spray history survives to age out on its own window.
     expect((await store.peek("ip:1.2.3.4"))?.failCount).toBe(2);
+  });
+});
+
+describe("guardAttempt", () => {
+  it("blocks when a hard-lock key is locked (429 path)", async () => {
+    const store = new InMemoryThrottleStore();
+    const keys = attemptKeys("user:bob", "1.2.3.4");
+    for (let i = 0; i < CFG.maxFails; i++) await recordFailure(store, keys.fail, 0, CFG);
+    const decision = await guardAttempt(store, keys, { nowMs: 0, cfg: CFG, sleep: noSleep });
+    expect(decision.allowed).toBe(false);
+    expect(decision.retryAfterMs).toBe(CFG.baseLockMs);
   });
 
   it("frees the attempt once the lock elapses", async () => {
     const store = new InMemoryThrottleStore();
-    const keys = ["user:bob"];
-    for (let i = 0; i < CFG.maxFails; i++) await recordFailure(store, keys, 0, CFG);
-    expect((await checkThrottle(store, keys, 0)).allowed).toBe(false);
-    expect((await checkThrottle(store, keys, CFG.baseLockMs + 1)).allowed).toBe(true);
+    const keys = attemptKeys("user:bob", "1.2.3.4");
+    for (let i = 0; i < CFG.maxFails; i++) await recordFailure(store, keys.fail, 0, CFG);
+    const d = await guardAttempt(store, keys, {
+      nowMs: CFG.baseLockMs + 1,
+      cfg: CFG,
+      sleep: noSleep,
+    });
+    expect(d.allowed).toBe(true);
   });
 
-  it("blocks if ANY gate key (composite OR IP) is locked", async () => {
+  it("applies the escalating per-name DELAY (not a lock) even with NO IP", async () => {
     const store = new InMemoryThrottleStore();
-    // Lock only the IP key; a request carrying both keys is still blocked.
-    for (let i = 0; i < CFG.maxFails; i++) {
-      await recordFailure(store, ["ip:1.2.3.4"], 0, CFG);
-    }
-    const gate = await checkThrottle(store, ["user:alice|ip:1.2.3.4", "ip:1.2.3.4"], 0);
-    expect(gate.allowed).toBe(false);
+    const keys = attemptKeys("user:bob", null); // no hard-lock keys
+    const DCFG: DelayConfig = { freeAttempts: 1, baseDelayMs: 10, maxDelayMs: 40 };
+    // Drive the name key up.
+    for (let i = 0; i < 4; i++) await recordFailure(store, keys.fail, 0, CFG);
+    const slept: number[] = [];
+    const decision = await guardAttempt(store, keys, {
+      nowMs: 0,
+      cfg: CFG,
+      delayCfg: DCFG,
+      sleep: async (ms) => {
+        slept.push(ms);
+      },
+    });
+    // Never BLOCKED (grief-free), but it DID delay (bounds rotated-IP guessing).
+    expect(decision.allowed).toBe(true);
+    expect(slept.length).toBe(1);
+    expect(slept[0]).toBeGreaterThan(0);
   });
 
+  it("blocks if ANY hard-lock key (composite OR IP) is locked", async () => {
+    const store = new InMemoryThrottleStore();
+    for (let i = 0; i < CFG.maxFails; i++) await recordFailure(store, ["ip:1.2.3.4"], 0, CFG);
+    const keys = attemptKeys("user:alice", "1.2.3.4");
+    const d = await guardAttempt(store, keys, { nowMs: 0, cfg: CFG, sleep: noSleep });
+    expect(d.allowed).toBe(false);
+  });
+});
+
+describe("checkThrottle / recordFailure basics", () => {
   it("keeps distinct keys independent", async () => {
     const store = new InMemoryThrottleStore();
     for (let i = 0; i < CFG.maxFails; i++) await recordFailure(store, ["user:bob"], 0, CFG);

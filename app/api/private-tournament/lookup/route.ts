@@ -5,12 +5,12 @@ import {
   normalizeTournamentName,
   type PrivateTournamentSummary,
 } from "@/lib/privateTournament";
-import { getPrivateTournamentsByNameNorm } from "@/lib/privateTournamentQueries";
+import { getPrivateTournamentsByNameNormRO } from "@/lib/privateTournamentReadQueries";
 import { verifyPin } from "@/lib/pinHash";
 import {
   clientIp,
   publicAttemptKeys,
-  publicThrottleCheck,
+  publicGuardAttempt,
   publicThrottleFail,
   publicThrottleSuccess,
 } from "@/lib/apiAuth";
@@ -47,11 +47,8 @@ export async function POST(req: NextRequest) {
     // account PIN); attemptKeys() adds a per-IP brake + a (name+IP) composite so a
     // remote attacker can't lock a tournament's name. Best-effort + fail-open
     // (public route: never runs DDL, never 500s on a throttle blip).
-    const { gate: gateKeys, subject: subjectKeys } = publicAttemptKeys(
-      `pt:${nameNorm}`,
-      clientIp(req),
-    );
-    const gate = await publicThrottleCheck(gateKeys);
+    const keys = publicAttemptKeys(`pt:${nameNorm}`, clientIp(req));
+    const gate = await publicGuardAttempt(keys);
     if (!gate.allowed) {
       return jsonWithSessionHint(
         sessionHint,
@@ -62,13 +59,13 @@ export async function POST(req: NextRequest) {
 
     // Pick the tournament whose PIN verifies (verifyPin is length-guarded +
     // constant-time). Same generic 404 on any miss (no enum).
-    const candidates = await getPrivateTournamentsByNameNorm(nameNorm);
+    const candidates = await getPrivateTournamentsByNameNormRO(nameNorm);
     const match = candidates.find((t) => verifyPin(pin, t.pinHash, t.pinSalt));
     if (!match) {
-      await publicThrottleFail(gateKeys);
+      await publicThrottleFail(keys.fail);
       return jsonWithSessionHint(sessionHint, NOT_FOUND, { status: 404 });
     }
-    await publicThrottleSuccess(subjectKeys);
+    await publicThrottleSuccess(keys.subject);
 
     const summary: PrivateTournamentSummary = {
       tournamentId: match.tournamentId,

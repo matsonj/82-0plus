@@ -1,11 +1,13 @@
+import { isIP } from "node:net";
 import type { NextRequest, NextResponse } from "next/server";
 import { authenticate, type AuthOptions } from "./dailyResults";
 import { jsonWithSessionHint, type SessionHint } from "./sessionHint";
 import {
   attemptKeys,
-  checkThrottle,
+  guardAttempt,
   recordFailure,
   recordSuccess,
+  type AttemptKeys,
   type ThrottleDecision,
 } from "./authRateLimit";
 import { pgThrottleStore } from "./authThrottleStore";
@@ -33,22 +35,22 @@ import { pgThrottleStore } from "./authThrottleStore";
 //     the RIGHT of any hops a client prepends, so its leftmost value is
 //     attacker-controlled — trusting it would allow throttle bypass (rotate a fake
 //     leftmost IP) and victim-IP forgery (frame someone else's IP).
-// The value is validated as a real IPv4/IPv6 literal before use; anything else is
-// treated as "unknown" (null), which degrades to name-only throttling.
-
-const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-
-function isIpLiteral(v: string): boolean {
-  const m = IPV4_RE.exec(v);
-  if (m) return m.slice(1).every((o) => Number(o) <= 255);
-  // IPv6: hex groups + colons only (loose, but rejects junk / injected separators).
-  return v.length <= 45 && v.includes(":") && /^[0-9a-fA-F:.]+$/.test(v);
-}
+// The value is validated with node's net.isIP() (a real IPv4/IPv6 literal) before
+// use; anything else is treated as "unknown" (null), which degrades to per-name
+// (delay-only) throttling.
+//
+// IMPORTANT (best-effort, not a security boundary): even x-real-ip should be
+// treated as best-effort defense-in-depth — the per-IP layer is NOT the sole
+// brake. If a deployment's IP header were spoofable, the failure mode degrades to
+// the per-name escalating-delay + scrypt brakes (bounded per-account guessing),
+// not an unbounded bypass. See lib/authRateLimit and the PR notes; adopting
+// @vercel/functions `ipAddress()` is the recommended follow-up if we want the
+// per-IP layer treated as authoritative.
 
 export function clientIp(req: NextRequest): string | null {
   const raw = req.headers.get("x-real-ip")?.trim();
   if (!raw) return null;
-  return isIpLiteral(raw) ? raw.toLowerCase() : null;
+  return isIP(raw) !== 0 ? raw.toLowerCase() : null;
 }
 
 export type AuthSuccess = {
@@ -112,31 +114,32 @@ export async function requireAuth(
 // a public read. In steady state the table is always present (authenticated
 // traffic provisions it via ensureSchema), so this window is negligible.
 
-/** Gate keys + the subject key(s) to clear on a public-lookup success. */
-export function publicAttemptKeys(subject: string, ip: string | null) {
+/** Layered attempt keys for a public lookup (see attemptKeys). */
+export function publicAttemptKeys(subject: string, ip: string | null): AttemptKeys {
   return attemptKeys(subject, ip);
 }
 
-/** Pre-attempt gate for a public lookup; fails open on any store error. */
-export async function publicThrottleCheck(gateKeys: string[]): Promise<ThrottleDecision> {
+/** Pre-attempt gate (hard-lock + escalating name delay) for a public lookup;
+ *  fails open on any store error (public route must never 500 on a throttle blip). */
+export async function publicGuardAttempt(keys: AttemptKeys): Promise<ThrottleDecision> {
   try {
-    return await checkThrottle(pgThrottleStore, gateKeys);
+    return await guardAttempt(pgThrottleStore, keys);
   } catch (err) {
-    console.warn("[throttle] public check failed open:", err);
+    console.warn("[throttle] public gate failed open:", err);
     return { allowed: true, retryAfterMs: 0 };
   }
 }
 
-/** Record a public-lookup miss; never throws. */
-export async function publicThrottleFail(gateKeys: string[]): Promise<void> {
+/** Record a public-lookup miss against all fail keys; never throws. */
+export async function publicThrottleFail(failKeys: string[]): Promise<void> {
   try {
-    await recordFailure(pgThrottleStore, gateKeys);
+    await recordFailure(pgThrottleStore, failKeys);
   } catch (err) {
     console.warn("[throttle] public failure record failed open:", err);
   }
 }
 
-/** Reset the subject after a public-lookup hit; never throws. */
+/** Reset the subject keys after a public-lookup hit; never throws. */
 export async function publicThrottleSuccess(subjectKeys: string[]): Promise<void> {
   try {
     await recordSuccess(pgThrottleStore, subjectKeys);

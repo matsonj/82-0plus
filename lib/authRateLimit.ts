@@ -21,15 +21,25 @@
 // then the lock trips; that residual is bounded by instance concurrency and is
 // inherent to any check-then-verify limiter.)
 //
-// Anti-grief keying. Names are public, so a GLOBAL per-name lock would let anyone
-// lock a victim out. See attemptKeys(): the per-IP key is the primary brake, and
-// the per-name key is scoped to (name + IP) so a remote attacker can't lock a
-// victim's name from arbitrary IPs. A successful login clears ONLY the subject
-// (name/name+IP) key — never the shared per-IP bucket, so one good login can't
-// wipe an IP's anti-spray history.
+// Layered brakes (see attemptKeys) — no single layer is the sole defense:
+//   1. per-IP HARD LOCK (`ip:<ip>`) — bounds one address's total attempts.
+//   2. per-(name+IP) HARD LOCK (`<subject>|ip:<ip>`) — tight brake on the common
+//      attacker-from-one-IP case.
+//   3. per-name ESCALATING DELAY (`<subject>`, global) — the grief-free brake that
+//      bounds guessing of ONE account even when the IP is spoofed/rotated (each
+//      key resets per fake IP, but the global-name delay does not). It's a growing
+//      DELAY, not a lockout, so a remote attacker can slow a victim but never lock
+//      them out — and a correct login clears it.
+//   4. scrypt — a ~fixed CPU tax per guess, independent of all of the above.
+// Because the IP layer is only best-effort (see lib/apiAuth clientIp — the header
+// is trustworthy on Vercel but we don't treat it as a hard boundary), the per-name
+// delay + scrypt are the layers that survive a spoofed IP: the failure mode
+// degrades to bounded per-account guessing, NOT an unbounded bypass.
 //
-// The decision logic (window / cap / escalating lock) is a pure function reused by
-// the in-memory store; the Postgres store's SQL upsert mirrors it exactly.
+// A successful login clears ONLY the subject keys (name + name/IP composite),
+// never the shared per-IP bucket, so one good login can't wipe an IP's anti-spray
+// history. The window/cap/escalation logic is a pure function reused by the
+// in-memory store; the Postgres store's SQL upsert mirrors it exactly.
 
 /** A stored throttle counter for one key (a subject or a client IP). */
 export interface ThrottleState {
@@ -120,34 +130,77 @@ export interface ThrottleDecision {
   retryAfterMs: number;
 }
 
-/** Gate + subject keys for one credential attempt (see attemptKeys). */
+/** The layered keys for one credential attempt (see attemptKeys). */
 export interface AttemptKeys {
-  /** Keys to gate on / record failures against (subject + IP). */
-  gate: string[];
-  /** Keys to CLEAR on success — the subject only, never the shared IP bucket. */
+  /** IP-scoped keys that HARD-LOCK (429 when locked). Empty when no IP is known. */
+  hardGate: string[];
+  /** Global subject key that applies an escalating DELAY (grief-free), or null. */
+  delayKey: string | null;
+  /** All keys to increment on a miss. */
+  fail: string[];
+  /** Keys to CLEAR on success — subject keys only, never the shared IP bucket. */
   subject: string[];
 }
 
 /**
- * Build the throttle keys for an attempt against `subject` (e.g. `user:<name>` or
- * `pt:<name>`) from `ip`.
+ * Build the layered throttle keys for an attempt against `subject` (e.g.
+ * `user:<name>` or `pt:<name>`) from `ip`.
  *
- *  - With an IP: gate on BOTH a per-IP key (the primary brake — bounds an
- *    attacker's total attempts from one address across all names) AND a
- *    (subject+IP) composite (finer per-name limiting that a REMOTE attacker cannot
- *    use to lock a victim, since it's always scoped to the attacker's own IP).
- *    Success clears only the composite, leaving the IP bucket to age out.
- *  - Without an IP (should be rare on Vercel — x-real-ip is platform-set): fall
- *    back to a bare per-name key. This is the one case a name can be griefed;
- *    documented as a residual tradeoff.
+ *  - The global `subject` key is ALWAYS the delay key — the grief-free per-account
+ *    brake that survives a spoofed/rotated IP (a hard lock here would let anyone
+ *    lock a public name out; an escalating delay only slows an attacker and is
+ *    cleared by a correct login).
+ *  - With an IP we ALSO hard-lock a per-IP key and a (subject+IP) composite — tight
+ *    brakes for the realistic single-IP attacker. Success clears the composite +
+ *    the global subject, never the shared IP bucket.
+ *  - Without an IP (rare on Vercel) there is no hard lock — the per-name delay +
+ *    scrypt are the only brakes. Documented degradation, not a bypass.
  */
 export function attemptKeys(subject: string, ip: string | null): AttemptKeys {
   if (ip) {
     const composite = `${subject}|ip:${ip}`;
-    return { gate: [composite, `ip:${ip}`], subject: [composite] };
+    const ipKey = `ip:${ip}`;
+    return {
+      hardGate: [composite, ipKey],
+      delayKey: subject,
+      fail: [composite, ipKey, subject],
+      subject: [composite, subject],
+    };
   }
-  return { gate: [subject], subject: [subject] };
+  return { hardGate: [], delayKey: subject, fail: [subject], subject: [subject] };
 }
+
+/** Escalating-delay tuning for the global per-name brake. */
+export interface DelayConfig {
+  /** Misses allowed before any delay kicks in. */
+  freeAttempts: number;
+  /** Delay on the first over-budget miss. */
+  baseDelayMs: number;
+  /** Ceiling for the escalating delay. */
+  maxDelayMs: number;
+}
+
+// A gentle delay: normal players never accumulate misses (a correct login clears
+// the counter), so this only ever slows a name that is actively under attack.
+export const DEFAULT_NAME_DELAY: DelayConfig = {
+  freeAttempts: 5,
+  baseDelayMs: 250,
+  maxDelayMs: 2_000,
+};
+
+/** Milliseconds to delay this attempt given the global-name key's state. */
+export function attemptDelayMs(
+  state: ThrottleState | null,
+  cfg: DelayConfig = DEFAULT_NAME_DELAY,
+): number {
+  if (!state) return 0;
+  const over = state.failCount - cfg.freeAttempts;
+  if (over <= 0) return 0;
+  return Math.min(cfg.baseDelayMs * 2 ** (over - 1), cfg.maxDelayMs);
+}
+
+export type Sleep = (ms: number) => Promise<void>;
+const realSleep: Sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Gate an auth attempt: blocked if ANY gate key is currently locked. Returns the
@@ -164,6 +217,33 @@ export async function checkThrottle(
     retryAfterMs = Math.max(retryAfterMs, lockRemainingMs(state, nowMs));
   }
   return { allowed: retryAfterMs === 0, retryAfterMs };
+}
+
+/**
+ * The full pre-attempt gate for a credential check: reject if any HARD-LOCK key is
+ * locked, otherwise apply the escalating per-name DELAY (a growing sleep, never a
+ * lockout). Callers then verify the credential and record the outcome via
+ * recordFailure(keys.fail) / recordSuccess(keys.subject).
+ */
+export async function guardAttempt(
+  store: ThrottleStore,
+  keys: AttemptKeys,
+  opts: {
+    nowMs?: number;
+    cfg?: ThrottleConfig;
+    delayCfg?: DelayConfig;
+    sleep?: Sleep;
+  } = {},
+): Promise<ThrottleDecision> {
+  const nowMs = opts.nowMs ?? Date.now();
+  const gate = await checkThrottle(store, keys.hardGate, nowMs);
+  if (!gate.allowed) return gate;
+  if (keys.delayKey) {
+    const state = await store.peek(keys.delayKey);
+    const delay = attemptDelayMs(state, opts.delayCfg);
+    if (delay > 0) await (opts.sleep ?? realSleep)(delay);
+  }
+  return { allowed: true, retryAfterMs: 0 };
 }
 
 /** Record a failed attempt against every gate key (atomic per key). */

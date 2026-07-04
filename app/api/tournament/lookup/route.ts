@@ -6,7 +6,7 @@ import { verifyPin } from "@/lib/pinHash";
 import {
   clientIp,
   publicAttemptKeys,
-  publicThrottleCheck,
+  publicGuardAttempt,
   publicThrottleFail,
   publicThrottleSuccess,
 } from "@/lib/apiAuth";
@@ -41,11 +41,8 @@ export async function POST(req: NextRequest) {
     // (`user:<nameNorm>`); attemptKeys() adds a per-IP brake + a (name+IP)
     // composite so a remote attacker can't lock a victim's name. Best-effort +
     // fail-open (public route: never runs DDL, never 500s on a throttle blip).
-    const { gate: gateKeys, subject: subjectKeys } = publicAttemptKeys(
-      `user:${nameNorm}`,
-      clientIp(req),
-    );
-    const gate = await publicThrottleCheck(gateKeys);
+    const keys = publicAttemptKeys(`user:${nameNorm}`, clientIp(req));
+    const gate = await publicGuardAttempt(keys);
     if (!gate.allowed) {
       return jsonWithSessionHint(
         sessionHint,
@@ -66,10 +63,10 @@ export async function POST(req: NextRequest) {
       }
     }
     if (matchingUserIds.length === 0) {
-      await publicThrottleFail(gateKeys);
+      await publicThrottleFail(keys.fail);
       return jsonWithSessionHint(sessionHint, NOT_FOUND, { status: 404 });
     }
-    await publicThrottleSuccess(subjectKeys);
+    await publicThrottleSuccess(keys.subject);
 
     const teams = (
       await Promise.all(matchingUserIds.map((uid) => getUserTeamsRO(uid)))

@@ -2,14 +2,16 @@ import "server-only";
 import { track } from "@vercel/analytics/server";
 import { queryRW, ensureSchema } from "./oltpDb";
 import { getUsersByName, insertUser } from "./tournamentQueries";
+import { getUsersByNameRO } from "./tournamentReadQueries";
 import { normalizeName, validateName, validatePin } from "./tournamentValidation";
 import { verifyPin, hashPin } from "./pinHash";
 import {
   attemptKeys,
-  checkThrottle,
+  guardAttempt,
   recordFailure,
   recordSuccess,
   type ThrottleStore,
+  type Sleep,
 } from "./authRateLimit";
 import { pgThrottleStore } from "./authThrottleStore";
 
@@ -60,6 +62,8 @@ export interface AuthOptions {
   ip?: string | null;
   /** Override the throttle store (defaults to the durable Postgres store). */
   throttleStore?: ThrottleStore;
+  /** Override the delay sleep (tests pass a no-op to skip the real backoff). */
+  sleep?: Sleep;
 }
 
 // Throttle keys for an account credential attempt. The subject is the account
@@ -128,12 +132,40 @@ async function matchExistingUser(
 }
 
 /**
+ * READ-ONLY create-free match for the PUBLIC private-tournament `you` lookup.
+ * Reads users via the low-privilege RO pool and NEVER runs ensureSchema (DDL) —
+ * so a public/unauthenticated route can't trigger schema DDL (review P2#4). The
+ * RO pool hits the same always-on Postgres (no replication lag), so a
+ * just-registered account still resolves.
+ */
+async function matchExistingUserRO(
+  rawName: unknown,
+  rawPin: unknown,
+): Promise<{ userId: string; name: string; nameNorm: string } | null> {
+  const name = typeof rawName === "string" ? rawName : "";
+  const pin = typeof rawPin === "string" ? rawPin : "";
+  if (!name || !pin || !validateName(name).ok || !validatePin(pin)) return null;
+
+  const nameNorm = normalizeName(name);
+  for (const u of await getUsersByNameRO(nameNorm)) {
+    if (verifyPin(pin, u.pin_hash, u.pin_salt)) {
+      return { userId: u.user_id, name, nameNorm };
+    }
+  }
+  return null;
+}
+
+/**
  * Throttled, create-free credential match for PUBLIC read paths (e.g. the private
  * tournament `you` lookup). Returns the matching account or null. A well-formed
  * credential pair that DOESN'T match counts as a failed attempt (feeding the
  * shared throttle); a match resets it. An absent/malformed pair is NOT a guess —
  * anonymous page views hit this with empty creds and must never trip the limiter,
  * so those short-circuit before touching the throttle.
+ *
+ * This is a PUBLIC/unauthenticated path: it reads via the RO pool (no DDL,
+ * matchExistingUserRO) and its throttle calls FAIL OPEN — a not-yet-provisioned
+ * auth_throttle table or a transient blip must never break the public view.
  *
  * `authenticate()` does NOT call this (it uses matchExistingUser + its own
  * throttle) so a single auth is never double-counted.
@@ -149,23 +181,25 @@ export async function findExistingUserByCredentials(
 
   const store = opts.throttleStore ?? pgThrottleStore;
   const nameNorm = normalizeName(name);
-  const { gate, subject } = accountAttemptKeys(nameNorm, opts.ip);
+  const keys = accountAttemptKeys(nameNorm, opts.ip);
 
-  // Ensure the schema (incl. auth_throttle) before the throttle read. This is an
-  // RW path that already provisioned tables via matchExistingUser → ensureSchema;
-  // running it here just guarantees the throttle table exists before we peek it.
-  await ensureSchema();
+  // Fail-open gate: locked → behave as "no match" (a read path never surfaces a
+  // 429; the caller just doesn't get their entrant state, same as a miss). A store
+  // error must not break a public read.
+  try {
+    const guard = await guardAttempt(store, keys, { sleep: opts.sleep });
+    if (!guard.allowed) return null;
+  } catch (err) {
+    console.warn("[throttle] findExisting gate failed open:", err);
+  }
 
-  // Locked → behave as "no match" (a read path never surfaces a 429; the caller
-  // just doesn't get their entrant state, which is the same as a miss).
-  if (!(await checkThrottle(store, gate)).allowed) return null;
-
-  const match = await matchExistingUser(name, pin);
+  const match = await matchExistingUserRO(name, pin);
   if (match) {
-    await recordSuccess(store, subject); // clear subject only, leave the IP bucket
+    // clear subject keys only, leave the IP bucket
+    await recordSuccess(store, keys.subject).catch(() => {});
     return match;
   }
-  await recordFailure(store, gate);
+  await recordFailure(store, keys.fail).catch(() => {});
   return null;
 }
 
@@ -182,16 +216,17 @@ async function authenticateUncoalesced(
   const name = String(rawName);
   const nameNorm = normalizeName(name);
   const pin = String(rawPin);
-  const { gate, subject } = accountAttemptKeys(nameNorm, opts.ip);
+  const keys = accountAttemptKeys(nameNorm, opts.ip);
 
   // Ensure the schema (incl. auth_throttle) BEFORE the throttle read — this
-  // authenticated path is where the throttle table gets provisioned.
+  // authenticated (RW) path is where the throttle table gets provisioned.
   await ensureSchema();
 
-  // Throttle gate AFTER shape validation, BEFORE any match or create: a locked key
-  // can neither guess an existing PIN nor mint a fresh account (bounding the
-  // create-on-miss row-creation vector as well as PIN brute-force).
-  const decision = await checkThrottle(store, gate);
+  // Layered gate AFTER shape validation, BEFORE any match or create: a locked
+  // hard-lock key (IP / name+IP) rejects outright; otherwise the escalating
+  // per-name delay slows a name under attack. This bounds both PIN brute-force AND
+  // the create-on-miss row-creation vector.
+  const decision = await guardAttempt(store, keys, { sleep: opts.sleep });
   if (!decision.allowed) {
     return {
       ok: false,
@@ -203,7 +238,7 @@ async function authenticateUncoalesced(
   // Match an existing account first (normalize + lookup + PIN check, no create).
   const existing = await matchExistingUser(name, pin);
   if (existing) {
-    await recordSuccess(store, subject); // clear subject only, leave the IP bucket
+    await recordSuccess(store, keys.subject); // clear subject only, leave IP bucket
     return { ok: true, ...existing };
   }
 
@@ -211,7 +246,7 @@ async function authenticateUncoalesced(
   // the throttle before creating, so unbounded account creation is bounded too.
   // (A legitimate brand-new user costs exactly one failure here; their next auth
   // matches this row and resets the subject counter.) ensureSchema already ran.
-  await recordFailure(store, gate);
+  await recordFailure(store, keys.fail);
   const { pinHash, pinSalt } = hashPin(pin);
   const userId = await insertUser({ name, nameNorm, pinHash, pinSalt });
   // Telemetry: a brand-new account (first sight of this name+PIN). This is the
