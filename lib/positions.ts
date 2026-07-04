@@ -49,12 +49,17 @@ export const ROLE_LABEL: Record<Role, string> = {
 // palette: --md-teal is documented there as "court green — W", so W stays
 // teal (not the unlabeled --md-teal-bright). --md-orange is a plain alias of
 // --md-coral/flame — reserved elsewhere for the primary accent / W-L verdict
-// — so it's the wrong pick for a "quiet data" position chip; --md-magenta
-// (riso overprint ink) is the one already carved out for B for that reason.
+// — so it's the wrong pick for a "quiet data" position chip; magenta (riso
+// overprint ink) is the one already carved out for B for that reason.
+//
+// B uses --md-magenta-deep (a darkened shade of the same riso magenta): plain
+// --md-magenta is a mid-luminance hue that can't clear WCAG AA (4.5:1) for the
+// ~9–10px chip text in either variant (best pairing ≈4.25:1), whereas the deep
+// shade clears it at 5.47:1 on white. Same magenta identity, contrast-safe.
 export const ROLE_COLOR: Record<Role, string> = {
   G: "var(--md-sky)", // violet
   W: "var(--md-teal)", // court green
-  B: "var(--md-magenta)", // riso magenta
+  B: "var(--md-magenta-deep)", // deep riso magenta (AA-safe)
 };
 
 export const SLOT_LABEL: Record<SlotKind, string> = {

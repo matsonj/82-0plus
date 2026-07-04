@@ -10,7 +10,7 @@ describe("ROLE_COLOR", () => {
     expect(ROLE_COLOR).toEqual({
       G: "var(--md-sky)", // violet
       W: "var(--md-teal)", // court green
-      B: "var(--md-magenta)", // riso magenta
+      B: "var(--md-magenta-deep)", // deep riso magenta (AA-safe)
     });
   });
 });
