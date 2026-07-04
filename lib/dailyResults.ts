@@ -245,7 +245,9 @@ export async function listDailyResults(
   await ensureSchema();
   // Order-independent signature of a roster's starters: a sorted, comma-joined
   // "name|team|season" key per element, so two rosters compare equal regardless of
-  // slot order. `arr` is a jsonb expression yielding the player array.
+  // slot order. `arr` is a jsonb expression yielding the player array. An empty/absent
+  // roster aggregates to SQL NULL, which never equals another signature (so an empty
+  // roster can never be crowned champion) — matching the old correlated subquery.
   const rosterSig = (arr: string) =>
     `(SELECT string_agg((e->>'name') || '|' || (e->>'team') || '|' || (e->>'season'), ','
               ORDER BY (e->>'name') || '|' || (e->>'team') || '|' || (e->>'season'))
@@ -257,28 +259,52 @@ export async function listDailyResults(
     // Rank every entry within its day (same order as the leaderboard). The 30-day
     // floor is applied INSIDE the CTE so the window functions only scan the
     // replayable window, not all history — per-day rank/field are unaffected.
+    //
+    // Champion is resolved in a SINGLE pass instead of a per-row correlated
+    // subquery: `mine` computes each of the user's daily rows' roster signature
+    // once; `team_sigs` computes each of the user's daily ENTERED teams' signature
+    // once; they JOIN on (daily_date, signature). Because a signature is NULL for an
+    // empty roster and NULL never joins, an empty roster stays non-champion — the
+    // same edge case the old `sig = sig` comparison enforced. DISTINCT ON keeps only
+    // the EARLIEST-created matching entry per day (ORDER BY created_at), exactly the
+    // old `ORDER BY t.created_at LIMIT 1`, and champion is that entry reaching round
+    // 4. No matching entry → LEFT JOIN yields NULL → COALESCE(...) = FALSE, and a
+    // matching entry whose reached_round is NULL also collapses to FALSE, both
+    // identical to wrapping the old subquery in COALESCE(..., FALSE).
     `WITH ranked AS (
        SELECT user_id, daily_date, wins, losses, margin, perfect, roster_json,
               RANK()   OVER (PARTITION BY daily_date ORDER BY wins DESC, margin DESC) AS rnk,
               COUNT(*) OVER (PARTITION BY daily_date) AS field
          FROM ${TDB}.daily_results
         ${since ? "WHERE daily_date >= $2" : ""}
+     ),
+     mine AS (
+       SELECT r.daily_date, r.wins, r.losses, r.margin, r.perfect, r.rnk, r.field,
+              ${rosterSig("r.roster_json")} AS sig
+         FROM ranked r
+        WHERE r.user_id = $1
+     ),
+     team_sigs AS (
+       SELECT t.daily_date, t.reached_round, t.created_at,
+              ${rosterSig("t.roster_display -> 'roster'")} AS sig
+         FROM ${TDB}.teams t
+        WHERE t.user_id = $1
+          AND t.mode = 'daily'
+          ${since ? "AND t.daily_date >= $2" : ""}
+     ),
+     champ AS (
+       SELECT DISTINCT ON (m.daily_date) m.daily_date, t.reached_round
+         FROM mine m
+         JOIN team_sigs t
+           ON t.daily_date = m.daily_date
+          AND t.sig = m.sig
+        ORDER BY m.daily_date, t.created_at
      )
-     SELECT r.daily_date, r.wins, r.losses, r.margin, r.perfect,
-            COALESCE((
-              SELECT t.reached_round = 4
-                FROM ${TDB}.teams t
-               WHERE t.user_id = r.user_id
-                 AND t.daily_date = r.daily_date
-                 AND t.mode = 'daily'
-                 AND ${rosterSig("t.roster_display -> 'roster'")}
-                   = ${rosterSig("r.roster_json")}
-               ORDER BY t.created_at
-               LIMIT 1
-            ), FALSE) AS champion,
-            (r.field >= ${TOP10_MIN_FIELD} AND r.rnk <= ceil(0.10 * r.field)) AS top10
-       FROM ranked r
-      WHERE r.user_id = $1`,
+     SELECT m.daily_date, m.wins, m.losses, m.margin, m.perfect,
+            COALESCE(c.reached_round = 4, FALSE) AS champion,
+            (m.field >= ${TOP10_MIN_FIELD} AND m.rnk <= ceil(0.10 * m.field)) AS top10
+       FROM mine m
+       LEFT JOIN champ c ON c.daily_date = m.daily_date`,
     since ? [userId, since] : [userId],
   );
   return rows.map((r) => ({
