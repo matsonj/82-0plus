@@ -21,6 +21,7 @@ import { generatePrivateBots } from "./privateBoard";
 import type { PrivateSize } from "./privateTournament";
 import { simulateRoster } from "./scoring";
 import { UnresolvedRosterError } from "./queries";
+import { parsePicks, parseSixth } from "./rosterParse";
 import {
   buildTournamentTeam,
   getStatNorms,
@@ -229,17 +230,16 @@ export async function buildEntryTeam(
   name: string,
   options: QueryOptions = {},
 ): Promise<TournamentTeam> {
-  const picks = entry.rosterJson;
-  const sixth = entry.sixthJson;
-  // A null/malformed stored roster (e.g. a submit that predates roster_json
-  // persistence, or corrupt JSON) is an UNRESOLVABLE roster — same class as an
-  // unknown pick — so it degrades rather than crashing finalize with a TypeError.
-  if (
-    !Array.isArray(picks) ||
-    picks.length === 0 ||
-    sixth == null ||
-    typeof sixth !== "object"
-  ) {
+  // Validate the STORED roster's SHAPE with the SAME parser the submit path uses
+  // (5 distinct slots covering [G,FLEX,W,FLEX,B], distinct well-formed picks; a
+  // well-formed sixth). Any invalid stored shape — null/missing element, wrong
+  // length, dup slot, bad pick object, corrupt JSON, or a submit predating
+  // roster_json persistence — is an UNRESOLVABLE roster (same class as an unknown
+  // pick), so it degrades to a bot rather than crashing finalize with a TypeError
+  // or, worse, being scored as a real result.
+  const picks = parsePicks(entry.rosterJson);
+  const sixth = parseSixth(entry.sixthJson);
+  if (!picks || !sixth) {
     throw new UnresolvedRosterError(
       `entry ${entry.entryId}: missing or malformed stored roster`,
     );
@@ -249,11 +249,7 @@ export async function buildEntryTeam(
   // result is PERSISTED as a real standing — so we must never fabricate stats.
   // runFinal catches ONLY UnresolvedRosterError and degrades the whole entry to a
   // "{USERNAME} BOT"; a transient error propagates so finalize retries (#104).
-  const hydrated = await hydrateTournamentRoster(
-    picks as SimPick[],
-    sixth as { entity_id: string; team: string; decade: number },
-    options,
-  );
+  const hydrated = await hydrateTournamentRoster(picks, sixth, options);
   const seedNet =
     entry.seedNet != null && Number.isFinite(entry.seedNet)
       ? entry.seedNet

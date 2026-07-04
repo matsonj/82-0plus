@@ -20,20 +20,22 @@ function row(entity_id: string, team: string, decade: number): IndexedPlayer {
   };
 }
 
-const STARTER_TEAMS = ["T0", "T1", "T2", "T3", "T4"] as const;
+// Real 3-uppercase-letter abbreviations so the stored roster passes parsePicks'
+// team-format check (the same shape validator the submit path uses).
+const STARTER_TEAMS = ["BOS", "NYK", "LAL", "CHI", "MIA"] as const;
 function buildIndex(): IndexedPlayer[] {
   const rows: IndexedPlayer[] = [];
   for (const t of STARTER_TEAMS) {
     rows.push(row(`${t}a`, t, 1990), row(`${t}b`, t, 1990));
   }
-  rows.push(row("TBa", "TB", 1990), row("TBb", "TB", 1990));
+  rows.push(row("PHXa", "PHX", 1990), row("PHXb", "PHX", 1990));
   return rows;
 }
 
 function board(): PrivateBoard {
   return {
     slots: STARTER_TEAMS.map((t) => ({ team: t, decade: 1990 })),
-    benchSlot: { team: "TB", decade: 1990 },
+    benchSlot: { team: "PHX", decade: 1990 },
     mode: "blind",
   };
 }
@@ -45,10 +47,24 @@ function norms(): StatNorms {
   return { mean, std };
 }
 
+// A stored entry row as finalize sees it. rosterJson/sixthJson are `unknown` (raw
+// JSON columns) so a test can supply a MALFORMED roster, not just a well-typed one.
+interface StoredRow {
+  entryId: string;
+  userId: string;
+  userName: string;
+  teamName: string | null;
+  status: string;
+  rosterJson: unknown;
+  sixthJson: unknown;
+  captainSlot: number | null;
+  seedNet: number | null;
+}
+
 // A full stored entry row (roster + sixth persisted = a locked six). `status` is
 // included so tests can flip it and prove classification IGNORES it. If `badSlot`
 // is set, that starter references an id NOT in the index (dropped by a rebuild).
-function fullEntryRow(status: string, badSlot: number | null) {
+function fullEntryRow(status: string, badSlot: number | null): StoredRow {
   const picks: SimPick[] = STARTER_TEAMS.map((t, i) => ({
     entity_id: i === badSlot ? "77847" : `${t}a`,
     team: t,
@@ -62,7 +78,7 @@ function fullEntryRow(status: string, badSlot: number | null) {
     teamName: "MY TEAM",
     status,
     rosterJson: picks,
-    sixthJson: { entity_id: "TBa", team: "TB", decade: 1990 },
+    sixthJson: { entity_id: "PHXa", team: "PHX", decade: 1990 },
     captainSlot: 0,
     seedNet: 5,
   };
@@ -70,7 +86,7 @@ function fullEntryRow(status: string, badSlot: number | null) {
 
 // Mirror finalize's runFinalForTournament: `submitted` is derived from the
 // IMMUTABLE sixth_json signal (a locked six), never from the mutable `status`.
-function planEntryFrom(r: ReturnType<typeof fullEntryRow>) {
+function planEntryFrom(r: StoredRow) {
   return {
     entryId: r.entryId,
     userId: r.userId,
@@ -80,7 +96,7 @@ function planEntryFrom(r: ReturnType<typeof fullEntryRow>) {
   };
 }
 
-async function finalizeRow(r: ReturnType<typeof fullEntryRow>, tournamentId = "tourney-1") {
+async function finalizeRow(r: StoredRow, tournamentId = "tourney-1") {
   const size: PrivateSize = 4;
   return runFinal(
     tournamentId,
@@ -177,6 +193,49 @@ describe("runFinal — a direct (registered→submit) entry is classified as sub
   });
 });
 
+// ── Malformed stored roster degrades (not a TypeError, not scored as real) ────
+
+describe("runFinal — a malformed stored roster degrades to a bot", () => {
+  beforeEach(seedIndex);
+
+  const validPicks: SimPick[] = STARTER_TEAMS.map((t, i) => ({
+    entity_id: `${t}a`, team: t, decade: 1990, slot: i,
+  }));
+  function rowWithRoster(rosterJson: unknown): StoredRow {
+    return {
+      entryId: "e_test", userId: "u_test", userName: "ALICE", teamName: "MY TEAM",
+      status: "submitted", rosterJson,
+      sixthJson: { entity_id: "PHXa", team: "PHX", decade: 1990 },
+      captainSlot: 0, seedNet: 5,
+    };
+  }
+  async function expectDegraded(rosterJson: unknown) {
+    const res = await finalizeRow(rowWithRoster(rosterJson));
+    const me = res.bracket.teams.find((t) => t.id === "entry:e_test");
+    expect(me).toBeDefined();
+    expect(me!.isGhost).toBe(true); // ran as a bot, NOT scored as a real roster
+    expect(me!.name).toBe("ALICE BOT");
+    expect(res.botReplacedUserIds).toContain("u_test");
+    // Never crashed finalize (a TypeError would have rejected) and never persisted
+    // a placeholder as a real player.
+    expect(res.bracket.teams.some((t) => t.name === "(unavailable player)")).toBe(false);
+  }
+
+  it("degrades when a stored roster element is null (no TypeError)", async () => {
+    const roster = validPicks.map((p, i) => (i === 2 ? null : p));
+    await expectDegraded(roster);
+  });
+
+  it("degrades when a stored roster is the wrong length", async () => {
+    await expectDegraded(validPicks.slice(0, 4));
+  });
+
+  it("degrades when a stored roster has a malformed pick object", async () => {
+    const roster = validPicks.map((p, i) => (i === 1 ? { team: "NYK", decade: 1990, slot: 1 } : p));
+    await expectDegraded(roster); // missing entity_id
+  });
+});
+
 // ── Typed-error boundary: only UnresolvedRosterError degrades ─────────────────
 
 describe("typed-error boundary", () => {
@@ -184,7 +243,7 @@ describe("typed-error boundary", () => {
 
   it("hydrateRoster throws UnresolvedRosterError (not a plain Error) on an unknown pick", async () => {
     const picks: SimPick[] = [
-      { entity_id: "77847", team: "T2", decade: 1990, slot: 0 },
+      { entity_id: "77847", team: "LAL", decade: 1990, slot: 0 },
     ];
     await expect(hydrateRoster(picks)).rejects.toBeInstanceOf(UnresolvedRosterError);
   });
