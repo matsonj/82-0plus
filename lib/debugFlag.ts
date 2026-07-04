@@ -1,3 +1,5 @@
+import "server-only";
+
 // Shared gate for the tournament API routes' verbose "include the full scoring
 // breakdown" debug mode. NEXT_PUBLIC_DEBUG is a build-time public env var, so
 // requiring it ALONE is not safe: a production build accidentally shipped with

@@ -9,6 +9,18 @@ describe("getTournamentSecret — no DB-token fallback", () => {
     expect(getTournamentSecret()).toBe("a-real-secret");
   });
 
+  it("returns the explicit secret in production (correctly-configured prod must not throw)", () => {
+    vi.stubEnv("TOURNAMENT_SECRET", "prod-secret");
+    vi.stubEnv("NODE_ENV", "production");
+    expect(getTournamentSecret()).toBe("prod-secret");
+  });
+
+  it("returns the explicit secret under a non-dev/test NODE_ENV (e.g. staging)", () => {
+    vi.stubEnv("TOURNAMENT_SECRET", "staging-secret");
+    vi.stubEnv("NODE_ENV", "staging");
+    expect(getTournamentSecret()).toBe("staging-secret");
+  });
+
   it("throws in production when TOURNAMENT_SECRET is unset", () => {
     vi.stubEnv("TOURNAMENT_SECRET", "");
     vi.stubEnv("NODE_ENV", "production");
