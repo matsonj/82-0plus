@@ -292,7 +292,7 @@ export function PlayerList({
                   <span className="shrink-0 font-display text-xs text-[var(--md-ink-muted)]">
                     {i + 1}.
                   </span>
-                  <PositionChipGroup positions={p.positions} />
+                  <PositionChipGroup positions={p.positions} className="font-display" />
                   <span
                     className="min-w-0 truncate font-archivo text-[15px] font-bold"
                     style={{ fontVariationSettings: '"wdth" 90' }}

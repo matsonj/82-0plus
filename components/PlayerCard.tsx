@@ -457,7 +457,7 @@ function FullCard({
         </span>
         {/* Position + franchise label */}
         <div className="relative z-10 flex items-center gap-2">
-          <PositionChipGroup positions={player.positions} />
+          <PositionChipGroup positions={player.positions} className="font-cond uppercase" />
           <span
             className="font-cond text-[11px] font-bold uppercase tracking-[0.14em]"
             style={{ color: "var(--md-yellow)" }}
