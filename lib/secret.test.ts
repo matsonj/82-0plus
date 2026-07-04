@@ -9,15 +9,45 @@ describe("getTournamentSecret — no DB-token fallback", () => {
     expect(getTournamentSecret()).toBe("a-real-secret");
   });
 
+  it("returns the explicit secret in production (correctly-configured prod must not throw)", () => {
+    vi.stubEnv("TOURNAMENT_SECRET", "prod-secret");
+    vi.stubEnv("NODE_ENV", "production");
+    expect(getTournamentSecret()).toBe("prod-secret");
+  });
+
+  it("returns the explicit secret under a non-dev/test NODE_ENV (e.g. staging)", () => {
+    vi.stubEnv("TOURNAMENT_SECRET", "staging-secret");
+    vi.stubEnv("NODE_ENV", "staging");
+    expect(getTournamentSecret()).toBe("staging-secret");
+  });
+
   it("throws in production when TOURNAMENT_SECRET is unset", () => {
     vi.stubEnv("TOURNAMENT_SECRET", "");
     vi.stubEnv("NODE_ENV", "production");
-    expect(() => getTournamentSecret()).toThrow(/required in production/i);
+    expect(() => getTournamentSecret()).toThrow(/required outside/i);
   });
 
-  it("falls back to a dev placeholder outside production", () => {
+  it("throws when NODE_ENV is unset (self-hosted deploy w/ no explicit env)", () => {
+    vi.stubEnv("TOURNAMENT_SECRET", "");
+    vi.stubEnv("NODE_ENV", "");
+    expect(() => getTournamentSecret()).toThrow(/required outside/i);
+  });
+
+  it("throws for any non-dev/test NODE_ENV value (e.g. staging)", () => {
+    vi.stubEnv("TOURNAMENT_SECRET", "");
+    vi.stubEnv("NODE_ENV", "staging");
+    expect(() => getTournamentSecret()).toThrow(/required outside/i);
+  });
+
+  it("falls back to a dev placeholder when NODE_ENV=development", () => {
     vi.stubEnv("TOURNAMENT_SECRET", "");
     vi.stubEnv("NODE_ENV", "development");
+    expect(getTournamentSecret()).toBe("82-0plus-dev-secret");
+  });
+
+  it("falls back to a dev placeholder when NODE_ENV=test", () => {
+    vi.stubEnv("TOURNAMENT_SECRET", "");
+    vi.stubEnv("NODE_ENV", "test");
     expect(getTournamentSecret()).toBe("82-0plus-dev-secret");
   });
 
@@ -34,7 +64,13 @@ describe("assertTournamentSecret — fail before a write when misconfigured", ()
   it("throws in production when the secret is unset (so callers fail before mutating)", () => {
     vi.stubEnv("TOURNAMENT_SECRET", "");
     vi.stubEnv("NODE_ENV", "production");
-    expect(() => assertTournamentSecret()).toThrow(/required in production/i);
+    expect(() => assertTournamentSecret()).toThrow(/required outside/i);
+  });
+
+  it("throws when NODE_ENV is unset", () => {
+    vi.stubEnv("TOURNAMENT_SECRET", "");
+    vi.stubEnv("NODE_ENV", "");
+    expect(() => assertTournamentSecret()).toThrow(/required outside/i);
   });
 
   it("is a no-op when configured", () => {

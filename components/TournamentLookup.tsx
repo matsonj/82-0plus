@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   TournamentLookupResponse,
@@ -29,6 +28,7 @@ import {
   formatSignedMargin,
 } from "@/lib/tournamentLabels";
 import { Button, EmptyState, LoadingState, Notice } from "@/components/ui";
+import { LobbyRow, LobbyCard } from "@/components/LobbyRow";
 import {
   AccountFields,
   TournamentCredentialFields,
@@ -165,122 +165,102 @@ function TeamRow({
       : "var(--md-ink-muted)";
 
   return (
-    <button
-      type="button"
+    <LobbyRow
       onClick={onOpen}
       disabled={loading}
-      className="group flex w-full items-center border-b border-[var(--md-paper-3)] px-4 py-3 text-left transition-colors hover:bg-[var(--md-paper-2)] disabled:opacity-60"
-      style={isChampion ? { background: "var(--md-paper-2)" } : undefined}
-    >
-      {/* Crown for champion — fixed 20px slot so team name aligns */}
-      <span className="mr-3 w-5 shrink-0 text-center">
-        {isChampion && (
-          <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>
-        )}
-      </span>
-
-      {/* Team name + mode subtitle */}
-      <span className="flex min-w-0 flex-[2] flex-col">
-        <span
-          className="font-archivo truncate leading-tight"
-          style={{ fontSize: 15, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
-        >
-          {team.teamName}
-        </span>
-        <span className="font-byline text-[11px] text-[var(--md-ink-muted)]">
-          {modeLabel}
-        </span>
-      </span>
-
-      {/* THE RUN — fixed-width sub-lanes, all whitespace-nowrap */}
-      <span className="hidden items-center font-mono text-[12px] tabular-nums sm:flex">
-
-        {/* Sub-lane: REG record + net rating */}
-        <span
-          className="flex items-baseline gap-1"
-          style={{ width: 170, flexShrink: 0, whiteSpace: "nowrap" }}
-        >
-          <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-            {team.mode === "daily" ? "DAILY" : "REG"}
-          </span>
-          <span className="font-bold">{reg.w}–{reg.l}</span>
+      highlight={isChampion ? "champion" : "none"}
+      leading={isChampion && <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>}
+      title={team.teamName}
+      subtitle={modeLabel}
+      run={
+        /* THE RUN — fixed-width sub-lanes, all whitespace-nowrap */
+        <span className="hidden items-center font-mono text-[12px] tabular-nums sm:flex">
+          {/* Sub-lane: REG record + net rating */}
           <span
-            className="text-[11px]"
-            style={{ color: netPositive ? "var(--md-teal)" : "var(--md-coral-deep)" }}
+            className="flex items-baseline gap-1"
+            style={{ width: 170, flexShrink: 0, whiteSpace: "nowrap" }}
           >
-            ({netText})
+            <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+              {team.mode === "daily" ? "DAILY" : "REG"}
+            </span>
+            <span className="font-bold">{reg.w}–{reg.l}</span>
+            <span
+              className="text-[11px]"
+              style={{ color: netPositive ? "var(--md-teal)" : "var(--md-coral-deep)" }}
+            >
+              ({netText})
+            </span>
+          </span>
+
+          {/* Arrow + BRACKET lane — hidden when team didn't enter */}
+          {!didntEnter ? (
+            <>
+              <span
+                className="text-center text-[var(--md-ink-muted)]"
+                style={{ width: 24, flexShrink: 0 }}
+              >
+                →
+              </span>
+              <span
+                className="flex items-baseline gap-1"
+                style={{ width: 110, flexShrink: 0, whiteSpace: "nowrap" }}
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                  BRACKET
+                </span>
+                <span className="font-bold">{team.recordW}–{team.recordL}</span>
+              </span>
+              <span
+                className="text-center text-[var(--md-ink-muted)]"
+                style={{ width: 24, flexShrink: 0 }}
+              >
+                →
+              </span>
+            </>
+          ) : (
+            /* Ghost spacer keeps outcome lane in the same x position */
+            <span style={{ width: 24 + 110 + 24, flexShrink: 0 }} />
+          )}
+
+          {/* Sub-lane: outcome — plain text, consistent across all rows */}
+          <span
+            className="font-cond text-[12px] font-bold uppercase tracking-[0.06em]"
+            style={{ width: 130, flexShrink: 0, whiteSpace: "nowrap", color: outcomeColor }}
+          >
+            {isChampion && <span className="mr-1">♛</span>}
+            {outcomeText}
           </span>
         </span>
-
-        {/* Arrow + BRACKET lane — hidden when team didn't enter */}
-        {!didntEnter ? (
-          <>
-            <span
-              className="text-center text-[var(--md-ink-muted)]"
-              style={{ width: 24, flexShrink: 0 }}
-            >
-              →
-            </span>
-            <span
-              className="flex items-baseline gap-1"
-              style={{ width: 110, flexShrink: 0, whiteSpace: "nowrap" }}
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
-                BRACKET
-              </span>
-              <span className="font-bold">{team.recordW}–{team.recordL}</span>
-            </span>
-            <span
-              className="text-center text-[var(--md-ink-muted)]"
-              style={{ width: 24, flexShrink: 0 }}
-            >
-              →
-            </span>
-          </>
-        ) : (
-          /* Ghost spacer keeps outcome lane in the same x position */
-          <span style={{ width: 24 + 110 + 24, flexShrink: 0 }} />
-        )}
-
-        {/* Sub-lane: outcome — plain text, consistent across all rows */}
-        <span
-          className="font-cond text-[12px] font-bold uppercase tracking-[0.06em]"
-          style={{ width: 130, flexShrink: 0, whiteSpace: "nowrap", color: outcomeColor }}
-        >
-          {isChampion && <span className="mr-1">♛</span>}
-          {outcomeText}
-        </span>
-      </span>
-
-      {/* TIER column — fixed 100px. One consistent stamp family, right-aligned:
-          an optional outcome stamp (champ / runner-up) stacked over the qualifier
-          — the daily leaderboard rank for daily teams, or the season tier badge
-          for Classic/Ranked. Champ omits the tier (the crown says it all). */}
-      <span
-        className="flex shrink-0 flex-col items-end gap-2"
-        style={{ width: 100 }}
-      >
-        {isChampion && (
-          <RowStamp fill="var(--md-yellow)" text="var(--md-ink)" title="Champion">
-            ♛ CHAMP
-          </RowStamp>
-        )}
-        {isRunnerUp && (
-          <RowStamp fill="var(--md-white)" text="var(--md-ink)" title="Runner-up">
-            RUNNER-UP
-          </RowStamp>
-        )}
-        {team.mode === "daily"
-          ? team.dailyRank != null && (
-              <DailyRankStamp rank={team.dailyRank} field={team.dailyFieldSize} />
-            )
-          : !isChampion && <TierBadge seedNet={team.seedNet} size="capsule" />}
-      </span>
-
-      {loading && (
-        <span className="ml-2 font-mono text-[11px] text-[var(--md-ink-muted)]">…</span>
-      )}
-    </button>
+      }
+      stamp={
+        <>
+          {/* TIER column — fixed 100px. One consistent stamp family, right-aligned:
+              an optional outcome stamp (champ / runner-up) stacked over the qualifier
+              — the daily leaderboard rank for daily teams, or the season tier badge
+              for Classic/Ranked. Champ omits the tier (the crown says it all). */}
+          <span className="flex shrink-0 flex-col items-end gap-2" style={{ width: 100 }}>
+            {isChampion && (
+              <RowStamp fill="var(--md-yellow)" text="var(--md-ink)" title="Champion">
+                ♛ CHAMP
+              </RowStamp>
+            )}
+            {isRunnerUp && (
+              <RowStamp fill="var(--md-white)" text="var(--md-ink)" title="Runner-up">
+                RUNNER-UP
+              </RowStamp>
+            )}
+            {team.mode === "daily"
+              ? team.dailyRank != null && (
+                  <DailyRankStamp rank={team.dailyRank} field={team.dailyFieldSize} />
+                )
+              : !isChampion && <TierBadge seedNet={team.seedNet} size="capsule" />}
+          </span>
+          {loading && (
+            <span className="ml-2 font-mono text-[11px] text-[var(--md-ink-muted)]">…</span>
+          )}
+        </>
+      }
+    />
   );
 }
 
@@ -310,34 +290,15 @@ function TeamCard({
         : "Classic";
 
   return (
-    <button
-      type="button"
+    <LobbyCard
       onClick={onOpen}
       disabled={loading}
-      className="md-card w-full text-left p-0 overflow-hidden transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px] disabled:opacity-60"
-      style={
-        isChampion
-          ? { border: "2px solid var(--md-yellow)", boxShadow: "5px 5px 0 0 var(--md-yellow)" }
-          : undefined
-      }
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 p-4 pb-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            {isChampion && <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>}
-            <span
-              className="font-archivo truncate leading-tight"
-              style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
-            >
-              {team.teamName}
-            </span>
-          </div>
-          <div className="mt-0.5 font-byline text-[11px] text-[var(--md-ink-muted)]">
-            {modeLabel}
-          </div>
-        </div>
-        {/* Outcome + qualifier stamps — same family as the desktop TIER lane. */}
+      highlight={isChampion ? "champion" : "none"}
+      leading={isChampion && <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>}
+      title={team.teamName}
+      subtitle={modeLabel}
+      stamp={
+        // Outcome + qualifier stamps — same family as the desktop TIER lane.
         <div className="flex shrink-0 flex-col items-end gap-2">
           {isChampion && (
             <RowStamp fill="var(--md-yellow)" text="var(--md-ink)" title="Champion">
@@ -355,8 +316,8 @@ function TeamCard({
               )
             : !isChampion && <TierBadge seedNet={team.seedNet} size="capsule" />}
         </div>
-      </div>
-
+      }
+    >
       {/* Reg + Bracket records */}
       <div className="flex gap-0 border-t-2 border-y-2 border-[var(--md-ink)]">
         <div className="flex-1 px-4 py-2.5">
@@ -406,7 +367,7 @@ function TeamCard({
           {loading ? "Loading…" : "View →"}
         </span>
       </div>
-    </button>
+    </LobbyCard>
   );
 }
 
@@ -456,80 +417,68 @@ function PrivateStamp({ s }: { s: ReturnType<typeof privateRowState> }) {
 function PrivateRowDesktop({ row }: { row: MyPrivateRow }) {
   const s = privateRowState(row);
   return (
-    <Link
+    <LobbyRow
       href={`/p/${row.tournamentId}`}
-      className="group flex w-full items-center gap-4 border-b border-[var(--md-paper-3)] px-4 py-3.5 text-left transition-colors hover:bg-[var(--md-paper-2)]"
-      style={
-        s.cloaked
-          ? {
-              borderLeft: "3px solid var(--md-coral)",
-              background: "color-mix(in srgb, var(--md-coral) 6%, transparent)",
-            }
-          : s.isChampion
-            ? { background: "var(--md-paper-2)" }
-            : undefined
-      }
-    >
-      {/* crown / unread-dot lane */}
-      <span className="w-5 shrink-0 text-center">
-        {s.cloaked ? (
+      highlight={s.cloaked ? "cloaked" : s.isChampion ? "champion" : "none"}
+      leading={
+        s.cloaked ? (
           <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "var(--md-coral)" }} />
         ) : s.isChampion ? (
           <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>
-        ) : null}
-      </span>
-      {/* name + subtitle */}
-      <span className="flex min-w-0 flex-[2] flex-col">
-        <span
-          className="font-archivo truncate leading-tight"
-          style={{ fontSize: 15, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
-        >
-          {row.name}
-        </span>
-        <span className="font-byline text-[11px] text-[var(--md-ink-muted)]">
+        ) : null
+      }
+      title={row.name}
+      subtitle={
+        <>
           {row.modeLabel} · {row.size} teams
-        </span>
-      </span>
-      {/* PLAYOFF lane */}
-      <span className="flex shrink-0 items-baseline gap-2 font-mono text-[13px]" style={{ width: 150 }}>
-        <span className="font-cond text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">
-          Playoff
-        </span>
-        {s.cloaked ? (
-          <span className="inline-block" style={{ width: 44, height: 14, borderRadius: 3, background: "var(--md-paper-3)" }} />
-        ) : s.hasRec ? (
-          <span className="font-bold text-[var(--md-ink)]">{s.recW}–{s.recL}</span>
-        ) : (
-          <span className="text-[var(--md-ink-muted)]">—</span>
-        )}
-      </span>
-      {/* OUTCOME lane */}
-      <span className="shrink-0" style={{ width: 150 }}>
-        {s.cloaked ? (
-          <span className="inline-block" style={{ width: 96, height: 14, borderRadius: 3, background: "var(--md-paper-3)" }} />
-        ) : (
-          <span
-            className="font-mono text-[12px]"
-            style={{ color: s.isChampion ? "var(--md-ink)" : "var(--md-ink-muted)", fontWeight: s.isChampion ? 700 : 400 }}
-          >
-            {s.outcome}
+        </>
+      }
+      run={
+        <>
+          {/* PLAYOFF lane */}
+          <span className="flex shrink-0 items-baseline gap-2 font-mono text-[13px]" style={{ width: 150 }}>
+            <span className="font-cond text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">
+              Playoff
+            </span>
+            {s.cloaked ? (
+              <span className="inline-block" style={{ width: 44, height: 14, borderRadius: 3, background: "var(--md-paper-3)" }} />
+            ) : s.hasRec ? (
+              <span className="font-bold text-[var(--md-ink)]">{s.recW}–{s.recL}</span>
+            ) : (
+              <span className="text-[var(--md-ink-muted)]">—</span>
+            )}
           </span>
-        )}
-      </span>
-      {/* stamp / CTA lane */}
-      <span className="flex shrink-0 flex-col items-end gap-0.5" style={{ width: 130 }}>
-        {s.cloaked ? (
-          <>
+          {/* OUTCOME lane */}
+          <span className="shrink-0" style={{ width: 150 }}>
+            {s.cloaked ? (
+              <span className="inline-block" style={{ width: 96, height: 14, borderRadius: 3, background: "var(--md-paper-3)" }} />
+            ) : (
+              <span
+                className="font-mono text-[12px]"
+                style={{ color: s.isChampion ? "var(--md-ink)" : "var(--md-ink-muted)", fontWeight: s.isChampion ? 700 : 400 }}
+              >
+                {s.outcome}
+              </span>
+            )}
+          </span>
+        </>
+      }
+      stamp={
+        /* stamp / CTA lane */
+        <span className="flex shrink-0 flex-col items-end gap-0.5" style={{ width: 130 }}>
+          {s.cloaked ? (
+            <>
+              <PrivateStamp s={s} />
+              <span className="font-mono text-[11px] uppercase tracking-[0.04em] text-[var(--md-coral)]">reveal →</span>
+            </>
+          ) : !s.completed ? (
+            <span className="font-mono text-[11px] uppercase tracking-[0.04em] text-[var(--md-blue)]">Open lobby →</span>
+          ) : (
             <PrivateStamp s={s} />
-            <span className="font-mono text-[11px] uppercase tracking-[0.04em] text-[var(--md-coral)]">reveal →</span>
-          </>
-        ) : !s.completed ? (
-          <span className="font-mono text-[11px] uppercase tracking-[0.04em] text-[var(--md-blue)]">Open lobby →</span>
-        ) : (
-          <PrivateStamp s={s} />
-        )}
-      </span>
-    </Link>
+          )}
+        </span>
+      }
+    />
   );
 }
 
@@ -538,37 +487,21 @@ function PrivateRowDesktop({ row }: { row: MyPrivateRow }) {
 function PrivateCardMobile({ row }: { row: MyPrivateRow }) {
   const s = privateRowState(row);
   return (
-    <Link
+    <LobbyCard
       href={`/p/${row.tournamentId}`}
-      className="md-card w-full overflow-hidden p-0 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px]"
-      style={
-        s.cloaked
-          ? { borderColor: "var(--md-coral)", boxShadow: "4px 4px 0 0 var(--md-coral)" }
-          : s.isChampion
-            ? { borderColor: "var(--md-yellow)", boxShadow: "4px 4px 0 0 var(--md-yellow)" }
-            : undefined
+      highlight={s.cloaked ? "cloaked" : s.isChampion ? "champion" : "none"}
+      leading={
+        <>
+          {s.cloaked && (
+            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "var(--md-coral)" }} />
+          )}
+          {s.isChampion && <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>}
+        </>
       }
+      title={row.name}
+      subtitle={<>{row.modeLabel} · {row.size} teams</>}
+      stamp={<PrivateStamp s={s} />}
     >
-      <div className="flex items-start justify-between gap-3 p-4 pb-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            {s.cloaked && (
-              <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "var(--md-coral)" }} />
-            )}
-            {s.isChampion && <span style={{ color: "var(--md-yellow)", fontSize: 16 }}>♛</span>}
-            <span
-              className="font-archivo truncate leading-tight"
-              style={{ fontSize: 16, fontWeight: 800, fontVariationSettings: '"wdth" 100' }}
-            >
-              {row.name}
-            </span>
-          </div>
-          <div className="mt-0.5 font-byline text-[11px] text-[var(--md-ink-muted)]">
-            {row.modeLabel} · {row.size} teams
-          </div>
-        </div>
-        <PrivateStamp s={s} />
-      </div>
       <div className="flex items-baseline justify-between gap-3 border-t-2 border-[var(--md-ink)] px-4 py-2.5">
         {s.cloaked ? (
           <span className="inline-block" style={{ width: 72, height: 22, borderRadius: 3, background: "var(--md-paper-3)" }} />
@@ -589,7 +522,7 @@ function PrivateCardMobile({ row }: { row: MyPrivateRow }) {
           {s.cloaked ? "New result — tap to reveal" : s.outcome}
         </span>
       </div>
-    </Link>
+    </LobbyCard>
   );
 }
 

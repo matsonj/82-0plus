@@ -4,18 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { GameMode, PublicPlayer } from "@/lib/types";
 import type { Role } from "@/lib/positions";
 import { CardGlyph, type CardPlayer, usePlayerCardDeck } from "@/components/PlayerCard";
-import { Button, Capsule, SegmentedControl } from "@/components/ui";
+import { Button, Capsule, PositionChipGroup, SegmentedControl } from "@/components/ui";
 
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-
-// Position chips read at a glance — a distinct riso ink per role (cream text).
-// Flame is reserved for W/L, so positions use violet / court-green / magenta.
-const ROLE_BG: Record<Role, string> = {
-  G: "var(--md-sky)", // violet
-  W: "var(--md-teal)", // court green
-  B: "var(--md-magenta)", // riso magenta
-};
 
 type Status = "loading" | "ok" | "error";
 type SortKey = "mpg" | "pts" | "reb" | "ast" | "stl" | "blk";
@@ -300,17 +292,7 @@ export function PlayerList({
                   <span className="shrink-0 font-display text-xs text-[var(--md-ink-muted)]">
                     {i + 1}.
                   </span>
-                  <span className="flex shrink-0 gap-0.5">
-                    {p.positions.map((r) => (
-                      <span
-                        key={r}
-                        className="border border-[var(--md-ink)] px-1 font-display text-[10px] font-bold text-[var(--md-paper)]"
-                        style={{ background: ROLE_BG[r] }}
-                      >
-                        {r}
-                      </span>
-                    ))}
-                  </span>
+                  <PositionChipGroup positions={p.positions} className="font-display" />
                   <span
                     className="min-w-0 truncate font-archivo text-[15px] font-bold"
                     style={{ fontVariationSettings: '"wdth" 90' }}

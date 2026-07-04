@@ -28,6 +28,7 @@ import { isEligible, regWinsFromSeedNet, MIN_ELIGIBLE_WINS } from "@/lib/tier";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import { computeDailyBoard } from "@/lib/daily";
 import { ensureDailyGhosts } from "@/lib/dailyGhosts";
+import { isDebugEnabled } from "@/lib/debugFlag";
 import type { TournamentRunResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -35,7 +36,9 @@ export const dynamic = "force-dynamic";
 
 // Per-game modifier breakdown is debug-only; gate it server-side too (not just
 // the UI), so the model internals aren't readable from the API in normal play.
-const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "1";
+// See lib/debugFlag.ts: NEXT_PUBLIC_DEBUG alone can't enable this in a
+// production build.
+const DEBUG = isDebugEnabled();
 
 export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);

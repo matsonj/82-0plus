@@ -2,7 +2,7 @@ import { query, type QueryOptions } from "./motherduck";
 import { PGC, readPgCache, isCacheReady, scheduleWarmReconcile } from "./appCache";
 import { eligiblePositions, positionRank } from "./positions";
 import type { GameMode, PublicPlayer, SimPick, SimRosterLine } from "./types";
-import type { ScoringPlayer } from "./scoring";
+import { toScoring, type ScoringPlayer } from "./scoring";
 
 // All SQL lives here. Decade buckets use `season_year - (season_year % 10)`
 // because DuckDB `/` is float division. Regular Season only for fairness.
@@ -63,23 +63,8 @@ export interface IndexedPlayer {
 export async function getDecades(
   options: QueryOptions = {},
 ): Promise<number[]> {
-  const index = await getPlayerIndex(options);
-  const counts = new Map<string, number>(); // "team|decade" → player count
-  for (const p of index) {
-    const k = `${p.team}|${p.decade}`;
-    counts.set(k, (counts.get(k) ?? 0) + 1);
-  }
-  const playableTeams = new Map<number, number>(); // decade → # qualifying teams
-  for (const [k, c] of counts) {
-    if (c >= MIN_PLAYERS_PER_COMBO) {
-      const decade = Number(k.split("|")[1]);
-      playableTeams.set(decade, (playableTeams.get(decade) ?? 0) + 1);
-    }
-  }
-  return [...playableTeams]
-    .filter(([, teams]) => teams >= MIN_PLAYABLE_TEAMS_PER_DECADE)
-    .map(([decade]) => decade)
-    .sort((a, b) => a - b);
+  const { decades } = await getPlayerIndexView(options);
+  return decades.slice();
 }
 
 /** One browsable (team, decade) pair with its drafted-eligible player count. */
@@ -99,28 +84,8 @@ export interface TeamDecadeCombo {
 export async function getTeamDecadeCombos(
   options: QueryOptions = {},
 ): Promise<TeamDecadeCombo[]> {
-  const index = await getPlayerIndex(options);
-  const counts = new Map<string, number>(); // "team|decade" → player count
-  for (const p of index) {
-    const k = `${p.team}|${p.decade}`;
-    counts.set(k, (counts.get(k) ?? 0) + 1);
-  }
-  const combos: TeamDecadeCombo[] = [];
-  for (const [k, count] of counts) {
-    if (count < MIN_PLAYERS_PER_COMBO) continue;
-    const [team, decade] = k.split("|");
-    // Report the visible count: /api/players only serves the top
-    // MAX_OFFERED_PER_COMBO by minutes, so a deeper roster mustn't advertise
-    // players the browser can never show.
-    combos.push({
-      team,
-      decade: Number(decade),
-      count: Math.min(count, MAX_OFFERED_PER_COMBO),
-    });
-  }
-  return combos.sort(
-    (a, b) => b.decade - a.decade || a.team.localeCompare(b.team),
-  );
+  const { teamDecadeCombos } = await getPlayerIndexView(options);
+  return teamDecadeCombos.slice();
 }
 
 /** Teams in a decade with enough players to be offered (≥ MIN_PLAYERS_PER_COMBO). */
@@ -128,14 +93,8 @@ export async function getPlayableTeams(
   decade: number,
   options: QueryOptions = {},
 ): Promise<Set<string>> {
-  const index = await getPlayerIndex(options);
-  const counts = new Map<string, number>();
-  for (const p of index) {
-    if (p.decade === decade) counts.set(p.team, (counts.get(p.team) ?? 0) + 1);
-  }
-  return new Set(
-    [...counts].filter(([, c]) => c >= MIN_PLAYERS_PER_COMBO).map(([t]) => t),
-  );
+  const { playableTeamsByDecade } = await getPlayerIndexView(options);
+  return new Set(playableTeamsByDecade.get(decade) ?? []);
 }
 
 /** Weight = number of distinct seasons a team appears in a decade. */
@@ -235,6 +194,106 @@ export function getPlayerIndex(
     });
   }
   return globalThis.__player_index__;
+}
+
+/**
+ * Derived lookup structures built ONCE per loaded index so the hot accessors don't
+ * re-scan the flat array on every call (GET /api/slot alone did 3–4 full scans per
+ * roll). Every field is computed to reproduce the EXACT output of the original
+ * `.filter()/.sort()` accessors:
+ *   • byKey    — "entity_id|team|decade" → row (hydrateRoster lookup; last wins,
+ *                same as the old `new Map(index.map(...))`).
+ *   • byCombo  — "team|decade" → the combo's players, sorted by mpg DESC. Built by
+ *                pushing in original index order then a STABLE sort, so ties keep
+ *                their original order exactly like `filter().sort()` did.
+ *   • decades / teamDecadeCombos / teamDecades / playableTeamsByDecade — the
+ *                gated/sorted collections the browse + slot endpoints return.
+ */
+interface PlayerIndexView {
+  players: IndexedPlayer[];
+  byKey: Map<string, IndexedPlayer>;
+  byCombo: Map<string, IndexedPlayer[]>;
+  decades: number[];
+  teamDecadeCombos: TeamDecadeCombo[];
+  teamDecades: Map<string, number[]>;
+  playableTeamsByDecade: Map<number, Set<string>>;
+}
+
+function buildPlayerIndexView(players: IndexedPlayer[]): PlayerIndexView {
+  const byKey = new Map<string, IndexedPlayer>();
+  const byCombo = new Map<string, IndexedPlayer[]>();
+  for (const p of players) {
+    byKey.set(`${p.entity_id}|${p.team}|${p.decade}`, p);
+    const k = `${p.team}|${p.decade}`;
+    let bucket = byCombo.get(k);
+    if (!bucket) byCombo.set(k, (bucket = []));
+    bucket.push(p);
+  }
+  // Stable sort by minutes desc — matches the old filter().sort((a,b)=>b.mpg-a.mpg).
+  for (const bucket of byCombo.values()) bucket.sort((a, b) => b.mpg - a.mpg);
+
+  const playableTeamsByDecade = new Map<number, Set<string>>();
+  const teamDecades = new Map<string, number[]>();
+  const teamDecadeCombos: TeamDecadeCombo[] = [];
+  for (const [k, bucket] of byCombo) {
+    if (bucket.length < MIN_PLAYERS_PER_COMBO) continue;
+    const sep = k.indexOf("|");
+    const team = k.slice(0, sep);
+    const decade = Number(k.slice(sep + 1));
+    let teams = playableTeamsByDecade.get(decade);
+    if (!teams) playableTeamsByDecade.set(decade, (teams = new Set()));
+    teams.add(team);
+    const decs = teamDecades.get(team);
+    if (decs) decs.push(decade);
+    else teamDecades.set(team, [decade]);
+    teamDecadeCombos.push({
+      team,
+      decade,
+      count: Math.min(bucket.length, MAX_OFFERED_PER_COMBO),
+    });
+  }
+  for (const decs of teamDecades.values()) decs.sort((a, b) => a - b);
+  teamDecadeCombos.sort(
+    (a, b) => b.decade - a.decade || a.team.localeCompare(b.team),
+  );
+  const decades = [...playableTeamsByDecade]
+    .filter(([, teams]) => teams.size >= MIN_PLAYABLE_TEAMS_PER_DECADE)
+    .map(([decade]) => decade)
+    .sort((a, b) => a - b);
+
+  return {
+    players,
+    byKey,
+    byCombo,
+    decades,
+    teamDecadeCombos,
+    teamDecades,
+    playableTeamsByDecade,
+  };
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __player_index_view__:
+    | { src: Promise<IndexedPlayer[]>; view: Promise<PlayerIndexView> }
+    | undefined;
+}
+
+/**
+ * The derived view for the current warm index. Memoized against the index promise
+ * IDENTITY, so it rebuilds automatically the moment `__player_index__` is swapped
+ * or dropped (retry, or the daily warm reconcile) — no separate invalidation hook
+ * to keep in sync. Same single-flight guarantee: one build per loaded index.
+ */
+function getPlayerIndexView(
+  options: QueryOptions = {},
+): Promise<PlayerIndexView> {
+  const src = getPlayerIndex(options);
+  const cached = globalThis.__player_index_view__;
+  if (cached && cached.src === src) return cached.view;
+  const view = src.then(buildPlayerIndexView);
+  globalThis.__player_index_view__ = { src, view };
+  return view;
 }
 
 /** Compute the index from scratch (the source query the materialized table uses). */
@@ -466,10 +525,9 @@ export async function getPlayers(
   mode: GameMode,
   options: QueryOptions = {},
 ): Promise<PublicPlayer[]> {
-  const index = await getPlayerIndex(options);
-  return index
-    .filter((p) => p.team === team && p.decade === decade)
-    .sort((a, b) => b.mpg - a.mpg)
+  const { byCombo } = await getPlayerIndexView(options);
+  const bucket = byCombo.get(`${team}|${decade}`) ?? [];
+  return bucket
     .slice(0, MAX_OFFERED_PER_COMBO)
     .map((p) => toPublic(p, mode));
 }
@@ -482,13 +540,10 @@ export async function getOfferedIds(
   decade: number,
   options: QueryOptions = {},
 ): Promise<Set<string>> {
-  const index = await getPlayerIndex(options);
+  const { byCombo } = await getPlayerIndexView(options);
+  const bucket = byCombo.get(`${team}|${decade}`) ?? [];
   return new Set(
-    index
-      .filter((p) => p.team === team && p.decade === decade)
-      .sort((a, b) => b.mpg - a.mpg)
-      .slice(0, MAX_OFFERED_PER_COMBO)
-      .map((p) => p.entity_id),
+    bucket.slice(0, MAX_OFFERED_PER_COMBO).map((p) => p.entity_id),
   );
 }
 
@@ -563,15 +618,8 @@ export async function getTeamDecades(
   team: string,
   options: QueryOptions = {},
 ): Promise<number[]> {
-  const index = await getPlayerIndex(options);
-  const counts = new Map<number, number>();
-  for (const p of index) {
-    if (p.team === team) counts.set(p.decade, (counts.get(p.decade) ?? 0) + 1);
-  }
-  return [...counts]
-    .filter(([, c]) => c >= MIN_PLAYERS_PER_COMBO)
-    .map(([d]) => d)
-    .sort((a, b) => a - b);
+  const { teamDecades } = await getPlayerIndexView(options);
+  return (teamDecades.get(team) ?? []).slice();
 }
 
 /**
@@ -587,10 +635,7 @@ export async function hydrateRoster(
   lines: SimRosterLine[];
   players: IndexedPlayer[];
 }> {
-  const index = await getPlayerIndex(options);
-  const byKey = new Map(
-    index.map((p) => [`${p.entity_id}|${p.team}|${p.decade}`, p]),
-  );
+  const { byKey } = await getPlayerIndexView(options);
   const scoring: ScoringPlayer[] = [];
   const lines: SimRosterLine[] = [];
   const players: IndexedPlayer[] = [];
@@ -598,17 +643,7 @@ export async function hydrateRoster(
     const p = byKey.get(`${pick.entity_id}|${pick.team}|${pick.decade}`);
     if (!p) throw new Error(`unknown roster pick: ${pick.entity_id}`);
     players.push(p);
-    scoring.push({
-      gq: p.value, season: p.best_season, mpg: p.mpg,
-      pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
-      fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
-      fgm: p.fgm, ftm: p.ftm,
-      // Default to league-average if a stale/old index row lacks tsplus.
-      tsplus: Number.isFinite(p.tsplus) ? p.tsplus : 1,
-      height_in: Number.isFinite(p.height_in) ? p.height_in : 79,
-      pos: p.pos ?? null,
-      allDef: p.all_def ?? 0,
-    });
+    scoring.push(toScoring(p));
     lines.push({
       entity_id: p.entity_id, player_name: p.player_name, team: p.team,
       best_season: p.best_season, positions: eligiblePositions(p),

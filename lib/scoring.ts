@@ -1,4 +1,5 @@
 import type { SimResult } from "./types";
+import type { IndexedPlayer } from "./queries";
 import { primaryRole, type Role } from "./positions";
 import { paceAdj } from "./pace";
 
@@ -23,6 +24,26 @@ export interface ScoringPlayer {
   height_in: number; // real height (inches)
   pos: string | null; // real b-ref position (drives balance/eligibility; null → derived)
   allDef: number; // All-Defensive team on the drafted season: 1 (1st), 2 (2nd), 0 (none)
+}
+
+/**
+ * Map an indexed/stored player row into the scoring shape. The ONE definition
+ * shared by every hydration site (hydrateRoster, hydrateTournamentRoster, daily
+ * ghosts, private-board bots) so the fallback defaults stay in lockstep. tsplus
+ * and height_in default to league-average (1 / 79") when a stale index row lacks
+ * them; allDef defaults to 0 (no selection).
+ */
+export function toScoring(p: IndexedPlayer): ScoringPlayer {
+  return {
+    gq: p.value, season: p.best_season, mpg: p.mpg,
+    pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk,
+    fga: p.fga, fg3a: p.fg3a, fg3m: p.fg3m, fta: p.fta, tov: p.tov,
+    fgm: p.fgm, ftm: p.ftm,
+    tsplus: Number.isFinite(p.tsplus) ? p.tsplus : 1,
+    height_in: Number.isFinite(p.height_in) ? p.height_in : 79,
+    pos: p.pos ?? null,
+    allDef: p.all_def ?? 0,
+  };
 }
 
 /**
