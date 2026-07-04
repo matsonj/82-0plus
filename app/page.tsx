@@ -39,7 +39,7 @@ import {
   formatPublicSpots,
   type PublicTournamentSummary,
 } from "@/lib/privateTournament";
-import { fetchHomeBootstrap } from "@/lib/homeBootstrap";
+import { fetchHomeBootstrap, type NotifSummary } from "@/lib/homeBootstrap";
 import { pacificDate, isPlayableDailyDate } from "@/lib/dailyDate";
 import {
   setPendingDaily,
@@ -189,6 +189,12 @@ export default function Home() {
   // When exactly one public tournament still has slots, deep-link straight to its
   // lobby instead of a one-row list. null when there are 0 or 2+.
   const [soloJoinablePublicId, setSoloJoinablePublicId] = useState<string | null>(null);
+  // Open tournaments (public or private) where the signed-in account already has
+  // an entry — straight off the bootstrap call's notifications. When non-empty,
+  // the "join a public tournament" enticements flip to point at the user's own
+  // bracket instead of selling them a field they're already in. Empty when signed
+  // out or not entered anywhere.
+  const [pendingTournaments, setPendingTournaments] = useState<NotifSummary[]>([]);
   useEffect(() => {
     let active = true;
     fetch("/api/private-tournament/public")
@@ -228,6 +234,22 @@ export default function Home() {
     joinablePublicCount === 1 && soloJoinablePublicId
       ? `/p/${soloJoinablePublicId}`
       : "/tournament?tab=private&intent=public";
+  // Entered-state swap for the join CTAs: a lone entry deep-links to its lobby
+  // (name shown where there's room), 2+ go to the My Tournaments list.
+  const hasEnteredOpenTournament = pendingTournaments.length > 0;
+  const enteredTournament = hasEnteredOpenTournament
+    ? {
+        count: pendingTournaments.length,
+        name:
+          pendingTournaments.length === 1
+            ? pendingTournaments[0].tournamentName
+            : null,
+        href:
+          pendingTournaments.length === 1
+            ? `/p/${pendingTournaments[0].tournamentId}`
+            : "/tournament?tab=private",
+      }
+    : null;
   // Whether today's completion has resolved (results fetched, or no account to
   // fetch for). Until then we hold a stable placeholder so the daily block can't
   // flash "Play" and then flip to your result once the fetch lands. Seeds true when
@@ -518,13 +540,17 @@ export default function Home() {
     const u = getSavedUser();
     // No account → nothing to fetch; today's state is resolved (unplayed) at once.
     if (!u) {
+      setPendingTournaments([]);
       setDailyLoaded(true);
       return;
     }
     try {
       // One consolidated, authenticate-once call — deduped with the header's
       // alerts fetch so the home mount makes a single round trip (lib/homeBootstrap).
-      const { dailyResults } = await fetchHomeBootstrap(u.username, u.pin);
+      const { dailyResults, notifications } = await fetchHomeBootstrap(
+        u.username,
+        u.pin,
+      );
       const { results, todayRank } = dailyResults;
       const map: DailyDoneMap = {};
       for (const r of results) {
@@ -535,6 +561,7 @@ export default function Home() {
       }
       setDailyDone(map);
       setDailyRank(todayRank ?? null);
+      setPendingTournaments(notifications?.pending ?? []);
     } catch {
       /* leave prior state; the per-date playDaily check still fails closed */
     } finally {
@@ -1047,9 +1074,35 @@ export default function Home() {
               Review your team
             </button>
           </div>
-          {/* Caught your daily? Strong CTA toward the next hook at peak engagement:
-              joinable public tournaments. Only once today's result is in AND one has room. */}
-          {joinablePublicCount && joinablePublicCount > 0 ? (
+          {/* Caught your daily? Strong CTA toward the next hook at peak engagement.
+              Already in an open tournament → point at their own bracket; otherwise
+              joinable public tournaments, only when one has room. */}
+          {enteredTournament ? (
+            <div className="mt-4 flex flex-col gap-2 border-t border-white/16 pt-4">
+              <span className="text-[13px] text-[var(--md-paper-3)]">
+                {enteredTournament.name ? (
+                  <>You&rsquo;re in {enteredTournament.name}.</>
+                ) : (
+                  <>You&rsquo;re in {enteredTournament.count} tournaments.</>
+                )}
+              </span>
+              <Link
+                href={enteredTournament.href}
+                className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] px-4 py-2.5 font-cond text-[14px] font-semibold uppercase tracking-[0.06em] text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
+                style={{ background: "var(--md-yellow)" }}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: "var(--md-coral)" }}
+                    aria-hidden
+                  />
+                  Check your bracket{enteredTournament.count === 1 ? "" : "s"}
+                </span>
+                <span aria-hidden>→</span>
+              </Link>
+            </div>
+          ) : joinablePublicCount && joinablePublicCount > 0 ? (
             <div className="mt-4 flex flex-col gap-2 border-t border-white/16 pt-4">
               <span className="text-[13px] text-[var(--md-paper-3)]">
                 Daily&rsquo;s in the books — now go for a ring.
@@ -1212,6 +1265,7 @@ export default function Home() {
           count={joinablePublicCount ?? 0}
           entrants={joinablePublicEntrants}
           href={joinPublicHref}
+          entered={enteredTournament}
         />
       )}
       {phase === "menu" && (
@@ -1222,6 +1276,7 @@ export default function Home() {
           onStartGame={(nextMode) => startGame(nextMode, "free")}
           joinablePublicCount={joinablePublicCount}
           joinPublicHref={joinPublicHref}
+          entered={enteredTournament}
         />
       )}
 
