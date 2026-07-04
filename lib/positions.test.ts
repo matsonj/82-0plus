@@ -1,5 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { positionRank } from "./positions";
+import { positionRank, ROLE_COLOR } from "./positions";
+
+describe("ROLE_COLOR", () => {
+  // Pin the EXACT canonical mapping — the single source of truth for the
+  // browse list, player-card modal, and lineup board chips (issue #105, where
+  // those three surfaces disagreed). Pinning exact values means W can't
+  // silently drift back to --md-teal-bright, nor B to --md-orange.
+  it("maps each role to its exact canonical brand token", () => {
+    expect(ROLE_COLOR).toEqual({
+      G: "var(--md-sky)", // violet
+      W: "var(--md-teal)", // court green
+      B: "var(--md-magenta-deep)", // deep riso magenta (AA-safe)
+    });
+  });
+});
 
 describe("positionRank", () => {
   it("ranks pure and combo positions backcourt → frontcourt", () => {

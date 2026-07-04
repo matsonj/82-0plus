@@ -8,6 +8,7 @@ export * from "@/components/ui/ModalFrame";
 export * from "@/components/ui/NameField";
 export * from "@/components/ui/Notice";
 export * from "@/components/ui/PinField";
+export * from "@/components/ui/PositionChip";
 export * from "@/components/ui/SegmentedControl";
 export * from "@/components/ui/ShareAssetDialog";
 export * from "@/components/ui/TextField";

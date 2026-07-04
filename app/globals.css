@@ -35,6 +35,9 @@
   --md-cobalt: #1a2eae;       /* tournament/"YOU" accent — aliases the on-system
                                  process-blue (--md-blue); was an off-palette #2b4bff */
   --md-magenta: #e0218a;      /* riso magenta — overprint / sticker double-shadow (decorative) */
+  --md-magenta-deep: #be1c75; /* AA-compliant deep magenta for small text on/of
+                                 magenta (position chips → 5.47:1 on white);
+                                 brand --md-magenta is unchanged elsewhere */
   --md-gray-100: #e1d9c6;     /* legacy alias */
 
   /* ---- Hard offset shadows (no blur) ---- */

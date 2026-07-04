@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import type { PlayerSeasonRow } from "@/lib/queries";
 import type { Role } from "@/lib/positions";
 import { loadPlayerSeasons, prefetchPlayerSeasons } from "@/lib/playerSeasons";
-import { Button } from "@/components/ui";
+import { Button, PositionChipGroup } from "@/components/ui";
 
 type Status = "loading" | "ok" | "error";
 
@@ -77,13 +77,6 @@ export function usePlayerCardDeck({
 
   return { activeCardIndex: index, carousel, closeCard, openCard, prefetchCard };
 }
-
-// Position → capsule background on the SLAM system (no role colors bleed into data).
-const ROLE_BG: Record<Role, string> = {
-  G: "var(--md-sky)",
-  W: "var(--md-teal-bright)",
-  B: "var(--md-orange)",
-};
 
 const gq100 = (gq: number) => Math.round(gq * 100);
 // Tolerate null/undefined cells (e.g. a season with zero shot attempts) so a
@@ -354,23 +347,6 @@ function AllDefMedal({ allDef, className = "text-lg" }: { allDef?: number; class
   );
 }
 
-function PositionPills({ positions }: { positions?: Role[] }) {
-  if (!positions || positions.length === 0) return null;
-  return (
-    <span className="flex shrink-0 gap-0.5">
-      {positions.map((r) => (
-        <span
-          key={r}
-          className="border border-[var(--md-ink)] px-1 font-cond text-[10px] font-bold uppercase"
-          style={{ background: ROLE_BG[r] }}
-        >
-          {r}
-        </span>
-      ))}
-    </span>
-  );
-}
-
 function usePlayerSeasons(entityId: string) {
   const [seasons, setSeasons] = useState<PlayerSeasonRow[] | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -481,7 +457,7 @@ function FullCard({
         </span>
         {/* Position + franchise label */}
         <div className="relative z-10 flex items-center gap-2">
-          <PositionPills positions={player.positions} />
+          <PositionChipGroup positions={player.positions} className="font-cond uppercase" />
           <span
             className="font-cond text-[11px] font-bold uppercase tracking-[0.14em]"
             style={{ color: "var(--md-yellow)" }}
