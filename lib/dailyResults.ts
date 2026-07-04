@@ -5,6 +5,7 @@ import { getUsersByName, insertUser } from "./tournamentQueries";
 import { normalizeName, validateName, validatePin } from "./tournamentValidation";
 import { verifyPin, hashPin } from "./pinHash";
 import {
+  attemptKeys,
   checkThrottle,
   recordFailure,
   recordSuccess,
@@ -61,14 +62,12 @@ export interface AuthOptions {
   throttleStore?: ThrottleStore;
 }
 
-// Throttle keys for a credential attempt: the account NAME (what an attacker
-// fixes while varying the PIN) and, when known, the client IP (what an attacker
-// fixes while spraying names — and the anti-spam key for account creation). A
-// lock on EITHER blocks the attempt.
-function throttleKeys(nameNorm: string, ip?: string | null): string[] {
-  const keys = [`user:${nameNorm}`];
-  if (ip) keys.push(`ip:${ip}`);
-  return keys;
+// Throttle keys for an account credential attempt. The subject is the account
+// name (`user:<nameNorm>`); attemptKeys() combines it with the client IP into a
+// per-IP brake + a (name+IP) composite so a remote attacker can't lock a victim's
+// name from arbitrary IPs (see lib/authRateLimit).
+function accountAttemptKeys(nameNorm: string, ip?: string | null) {
+  return attemptKeys(`user:${nameNorm}`, ip ?? null);
 }
 
 // In-flight create-or-match calls, keyed by (normalized name + PIN). The account
@@ -150,18 +149,23 @@ export async function findExistingUserByCredentials(
 
   const store = opts.throttleStore ?? pgThrottleStore;
   const nameNorm = normalizeName(name);
-  const keys = throttleKeys(nameNorm, opts.ip);
+  const { gate, subject } = accountAttemptKeys(nameNorm, opts.ip);
+
+  // Ensure the schema (incl. auth_throttle) before the throttle read. This is an
+  // RW path that already provisioned tables via matchExistingUser → ensureSchema;
+  // running it here just guarantees the throttle table exists before we peek it.
+  await ensureSchema();
 
   // Locked → behave as "no match" (a read path never surfaces a 429; the caller
   // just doesn't get their entrant state, which is the same as a miss).
-  if (!(await checkThrottle(store, keys)).allowed) return null;
+  if (!(await checkThrottle(store, gate)).allowed) return null;
 
   const match = await matchExistingUser(name, pin);
   if (match) {
-    await recordSuccess(store, keys);
+    await recordSuccess(store, subject); // clear subject only, leave the IP bucket
     return match;
   }
-  await recordFailure(store, keys);
+  await recordFailure(store, gate);
   return null;
 }
 
@@ -178,32 +182,36 @@ async function authenticateUncoalesced(
   const name = String(rawName);
   const nameNorm = normalizeName(name);
   const pin = String(rawPin);
-  const keys = throttleKeys(nameNorm, opts.ip);
+  const { gate, subject } = accountAttemptKeys(nameNorm, opts.ip);
+
+  // Ensure the schema (incl. auth_throttle) BEFORE the throttle read — this
+  // authenticated path is where the throttle table gets provisioned.
+  await ensureSchema();
 
   // Throttle gate AFTER shape validation, BEFORE any match or create: a locked key
   // can neither guess an existing PIN nor mint a fresh account (bounding the
   // create-on-miss row-creation vector as well as PIN brute-force).
-  const gate = await checkThrottle(store, keys);
-  if (!gate.allowed) {
+  const decision = await checkThrottle(store, gate);
+  if (!decision.allowed) {
     return {
       ok: false,
       reason: "Too many attempts — wait a moment and try again.",
-      retryAfterMs: gate.retryAfterMs,
+      retryAfterMs: decision.retryAfterMs,
     };
   }
 
   // Match an existing account first (normalize + lookup + PIN check, no create).
   const existing = await matchExistingUser(name, pin);
   if (existing) {
-    await recordSuccess(store, keys); // a verified identity clears the counter
+    await recordSuccess(store, subject); // clear subject only, leave the IP bucket
     return { ok: true, ...existing };
   }
 
   // No match → BOTH a PIN miss and an account-creation attempt. Count it against
   // the throttle before creating, so unbounded account creation is bounded too.
   // (A legitimate brand-new user costs exactly one failure here; their next auth
-  // matches this row and resets the counter.) ensureSchema already ran above.
-  await recordFailure(store, keys);
+  // matches this row and resets the subject counter.) ensureSchema already ran.
+  await recordFailure(store, gate);
   const { pinHash, pinSalt } = hashPin(pin);
   const userId = await insertUser({ name, nameNorm, pinHash, pinSalt });
   // Telemetry: a brand-new account (first sight of this name+PIN). This is the

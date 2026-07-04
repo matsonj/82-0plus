@@ -1,6 +1,14 @@
 import type { NextRequest, NextResponse } from "next/server";
 import { authenticate, type AuthOptions } from "./dailyResults";
 import { jsonWithSessionHint, type SessionHint } from "./sessionHint";
+import {
+  attemptKeys,
+  checkThrottle,
+  recordFailure,
+  recordSuccess,
+  type ThrottleDecision,
+} from "./authRateLimit";
+import { pgThrottleStore } from "./authThrottleStore";
 
 // Shared credential gate for the authenticated daily / private-tournament routes.
 // Every one of those routes previously copy-pasted the same three lines:
@@ -14,21 +22,33 @@ import { jsonWithSessionHint, type SessionHint } from "./sessionHint";
 // 401 is unchanged; the only new response is a 429 when the shared limiter locks
 // an account/IP out (auth.retryAfterMs set).
 
-/**
- * Best-effort client IP for the per-IP throttle key. Next.js dropped
- * `request.ip`; on Vercel the real client address is the FIRST hop in
- * `x-forwarded-for` (Vercel appends the proxy chain), with `x-real-ip` as a
- * fallback. Returns null when neither header is present (the throttle then keys on
- * the account name only) — a null IP is never used as a shared bucket.
- */
+// ── Trusted client IP ────────────────────────────────────────────────────────
+//
+// Next 16 removed `request.ip`; on Vercel the docs point to `@vercel/functions`
+// `ipAddress()`, which reads the platform-set `x-real-ip` header. We read that
+// header directly (no extra dependency) and trust ONLY it:
+//   • `x-real-ip` is set by Vercel's edge to the real connecting client address
+//     and OVERWRITES any client-supplied value, so it can't be spoofed.
+//   • We deliberately do NOT read `x-forwarded-for`: Vercel appends the real IP to
+//     the RIGHT of any hops a client prepends, so its leftmost value is
+//     attacker-controlled — trusting it would allow throttle bypass (rotate a fake
+//     leftmost IP) and victim-IP forgery (frame someone else's IP).
+// The value is validated as a real IPv4/IPv6 literal before use; anything else is
+// treated as "unknown" (null), which degrades to name-only throttling.
+
+const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+function isIpLiteral(v: string): boolean {
+  const m = IPV4_RE.exec(v);
+  if (m) return m.slice(1).every((o) => Number(o) <= 255);
+  // IPv6: hex groups + colons only (loose, but rejects junk / injected separators).
+  return v.length <= 45 && v.includes(":") && /^[0-9a-fA-F:.]+$/.test(v);
+}
+
 export function clientIp(req: NextRequest): string | null {
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) {
-    const first = fwd.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  const real = req.headers.get("x-real-ip")?.trim();
-  return real || null;
+  const raw = req.headers.get("x-real-ip")?.trim();
+  if (!raw) return null;
+  return isIpLiteral(raw) ? raw.toLowerCase() : null;
 }
 
 export type AuthSuccess = {
@@ -81,4 +101,46 @@ export async function requireAuth(
     ok: false,
     response: jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 }),
   };
+}
+
+// ── Best-effort throttle for the PUBLIC (create-free) name+PIN lookup routes ──
+//
+// These routes read through the RO pool and must NOT run schema DDL (review
+// P2#4), so they use the narrow pgThrottleStore writer (no ensureSchema) and
+// these wrappers FAIL OPEN: a not-yet-provisioned auth_throttle table or a
+// transient DB blip degrades to "no throttle for this request" rather than 500ing
+// a public read. In steady state the table is always present (authenticated
+// traffic provisions it via ensureSchema), so this window is negligible.
+
+/** Gate keys + the subject key(s) to clear on a public-lookup success. */
+export function publicAttemptKeys(subject: string, ip: string | null) {
+  return attemptKeys(subject, ip);
+}
+
+/** Pre-attempt gate for a public lookup; fails open on any store error. */
+export async function publicThrottleCheck(gateKeys: string[]): Promise<ThrottleDecision> {
+  try {
+    return await checkThrottle(pgThrottleStore, gateKeys);
+  } catch (err) {
+    console.warn("[throttle] public check failed open:", err);
+    return { allowed: true, retryAfterMs: 0 };
+  }
+}
+
+/** Record a public-lookup miss; never throws. */
+export async function publicThrottleFail(gateKeys: string[]): Promise<void> {
+  try {
+    await recordFailure(pgThrottleStore, gateKeys);
+  } catch (err) {
+    console.warn("[throttle] public failure record failed open:", err);
+  }
+}
+
+/** Reset the subject after a public-lookup hit; never throws. */
+export async function publicThrottleSuccess(subjectKeys: string[]): Promise<void> {
+  try {
+    await recordSuccess(pgThrottleStore, subjectKeys);
+  } catch (err) {
+    console.warn("[throttle] public success reset failed open:", err);
+  }
 }

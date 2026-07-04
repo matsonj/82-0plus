@@ -7,9 +7,13 @@ import {
 } from "@/lib/privateTournament";
 import { getPrivateTournamentsByNameNorm } from "@/lib/privateTournamentQueries";
 import { verifyPin } from "@/lib/pinHash";
-import { clientIp } from "@/lib/apiAuth";
-import { checkThrottle, recordFailure, recordSuccess } from "@/lib/authRateLimit";
-import { pgThrottleStore } from "@/lib/authThrottleStore";
+import {
+  clientIp,
+  publicAttemptKeys,
+  publicThrottleCheck,
+  publicThrottleFail,
+  publicThrottleSuccess,
+} from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,11 +44,14 @@ export async function POST(req: NextRequest) {
     // Rate limit (#107): a create-free PIN verifier, so throttle brute-force. Keyed
     // by the TOURNAMENT name (`pt:<nameNorm>` — a separate namespace from the
     // account-auth `user:` keys, since this checks a tournament join PIN, not an
-    // account PIN) plus the client IP. A well-formed miss records a failure; a hit
-    // resets.
-    const ip = clientIp(req);
-    const keys = ip ? [`pt:${nameNorm}`, `ip:${ip}`] : [`pt:${nameNorm}`];
-    const gate = await checkThrottle(pgThrottleStore, keys);
+    // account PIN); attemptKeys() adds a per-IP brake + a (name+IP) composite so a
+    // remote attacker can't lock a tournament's name. Best-effort + fail-open
+    // (public route: never runs DDL, never 500s on a throttle blip).
+    const { gate: gateKeys, subject: subjectKeys } = publicAttemptKeys(
+      `pt:${nameNorm}`,
+      clientIp(req),
+    );
+    const gate = await publicThrottleCheck(gateKeys);
     if (!gate.allowed) {
       return jsonWithSessionHint(
         sessionHint,
@@ -58,10 +65,10 @@ export async function POST(req: NextRequest) {
     const candidates = await getPrivateTournamentsByNameNorm(nameNorm);
     const match = candidates.find((t) => verifyPin(pin, t.pinHash, t.pinSalt));
     if (!match) {
-      await recordFailure(pgThrottleStore, keys);
+      await publicThrottleFail(gateKeys);
       return jsonWithSessionHint(sessionHint, NOT_FOUND, { status: 404 });
     }
-    await recordSuccess(pgThrottleStore, keys);
+    await publicThrottleSuccess(subjectKeys);
 
     const summary: PrivateTournamentSummary = {
       tournamentId: match.tournamentId,

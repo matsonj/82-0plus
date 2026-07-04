@@ -3,9 +3,13 @@ import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { validateName, validatePin, normalizeName } from "@/lib/tournamentValidation";
 import { getUsersByNameRO, getUserTeamsRO } from "@/lib/tournamentReadQueries";
 import { verifyPin } from "@/lib/pinHash";
-import { clientIp } from "@/lib/apiAuth";
-import { checkThrottle, recordFailure, recordSuccess } from "@/lib/authRateLimit";
-import { pgThrottleStore } from "@/lib/authThrottleStore";
+import {
+  clientIp,
+  publicAttemptKeys,
+  publicThrottleCheck,
+  publicThrottleFail,
+  publicThrottleSuccess,
+} from "@/lib/apiAuth";
 import type { TournamentLookupResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -33,12 +37,15 @@ export async function POST(req: NextRequest) {
     const nameNorm = normalizeName(String(body.name));
 
     // Rate limit (#107): this is a create-free PIN verifier, so it's a prime
-    // brute-force target. Share the account-name throttle key with authenticate()
-    // (`user:<nameNorm>`) so guesses across both paths count together, plus a
-    // per-IP key. A well-formed miss below records a failure; a hit resets.
-    const ip = clientIp(req);
-    const keys = ip ? [`user:${nameNorm}`, `ip:${ip}`] : [`user:${nameNorm}`];
-    const gate = await checkThrottle(pgThrottleStore, keys);
+    // brute-force target. Share the account subject with authenticate()
+    // (`user:<nameNorm>`); attemptKeys() adds a per-IP brake + a (name+IP)
+    // composite so a remote attacker can't lock a victim's name. Best-effort +
+    // fail-open (public route: never runs DDL, never 500s on a throttle blip).
+    const { gate: gateKeys, subject: subjectKeys } = publicAttemptKeys(
+      `user:${nameNorm}`,
+      clientIp(req),
+    );
+    const gate = await publicThrottleCheck(gateKeys);
     if (!gate.allowed) {
       return jsonWithSessionHint(
         sessionHint,
@@ -59,10 +66,10 @@ export async function POST(req: NextRequest) {
       }
     }
     if (matchingUserIds.length === 0) {
-      await recordFailure(pgThrottleStore, keys);
+      await publicThrottleFail(gateKeys);
       return jsonWithSessionHint(sessionHint, NOT_FOUND, { status: 404 });
     }
-    await recordSuccess(pgThrottleStore, keys);
+    await publicThrottleSuccess(subjectKeys);
 
     const teams = (
       await Promise.all(matchingUserIds.map((uid) => getUserTeamsRO(uid)))

@@ -11,6 +11,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("./oltpDb", () => ({
   queryRW: vi.fn(async () => []),
   ensureSchema: vi.fn(async () => {}),
+  // authThrottleStore reads TDB at module-eval time to build its SQL; the tests
+  // inject an in-memory throttle store so the queryRW/DDL path is never exercised.
+  TDB: "tournament",
 }));
 vi.mock("./tournamentQueries", () => ({
   getUsersByName: vi.fn(async () => []),
@@ -128,5 +131,24 @@ describe("authenticate rate limiting (#107)", () => {
       if (!r.ok) stillOk = false;
     }
     expect(stillOk).toBe(true);
+  });
+
+  it("threads the IP: success clears the (name+IP) subject but NOT the shared IP bucket", async () => {
+    const throttleStore = new InMemoryThrottleStore();
+    const { pinHash, pinSalt } = hashPin("1234");
+    vi.mocked(q.getUsersByName).mockResolvedValue([
+      { user_id: "alice", pin_hash: pinHash, pin_salt: pinSalt },
+    ]);
+    const ip = "203.0.113.7";
+    // A couple of wrong-PIN misses from this IP…
+    await authenticate("Alice", "0001", { throttleStore, ip });
+    await authenticate("Alice", "0002", { throttleStore, ip });
+    // …then a correct login.
+    const ok = await authenticate("Alice", "1234", { throttleStore, ip });
+    expect(ok.ok).toBe(true);
+    // The subject (name+IP) counter is cleared…
+    expect(await throttleStore.peek(`user:alice|ip:${ip}`)).toBeNull();
+    // …but the per-IP anti-spray bucket retains its failures (ages out on its own).
+    expect((await throttleStore.peek(`ip:${ip}`))?.failCount).toBe(2);
   });
 });

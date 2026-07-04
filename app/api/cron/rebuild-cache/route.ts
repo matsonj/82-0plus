@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { refreshCacheIfStale } from "@/lib/appCache";
+import { purgeExpiredThrottle } from "@/lib/authThrottleStore";
 
 // Daily cache-rebuild cron — the ONLY thing that wakes the MotherDuck duckling now.
 // It recomputes the heavy analytics on MotherDuck (the game_quality self-join +
@@ -30,9 +31,19 @@ export async function GET(req: NextRequest) {
   try {
     const started = Date.now();
     const result = await refreshCacheIfStale();
+    // Retention: sweep expired auth-throttle rows so public misses can't leave
+    // durable rows forever (#107). Best-effort — a failure here must not fail the
+    // cache rebuild, which is this cron's primary job.
+    let throttleRowsPurged = 0;
+    try {
+      throttleRowsPurged = await purgeExpiredThrottle();
+    } catch (err) {
+      console.warn("[cron/rebuild-cache] throttle purge failed:", err);
+    }
     return NextResponse.json({
       ok: true,
       ...result,
+      throttleRowsPurged,
       elapsedMs: Date.now() - started,
     });
   } catch (err) {
