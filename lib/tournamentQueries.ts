@@ -3,7 +3,7 @@ import { query, type QueryOptions } from "./motherduck";
 import {
   getPlayerIndex,
   hydrateRoster,
-  placeholderIndexedPlayer,
+  UnresolvedRosterError,
   type IndexedPlayer,
 } from "./queries";
 import { simulateRoster, toScoring, type ScoringPlayer } from "./scoring";
@@ -148,26 +148,20 @@ export async function hydrateTournamentRoster(
   picks: SimPick[],
   sixthPick: { entity_id: string; team: string; decade: number },
   options: QueryOptions = {},
-  { allowUnresolved = false }: { allowUnresolved?: boolean } = {},
 ): Promise<HydratedTournamentRoster> {
-  const { scoring, lines, players } = await hydrateRoster(picks, options, {
-    allowUnresolved,
-  });
+  const { scoring, lines, players } = await hydrateRoster(picks, options);
 
   const index = await getPlayerIndex(options);
   const byKey = new Map(
     index.map((p) => [`${p.entity_id}|${p.team}|${p.decade}`, p]),
   );
-  let sixthRow = byKey.get(
+  const sixthRow = byKey.get(
     `${sixthPick.entity_id}|${sixthPick.team}|${sixthPick.decade}`,
   );
   if (!sixthRow) {
-    // Display path (see hydrateRoster): a persisted sixth man dropped by a rebuild
-    // degrades to a placeholder rather than 500ing the whole response.
-    if (!allowUnresolved) {
-      throw new Error(`unknown sixth-man pick: ${sixthPick.entity_id}`);
-    }
-    sixthRow = placeholderIndexedPlayer(sixthPick);
+    throw new UnresolvedRosterError(
+      `unknown sixth-man pick: ${sixthPick.entity_id}`,
+    );
   }
   const sixthMan = toScoring(sixthRow);
   const sixthInfo: BracketPlayer = {

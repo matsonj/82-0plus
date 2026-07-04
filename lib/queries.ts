@@ -622,49 +622,30 @@ export async function getTeamDecades(
   return (teamDecades.get(team) ?? []).slice();
 }
 
-/** Clearly-marked stand-in for a persisted pick that's no longer in the index
- *  (e.g. an id dropped by a rebuild). Neutral, scoreless stats keep the response
- *  shape valid and the array slot-aligned; the display name marks it unavailable.
- *  DISPLAY-ONLY — never let a placeholder feed a persisted competitive result. */
-export function placeholderIndexedPlayer(ref: {
-  entity_id: string;
-  team: string;
-  decade: number;
-}): IndexedPlayer {
-  return {
-    entity_id: ref.entity_id,
-    player_name: "(unavailable player)",
-    team: ref.team,
-    decade: ref.decade,
-    best_season: 0,
-    value: 0,
-    gp: 0, mpg: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0,
-    fga: 0, fg3a: 0, fg3m: 0, fta: 0, tov: 0, fgm: 0, ftm: 0,
-    tsplus: 1, height_in: 79, pos: null, all_def: 0, debut: 0,
-  };
+/**
+ * A stored roster can't be resolved against the current player index — an
+ * unknown/dropped pick or sixth-man id, or a null/malformed persisted roster. This
+ * is the ONLY error the finalize path treats as "degrade this entry to a bot"; any
+ * other failure (transient index/cache/DB error, a bug) is NOT this type, so it
+ * propagates and finalize aborts+retries rather than persisting fabricated bots.
+ */
+export class UnresolvedRosterError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnresolvedRosterError";
+  }
 }
 
 /**
  * Hydrate a roster of (entity_id, team, decade) picks server-side into scoring
  * inputs (incl. GQ) + display lines. The client never submits stats, so it can't
- * fabricate an 82-0 season.
- *
- * By default an unresolvable pick THROWS — a fresh submit/sim of a pick that isn't
- * a real index entry is a client error the write paths turn into a 400, and the
- * FINALIZE/compute path relies on the throw to degrade a whole entry to a bot (so
- * a fabricated stat line is never persisted as a competitive standing).
- *
- * `allowUnresolved` is the DISPLAY-ONLY escape hatch: a read path that re-hydrates
- * a PERSISTED roster purely to RENDER it (a stored entry whose player id was later
- * dropped by a rebuild — see #104) passes it to substitute a clearly-marked
- * placeholder instead of throwing, so one stale id can't 500 the whole response.
- * It must NEVER be set on a path whose result is written back as a standing.
- * Array order/length stay aligned with `picks` either way.
+ * fabricate an 82-0 season. Throws UnresolvedRosterError if any pick isn't a real
+ * index entry (the write paths turn it into a 400; finalize catches it to degrade
+ * the entry to a bot — see runFinal).
  */
 export async function hydrateRoster(
   picks: SimPick[],
   options: QueryOptions = {},
-  { allowUnresolved = false }: { allowUnresolved?: boolean } = {},
 ): Promise<{
   scoring: ScoringPlayer[];
   lines: SimRosterLine[];
@@ -675,13 +656,8 @@ export async function hydrateRoster(
   const lines: SimRosterLine[] = [];
   const players: IndexedPlayer[] = [];
   for (const pick of picks) {
-    let p = byKey.get(`${pick.entity_id}|${pick.team}|${pick.decade}`);
-    if (!p) {
-      if (!allowUnresolved) {
-        throw new Error(`unknown roster pick: ${pick.entity_id}`);
-      }
-      p = placeholderIndexedPlayer(pick);
-    }
+    const p = byKey.get(`${pick.entity_id}|${pick.team}|${pick.decade}`);
+    if (!p) throw new UnresolvedRosterError(`unknown roster pick: ${pick.entity_id}`);
     players.push(p);
     scoring.push(toScoring(p));
     lines.push({

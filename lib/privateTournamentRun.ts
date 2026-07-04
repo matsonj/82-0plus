@@ -20,6 +20,7 @@ import type { GeneratedPrivateBot, PrivateBoard } from "./privateBoard";
 import { generatePrivateBots } from "./privateBoard";
 import type { PrivateSize } from "./privateTournament";
 import { simulateRoster } from "./scoring";
+import { UnresolvedRosterError } from "./queries";
 import {
   buildTournamentTeam,
   getStatNorms,
@@ -228,18 +229,31 @@ export async function buildEntryTeam(
   name: string,
   options: QueryOptions = {},
 ): Promise<TournamentTeam> {
-  const picks = entry.rosterJson as SimPick[];
-  const sixth = entry.sixthJson as {
-    entity_id: string;
-    team: string;
-    decade: number;
-  };
-  // STRICT hydration: an unresolvable stored pick THROWS here (it is NOT degraded
-  // to a placeholder). This is the FINALIZE/compute path — its result is PERSISTED
-  // as a real standing — so we must never fabricate stats. runFinal catches the
-  // throw and degrades the whole entry to a "{USERNAME} BOT" via the existing
-  // bot-replacement mechanism, so no fabricated result is ever written (#104).
-  const hydrated = await hydrateTournamentRoster(picks, sixth, options);
+  const picks = entry.rosterJson;
+  const sixth = entry.sixthJson;
+  // A null/malformed stored roster (e.g. a submit that predates roster_json
+  // persistence, or corrupt JSON) is an UNRESOLVABLE roster — same class as an
+  // unknown pick — so it degrades rather than crashing finalize with a TypeError.
+  if (
+    !Array.isArray(picks) ||
+    picks.length === 0 ||
+    sixth == null ||
+    typeof sixth !== "object"
+  ) {
+    throw new UnresolvedRosterError(
+      `entry ${entry.entryId}: missing or malformed stored roster`,
+    );
+  }
+  // STRICT hydration: an unresolvable stored pick throws UnresolvedRosterError (it
+  // is NOT degraded to a placeholder). This is the FINALIZE/compute path — its
+  // result is PERSISTED as a real standing — so we must never fabricate stats.
+  // runFinal catches ONLY UnresolvedRosterError and degrades the whole entry to a
+  // "{USERNAME} BOT"; a transient error propagates so finalize retries (#104).
+  const hydrated = await hydrateTournamentRoster(
+    picks as SimPick[],
+    sixth as { entity_id: string; team: string; decade: number },
+    options,
+  );
   const seedNet =
     entry.seedNet != null && Number.isFinite(entry.seedNet)
       ? entry.seedNet
@@ -416,7 +430,12 @@ export async function runFinal(
         slot.entry.entryId,
         await buildEntryTeam(row, id, name, options),
       );
-    } catch {
+    } catch (err) {
+      // ONLY a genuinely unresolvable stored roster degrades to a bot. A transient
+      // failure (index/cache/DB, or a bug) must NOT be silently turned into a
+      // persisted bot standing — rethrow so finalize aborts and the lazy GET
+      // surfaces a retryable 5xx instead.
+      if (!(err instanceof UnresolvedRosterError)) throw err;
       degradedEntryIds.add(slot.entry.entryId);
     }
   }

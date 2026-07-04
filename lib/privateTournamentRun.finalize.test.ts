@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { runFinal } from "./privateTournamentRun";
-import { hydrateRoster, type IndexedPlayer } from "./queries";
+import { hydrateRoster, UnresolvedRosterError, type IndexedPlayer } from "./queries";
 import type { PrivateBoard } from "./privateBoard";
 import type { PrivateSize } from "./privateTournament";
 import type { SimPick, StatNorms } from "./types";
@@ -177,25 +177,28 @@ describe("runFinal — a direct (registered→submit) entry is classified as sub
   });
 });
 
-// ── Display-only tolerance ────────────────────────────────────────────────────
+// ── Typed-error boundary: only UnresolvedRosterError degrades ─────────────────
 
-describe("hydrateRoster — display hydration renders a clearly-marked placeholder", () => {
+describe("typed-error boundary", () => {
   beforeEach(seedIndex);
 
-  it("allowUnresolved renders a placeholder line without throwing (display path)", async () => {
-    const picks: SimPick[] = [
-      { entity_id: "T0a", team: "T0", decade: 1990, slot: 0 },
-      { entity_id: "77847", team: "T2", decade: 1990, slot: 1 }, // dropped id
-    ];
-    const { lines, players } = await hydrateRoster(picks, {}, { allowUnresolved: true });
-    expect(players).toHaveLength(2);
-    expect(lines.some((l) => l.player_name === "(unavailable player)")).toBe(true);
-  });
-
-  it("throws by default so a fresh submit/sim rejects an unknown pick", async () => {
+  it("hydrateRoster throws UnresolvedRosterError (not a plain Error) on an unknown pick", async () => {
     const picks: SimPick[] = [
       { entity_id: "77847", team: "T2", decade: 1990, slot: 0 },
     ];
-    await expect(hydrateRoster(picks)).rejects.toThrow(/unknown roster pick: 77847/);
+    await expect(hydrateRoster(picks)).rejects.toBeInstanceOf(UnresolvedRosterError);
+  });
+
+  it("runFinal RETHROWS a transient (non-roster) failure instead of degrading to a bot", async () => {
+    // A transient index/cache failure must NOT be silently converted into persisted
+    // bot standings — finalize should abort so the lazy GET can retry.
+    const boom = new Error("player index cache unavailable");
+    globalThis.__app_cache_last_check__ = Date.now();
+    globalThis.__player_index__ = Promise.reject(boom);
+    globalThis.__player_index_view__ = undefined;
+
+    await expect(finalizeRow(fullEntryRow("submitted", null))).rejects.toThrow(
+      "player index cache unavailable",
+    );
   });
 });
