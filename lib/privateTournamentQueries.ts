@@ -515,43 +515,73 @@ export interface UpdateEntryFinalArgs {
   finalReachedRound: number;
 }
 
-/** Write one entry's resolved final bracket standing (computed by the caller). */
-export async function updateEntryFinal(
-  args: UpdateEntryFinalArgs,
-): Promise<void> {
-  await ensureSchema();
-  await queryRW(
-    `UPDATE ${TDB}.private_entries
-        SET final_record_w = $2,
-            final_record_l = $3,
-            final_status = $4,
-            final_realized_margin = $5,
-            final_reached_round = $6
-      WHERE entry_id = $1`,
-    [
-      args.entryId,
-      args.finalRecordW,
-      args.finalRecordL,
-      args.finalStatus,
-      args.finalRealizedMargin,
-      args.finalReachedRound,
-    ],
-  );
+export interface ApplyEntryFinalsArgs {
+  // Reserved-incomplete entries a bot took over — flipped to 'bot_replaced'
+  // BEFORE the final standings are written (mirrors the old per-row ordering).
+  botReplacedEntryIds: string[];
+  // Every entry (humans + the bots that took over reserved slots) that gets a
+  // resolved final standing written.
+  results: UpdateEntryFinalArgs[];
 }
 
 /**
- * Convert an incomplete entry (registered/partial) to 'bot_replaced' — a board-
- * constrained bot took the slot at finalize. The bot's roster/seed are written
- * with updateEntryFinal as usual; this just flips the status.
+ * Persist every per-entry final for one finalize pass in a SINGLE transaction —
+ * at most two round-trips total instead of one UPDATE per entry (a 20-team
+ * tournament used to be ~40 sequential awaits over PgBouncer). Batches:
+ *   1. the bot-replaced status flips into one `WHERE entry_id = ANY($1::uuid[])`
+ *      UPDATE;
+ *   2. the resolved standings into one `UPDATE ... FROM (VALUES ...)` UPDATE,
+ *      matching each row by entry_id.
+ * Both statements run on the SAME pinned backend via withTx (required under
+ * PgBouncer transaction-mode pooling — queryRW's per-call checkout can't span
+ * statements) so a partial finalize can never be observed: either every entry
+ * lands or none do. Skips a statement entirely when its input array is empty
+ * (an empty VALUES()/ANY('{}') would be malformed or pointless) — calling this
+ * with both arrays empty is a safe no-op that never opens a transaction.
  */
-export async function markEntryBotReplaced(entryId: string): Promise<void> {
+export async function applyEntryFinals(args: ApplyEntryFinalsArgs): Promise<void> {
+  if (args.botReplacedEntryIds.length === 0 && args.results.length === 0) return;
   await ensureSchema();
-  await queryRW(
-    `UPDATE ${TDB}.private_entries
-        SET status = 'bot_replaced'
-      WHERE entry_id = $1`,
-    [entryId],
-  );
+  await withTx(async (client) => {
+    if (args.botReplacedEntryIds.length > 0) {
+      await client.query(
+        `UPDATE ${TDB}.private_entries
+            SET status = 'bot_replaced'
+          WHERE entry_id = ANY($1::uuid[])`,
+        [args.botReplacedEntryIds],
+      );
+    }
+
+    if (args.results.length > 0) {
+      const params: unknown[] = [];
+      const rowsSql = args.results
+        .map((r, i) => {
+          const base = i * 6;
+          params.push(
+            r.entryId,
+            r.finalRecordW,
+            r.finalRecordL,
+            r.finalStatus,
+            r.finalRealizedMargin,
+            r.finalReachedRound,
+          );
+          return `($${base + 1}, $${base + 2}::integer, $${base + 3}::integer, $${base + 4}, $${base + 5}::double precision, $${base + 6}::integer)`;
+        })
+        .join(", ");
+      await client.query(
+        `UPDATE ${TDB}.private_entries AS t
+            SET final_record_w = v.final_record_w,
+                final_record_l = v.final_record_l,
+                final_status = v.final_status,
+                final_realized_margin = v.final_realized_margin,
+                final_reached_round = v.final_reached_round
+           FROM (VALUES ${rowsSql}) AS v(entry_id, final_record_w, final_record_l,
+                                          final_status, final_realized_margin, final_reached_round)
+          WHERE t.entry_id = v.entry_id::uuid`,
+        params,
+      );
+    }
+  });
 }
 
 /** Stamp an entry's viewed_final_at (clears the unread badge). */

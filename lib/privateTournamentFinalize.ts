@@ -1,11 +1,10 @@
 import "server-only";
 import type { QueryOptions } from "./motherduck";
 import {
+  applyEntryFinals,
   getPrivateTournament,
   listPrivateEntries,
-  markEntryBotReplaced,
   markTournamentCompleted,
-  updateEntryFinal,
   type PrivateEntryRow,
 } from "./privateTournamentQueries";
 import {
@@ -22,15 +21,16 @@ import {
 //
 // It loads the tournament + entries through the RW pool (so it reads its own
 // fresh writes), guards against a double-finalize (re-checks status), runs the
-// MATH (lib/privateTournamentRun.runFinal), and persists in this order:
-// updateEntryFinal per resolved entry + markEntryBotReplaced for the reserved-
-// incomplete slots a bot took over FIRST, then markTournamentCompleted LAST — so
-// the `completed` flag is the final write and implies every entry already has its
-// standing. Idempotent: a second call after completion short-circuits UNLESS a
-// prior pass crashed mid per-entry write (leaving entries with null finals), in
-// which case it re-runs the deterministic bracket and BACKFILLS the missing
-// per-entry rows. A best-effort per-process guard collapses concurrent calls in
-// one warm instance (the DB has no reliable uniqueness for this).
+// MATH (lib/privateTournamentRun.runFinal), and persists in this order: every
+// resolved standing + the reserved-incomplete → bot_replaced flips FIRST (both
+// batched into one transaction via applyEntryFinals — see privateTournamentQueries.ts),
+// then markTournamentCompleted LAST — so the `completed` flag is the final write
+// and implies every entry already has its standing. Idempotent: a second call
+// after completion short-circuits UNLESS a prior pass crashed mid per-entry write
+// (leaving entries with null finals), in which case it re-runs the deterministic
+// bracket and BACKFILLS the missing per-entry rows. A best-effort per-process
+// guard collapses concurrent calls in one warm instance (the DB has no reliable
+// uniqueness for this).
 
 // In-flight finalize calls, keyed by tournamentId — collapses a burst (the last
 // submitter racing the lazy GET path, say) into one finalize per warm instance.
@@ -148,45 +148,52 @@ async function runFinalForTournament(
 }
 
 /** Persist every per-entry final: flip reserved-incomplete entries to
- *  bot_replaced, then write each resolved standing. Idempotent — re-running with
- *  the same deterministic `final` just rewrites the same values. */
+ *  bot_replaced, then write each resolved standing — both in ONE batched,
+ *  transactional round-trip (see applyEntryFinals) instead of one UPDATE per
+ *  entry. Idempotent — re-running with the same deterministic `final` just
+ *  rewrites the same values. A tournament with zero entries (shouldn't happen,
+ *  but stay defensive) yields two empty arrays, which applyEntryFinals treats
+ *  as a no-op rather than emitting a malformed empty VALUES()/ANY('{}'). */
 async function persistEntryFinals(
   entries: PrivateEntryRow[],
   final: FinalRunResult,
 ): Promise<void> {
   // Map reserved-incomplete entries → mark bot_replaced. Build a set of userIds
-  // the runner flagged, then flip each matching incomplete entry's status.
+  // the runner flagged, then collect each matching incomplete entry's id.
   const replacedUserIds = new Set(final.botReplacedUserIds);
-  for (const e of entries) {
-    if (e.status !== "submitted" && e.status !== "bot_replaced" && replacedUserIds.has(e.userId)) {
-      await markEntryBotReplaced(e.entryId);
-    }
-  }
+  const botReplacedEntryIds = entries
+    .filter(
+      (e) =>
+        e.status !== "submitted" &&
+        e.status !== "bot_replaced" &&
+        replacedUserIds.has(e.userId),
+    )
+    .map((e) => e.entryId);
 
   // Each entry (humans + the bots that took over reserved slots) gets its final
   // standing written.
-  for (const r of final.entryResults) {
-    await updateEntryFinal({
-      entryId: r.entryId,
-      finalRecordW: r.finalRecordW,
-      finalRecordL: r.finalRecordL,
-      // The result label (e.g. "Champion", "Lost Play-In") — a PrivateResultLabel.
-      finalStatus: r.finalStatus,
-      finalRealizedMargin: r.finalRealizedMargin,
-      finalReachedRound: r.finalReachedRound,
-    });
-  }
+  const results = final.entryResults.map((r) => ({
+    entryId: r.entryId,
+    finalRecordW: r.finalRecordW,
+    finalRecordL: r.finalRecordL,
+    // The result label (e.g. "Champion", "Lost Play-In") — a PrivateResultLabel.
+    finalStatus: r.finalStatus,
+    finalRealizedMargin: r.finalRealizedMargin,
+    finalReachedRound: r.finalReachedRound,
+  }));
+
+  await applyEntryFinals({ botReplacedEntryIds, results });
 }
 
 /** True iff finalization left a per-entry gap — the signature of a finalize that
- *  crashed AFTER stamping the tournament completed but BEFORE persisting every
- *  per-entry write. Two distinct gaps:
- *    • a submitted OR bot_replaced entry with a null final record — its
- *      updateEntryFinal never landed; and
+ *  crashed AFTER stamping the tournament completed but BEFORE persistEntryFinals'
+ *  transaction landed. Two distinct gaps:
+ *    • a submitted OR bot_replaced entry with a null final record — its final
+ *      standing never landed; and
  *    • a still-registered/partial entry — once finalize fully ran, every
  *      reserved-incomplete slot is either flipped to bot_replaced (+ a final) or
  *      left as a never-reserved generic-bot slot; a leftover registered/partial
- *      row means the markEntryBotReplaced / updateEntryFinal pair never ran.
+ *      row means the applyEntryFinals transaction never ran (or was rolled back).
  *  Re-running the deterministic bracket + persistEntryFinals heals both. */
 function entriesMissingFinal(entries: PrivateEntryRow[]): boolean {
   return entries.some((e) => {
