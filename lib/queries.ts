@@ -623,9 +623,25 @@ export async function getTeamDecades(
 }
 
 /**
+ * A stored roster can't be resolved against the current player index — an
+ * unknown/dropped pick or sixth-man id, or a null/malformed persisted roster. This
+ * is the ONLY error the finalize path treats as "degrade this entry to a bot"; any
+ * other failure (transient index/cache/DB error, a bug) is NOT this type, so it
+ * propagates and finalize aborts+retries rather than persisting fabricated bots.
+ */
+export class UnresolvedRosterError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnresolvedRosterError";
+  }
+}
+
+/**
  * Hydrate a roster of (entity_id, team, decade) picks server-side into scoring
  * inputs (incl. GQ) + display lines. The client never submits stats, so it can't
- * fabricate an 82-0 season. Throws if any pick isn't a real index entry.
+ * fabricate an 82-0 season. Throws UnresolvedRosterError if any pick isn't a real
+ * index entry (the write paths turn it into a 400; finalize catches it to degrade
+ * the entry to a bot — see runFinal).
  */
 export async function hydrateRoster(
   picks: SimPick[],
@@ -641,7 +657,7 @@ export async function hydrateRoster(
   const players: IndexedPlayer[] = [];
   for (const pick of picks) {
     const p = byKey.get(`${pick.entity_id}|${pick.team}|${pick.decade}`);
-    if (!p) throw new Error(`unknown roster pick: ${pick.entity_id}`);
+    if (!p) throw new UnresolvedRosterError(`unknown roster pick: ${pick.entity_id}`);
     players.push(p);
     scoring.push(toScoring(p));
     lines.push({

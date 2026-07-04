@@ -118,7 +118,13 @@ async function runFinalForTournament(
     userId: e.userId,
     userName: e.userName,
     teamName: e.teamName,
-    status: e.status,
+    // "submitted" = locked a full six, keyed on the IMMUTABLE sixth_json signal:
+    // only the submit path ever writes sixth_json (partial writes roster_json but
+    // no sixth; register writes neither), and it is never cleared — not even when
+    // finalize flips a degraded entry to bot_replaced. So a re-run re-classifies a
+    // degraded submitted entry identically (submitted → tail-draw bot), keeping
+    // finalize byte-idempotent across retries/interleave.
+    submitted: e.sixthJson != null,
   }));
 
   // Row lookup so runFinal can hydrate submitted entries' stored rosters.
@@ -158,16 +164,14 @@ async function persistEntryFinals(
   entries: PrivateEntryRow[],
   final: FinalRunResult,
 ): Promise<void> {
-  // Map reserved-incomplete entries → mark bot_replaced. Build a set of userIds
-  // the runner flagged, then collect each matching incomplete entry's id.
+  // Mark bot_replaced every entry the runner replaced with a bot: reserved-
+  // incomplete entries (never locked a six) AND submitted entries whose stored
+  // roster no longer resolves (#104) — the runner degrades those to a bot too, so
+  // the flip is keyed purely on the replaced set. A normal submitted entry is never
+  // in that set, so it's untouched; an already-bot_replaced entry needs no re-flip.
   const replacedUserIds = new Set(final.botReplacedUserIds);
   const botReplacedEntryIds = entries
-    .filter(
-      (e) =>
-        e.status !== "submitted" &&
-        e.status !== "bot_replaced" &&
-        replacedUserIds.has(e.userId),
-    )
+    .filter((e) => e.status !== "bot_replaced" && replacedUserIds.has(e.userId))
     .map((e) => e.entryId);
 
   // Each entry (humans + the bots that took over reserved slots) gets its final

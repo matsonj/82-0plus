@@ -9,7 +9,7 @@ import type {
   SimRosterLine,
 } from "@/lib/types";
 import { draftSourceKey, type DraftRosterMap } from "@/lib/draftSources";
-import { type SlotKind } from "@/lib/positions";
+import { LINEUP_KINDS as KINDS } from "@/lib/lineup";
 import type { LineupEntry } from "@/components/LineupBoard";
 import { LineupDraftBoard } from "@/components/LineupDraftBoard";
 import { ResultsPanel } from "@/components/ResultsPanel";
@@ -29,7 +29,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { HomeMenu } from "@/components/home/HomeMenu";
 import { HomeLiveBar } from "@/components/home/HomeLiveBar";
 import Link from "next/link";
-import { Capsule } from "@/components/ui";
+import { Button, Capsule, Card } from "@/components/ui";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
 import { track } from "@vercel/analytics";
@@ -48,7 +48,6 @@ import {
   listOwnedPendingDailies,
 } from "@/lib/dailyPending";
 
-const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
 type Phase = "menu" | "play" | "tournament";
 type GameType = "free" | "daily";
 
@@ -1060,12 +1059,12 @@ export default function Home() {
             Next challenge in <Countdown />
           </div>
           <div className="mt-4 flex items-center gap-5">
-            <button
-              className="md-btn md-btn--sm"
+            <Button
+              size="sm"
               onClick={() => void shareDaily()}
             >
               🔗 {shareCopied ? "Copied!" : "Share result"}
-            </button>
+            </Button>
             <button
               type="button"
               onClick={() => playDaily()}
@@ -1172,12 +1171,13 @@ export default function Home() {
           <p className="font-display text-[13px] text-[var(--md-coral)]">
             {dailyGateError}
           </p>
-          <button
-            className="md-btn md-btn--sm md-btn--secondary"
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={() => playDaily(attemptedDaily.current)}
           >
             ↻ Retry
-          </button>
+          </Button>
         </div>
       )}
     </>
@@ -1283,7 +1283,7 @@ export default function Home() {
       {/* Failed to load the game data — recoverable. */}
       {phase === "play" && !booting && !result && !loaded && (
         <section className="relative z-10 mx-auto mt-6 w-full max-w-lg">
-          <div className="md-card md-card--lift p-5 text-center">
+          <Card lift className="p-5 text-center">
             <p className="font-display text-base font-bold">
               Couldn&rsquo;t start the game.
             </p>
@@ -1291,29 +1291,31 @@ export default function Home() {
               {error ?? "Something went wrong loading the league."}
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
-              <button
-                className="md-btn md-btn--sm md-btn--teal"
+              <Button
+                size="sm"
+                variant="teal"
                 onClick={() => startGame(mode, gameType)}
               >
                 Try again
-              </button>
-              <button
-                className="md-btn md-btn--sm md-btn--secondary"
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={backToMenu}
               >
                 Back to menu
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         </section>
       )}
 
       {/* Transient in-game error (e.g. a failed roll/simulate) while playing. */}
       {phase === "play" && loaded && !result && error && (
         <div className="relative z-10 mx-auto mt-6 max-w-lg">
-          <div className="md-card border-[var(--md-coral)] p-4">
+          <Card className="border-[var(--md-coral)] p-4">
             <p className="font-display text-sm">{error}</p>
-          </div>
+          </Card>
         </div>
       )}
 
@@ -1405,22 +1407,24 @@ export default function Home() {
                 // Desktop: stacked to the right of the reel, equal width
                 // (items-stretch → both take the wider button's width).
                 <div className="flex flex-row gap-2 lg:flex-col lg:items-stretch">
-                  <button
-                    className="md-btn md-btn--sm md-btn--ink"
+                  <Button
+                    size="sm"
+                    variant="ink"
                     onClick={teamSkip}
                     disabled={teamSkips <= 0 || r}
                   >
                     ↻ New team ({teamSkips})
-                  </button>
-                  <button
-                    className="md-btn md-btn--sm md-btn--ink"
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ink"
                     onClick={decadeSkip}
                     disabled={
                       decadeSkips <= 0 || r || currentTeamDecades.length < 2
                     }
                   >
                     ↻ New decade ({decadeSkips})
-                  </button>
+                  </Button>
                 </div>
               ) : null
             }
@@ -1431,13 +1435,14 @@ export default function Home() {
               <div className="font-display text-sm">
                 Five drafted, positions covered. Time to find out.
               </div>
-              <button
-                className="md-btn md-btn--lg md-btn--teal"
+              <Button
+                size="lg"
+                variant="teal"
                 disabled={simulating}
                 onClick={simulate}
               >
                 {simulating ? "Simulating…" : "Simulate Season"}
-              </button>
+              </Button>
             </div>
           )}
         </section>

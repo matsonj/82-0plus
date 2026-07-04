@@ -1,10 +1,10 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import Link from "next/link";
 import type { BracketResult } from "@/lib/types";
 import { BracketView } from "@/components/BracketView";
 import { PageShell } from "@/components/layout/PageShell";
+import { ButtonLink, Crown } from "@/components/ui";
 
 type Status = "loading" | "ok" | "error";
 
@@ -65,12 +65,14 @@ export default function PublicBracketPage({
             <p className="font-cond text-base font-semibold uppercase tracking-wide">
               Bracket not found.
             </p>
-            <Link
+            <ButtonLink
               href="/tournament"
-              className="md-btn md-btn--sm md-btn--secondary mt-4 inline-flex"
+              size="sm"
+              variant="secondary"
+              className="mt-4 inline-flex"
             >
               Go to the tournament
-            </Link>
+            </ButtonLink>
           </div>
         )}
         {status === "ok" && bracket && (
@@ -101,7 +103,7 @@ export default function PublicBracketPage({
                 className="mt-3 flex shrink-0 items-center gap-3 self-start border-2 border-[var(--md-ink)] px-4 py-3 md:mt-0"
                 style={{ background: "var(--md-yellow)", boxShadow: "var(--md-shadow-sm)" }}
               >
-                <span className="text-[22px]">♛</span>
+                <Crown variant="glyph" size={22} />
                 <div>
                   <div className="font-cond text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
                     Champion
@@ -135,12 +137,14 @@ export default function PublicBracketPage({
                   Build Your Own Bracket
                 </div>
               </div>
-              <Link
+              <ButtonLink
                 href="/"
-                className="md-btn md-btn--lg md-btn--secondary shrink-0 border-[var(--md-paper)] text-[var(--md-paper)] hover:bg-[var(--md-paper)] hover:text-[var(--md-ink)]"
+                size="lg"
+                variant="secondary"
+                className="shrink-0 border-[var(--md-paper)] text-[var(--md-paper)] hover:bg-[var(--md-paper)] hover:text-[var(--md-ink)]"
               >
                 daily82.com →
-              </Link>
+              </ButtonLink>
             </div>
           </div>
         )}

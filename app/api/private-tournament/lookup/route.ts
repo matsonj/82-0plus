@@ -1,4 +1,3 @@
-import { scryptSync, timingSafeEqual } from "node:crypto";
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { validateName, validatePin } from "@/lib/tournamentValidation";
@@ -6,7 +5,15 @@ import {
   normalizeTournamentName,
   type PrivateTournamentSummary,
 } from "@/lib/privateTournament";
-import { getPrivateTournamentsByNameNorm } from "@/lib/privateTournamentQueries";
+import { getPrivateTournamentsByNameNormRO } from "@/lib/privateTournamentReadQueries";
+import { verifyPin } from "@/lib/pinHash";
+import {
+  clientIp,
+  publicAttemptKeys,
+  publicGuardAttempt,
+  publicThrottleFail,
+  publicThrottleSuccess,
+} from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,17 +41,31 @@ export async function POST(req: NextRequest) {
     }
     const nameNorm = normalizeTournamentName(String(body.name));
 
-    // Pick the tournament whose PIN verifies. timingSafeEqual throws on mismatched
-    // lengths, so length-guard first. Same generic 404 on any miss (no enum).
-    const candidates = await getPrivateTournamentsByNameNorm(nameNorm);
-    const match = candidates.find((t) => {
-      const candidate = scryptSync(pin, t.pinSalt, 32);
-      const stored = Buffer.from(t.pinHash, "hex");
-      return candidate.length === stored.length && timingSafeEqual(candidate, stored);
-    });
+    // Rate limit (#107): a create-free PIN verifier, so throttle brute-force. Keyed
+    // by the TOURNAMENT name (`pt:<nameNorm>` — a separate namespace from the
+    // account-auth `user:` keys, since this checks a tournament join PIN, not an
+    // account PIN); attemptKeys() adds a per-IP brake + a (name+IP) composite so a
+    // remote attacker can't lock a tournament's name. Best-effort + fail-open
+    // (public route: never runs DDL, never 500s on a throttle blip).
+    const keys = publicAttemptKeys(`pt:${nameNorm}`, clientIp(req));
+    const gate = await publicGuardAttempt(keys);
+    if (!gate.allowed) {
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "Too many attempts — wait a moment and try again." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(gate.retryAfterMs / 1000)) } },
+      );
+    }
+
+    // Pick the tournament whose PIN verifies (verifyPin is length-guarded +
+    // constant-time). Same generic 404 on any miss (no enum).
+    const candidates = await getPrivateTournamentsByNameNormRO(nameNorm);
+    const match = candidates.find((t) => verifyPin(pin, t.pinHash, t.pinSalt));
     if (!match) {
+      await publicThrottleFail(keys.fail);
       return jsonWithSessionHint(sessionHint, NOT_FOUND, { status: 404 });
     }
+    await publicThrottleSuccess(keys.subject);
 
     const summary: PrivateTournamentSummary = {
       tournamentId: match.tournamentId,

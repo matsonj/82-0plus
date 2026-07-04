@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { authenticate } from "@/lib/dailyResults";
+import { requireAuth } from "@/lib/apiAuth";
+import { isUuid } from "@/lib/uuid";
 import { parsePicks } from "@/lib/rosterParse";
 import { savePrivatePartial } from "@/lib/privateTournamentQueries";
 import { buildTournamentTeam } from "@/lib/tournamentQueries";
@@ -22,9 +23,6 @@ export const dynamic = "force-dynamic";
 // completed entry. The validate→hydrate→sim pipeline is shared with submit via
 // lib/privateRoster; this route ORCHESTRATES it for the 5-only partial save.
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   const queryOptions = { sessionHint: sessionHint.value };
@@ -32,7 +30,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const tournamentId = String(body?.tournamentId ?? "");
-    if (!UUID_RE.test(tournamentId)) {
+    if (!isUuid(tournamentId)) {
       return jsonWithSessionHint(sessionHint, { error: "invalid tournament id" }, { status: 400 });
     }
 
@@ -58,10 +56,8 @@ export async function POST(req: NextRequest) {
       teamName = normalizeTeamName(String(body.teamName));
     }
 
-    const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
-    if (!auth.ok) {
-      return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
-    }
+    const auth = await requireAuth(req, sessionHint, body?.name, body?.pin);
+    if (!auth.ok) return auth.response;
 
     // ---- Tournament-open + entry-in-progress gate (shared with submit). ----
     const loaded = await loadOpenPrivateEntry({ tournamentId, userId: auth.userId });

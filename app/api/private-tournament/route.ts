@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { jsonPublicCacheable } from "@/lib/publicCache";
+import { isUuid } from "@/lib/uuid";
 import {
   entryDeadlineISO,
   isEntryExpired,
@@ -14,6 +15,7 @@ import {
   purgeStaleIncompleteEntries,
 } from "@/lib/privateTournamentQueries";
 import { findExistingUserByCredentials } from "@/lib/dailyResults";
+import { clientIp } from "@/lib/apiAuth";
 import { finalizePrivate } from "@/lib/privateTournamentFinalize";
 import type { BracketResult } from "@/lib/types";
 
@@ -41,14 +43,11 @@ export const dynamic = "force-dynamic";
 //   via a request BODY instead. Creds verify against EXISTING accounts only — a
 //   public read NEVER creates one.
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function GET(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   try {
     const id = req.nextUrl.searchParams.get("id") ?? "";
-    if (!UUID_RE.test(id)) {
+    if (!isUuid(id)) {
       return jsonWithSessionHint(sessionHint, { error: "invalid tournament id" }, { status: 400 });
     }
 
@@ -163,7 +162,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
 
     const id = String(body?.tournamentId ?? "");
-    if (!UUID_RE.test(id)) {
+    if (!isUuid(id)) {
       return jsonWithSessionHint(sessionHint, { error: "invalid tournament id" }, { status: 400 });
     }
 
@@ -172,8 +171,12 @@ export async function POST(req: NextRequest) {
       return jsonWithSessionHint(sessionHint, { error: "tournament not found" }, { status: 404 });
     }
 
-    // ---- Resolve entrant identity (existing accounts only; NEVER creates). ----
-    const viewer = await findExistingUserByCredentials(body?.name, body?.pin);
+    // ---- Resolve entrant identity (existing accounts only; NEVER creates). The
+    // shared throttle (#107) covers this create-free verifier too; a lockout just
+    // yields no entrant state (you:null), the same as a credential miss. ----
+    const viewer = await findExistingUserByCredentials(body?.name, body?.pin, {
+      ip: clientIp(req),
+    });
     if (!viewer) {
       // No creds / bad creds / no such account → no entrant-specific state.
       return jsonWithSessionHint(sessionHint, { you: null });

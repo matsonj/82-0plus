@@ -429,6 +429,9 @@ export async function savePrivatePartial(
 
 export interface SubmitPrivateEntryArgs {
   entryId: string;
+  rosterJson: unknown; // SimPick[] — the five starters (persisted so finalize can
+  //   re-hydrate the exact roster; the direct registered→submit path never wrote a
+  //   partial, so without this a submitted entry could have a null roster_json).
   sixthJson: unknown; // { entity_id, team, decade }
   captainSlot: number;
   rosterDisplay: unknown; // final names (with captain flagged + sixth man)
@@ -456,19 +459,21 @@ export async function submitPrivateEntry(
   const updated = await queryRW<{ entry_id: string }>(
     `UPDATE ${TDB}.private_entries
         SET status = 'submitted',
-            sixth_json = $2,
-            captain_slot = $3,
-            roster_display = $4,
-            provisional_record_w = $5,
-            provisional_record_l = $6,
-            provisional_status = $7,
-            team_name = COALESCE($8, team_name),
+            roster_json = $2,
+            sixth_json = $3,
+            captain_slot = $4,
+            roster_display = $5,
+            provisional_record_w = $6,
+            provisional_record_l = $7,
+            provisional_status = $8,
+            team_name = COALESCE($9, team_name),
             submitted_at = now()
       WHERE entry_id = $1
         AND status IN ('registered', 'partial')
       RETURNING entry_id`,
     [
       args.entryId,
+      JSON.stringify(args.rosterJson),
       JSON.stringify(args.sixthJson),
       args.captainSlot,
       JSON.stringify(args.rosterDisplay),

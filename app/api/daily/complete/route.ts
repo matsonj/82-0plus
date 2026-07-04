@@ -5,7 +5,8 @@ import { computeDailyBoard } from "@/lib/daily";
 import { getOfferedIds, hydrateRoster } from "@/lib/queries";
 import { simulateRoster } from "@/lib/scoring";
 import { parseLineupPicks, lineupEligible } from "@/lib/lineup";
-import { authenticate, recordDailyResult } from "@/lib/dailyResults";
+import { recordDailyResult } from "@/lib/dailyResults";
+import { requireAuth } from "@/lib/apiAuth";
 import { signDailyShare, toDailyShareRoster } from "@/lib/dailyShareToken";
 import { assertTournamentSecret } from "@/lib/secret";
 
@@ -31,10 +32,8 @@ export async function POST(req: NextRequest) {
     // can create an account (a write), so assert ahead of it.
     assertTournamentSecret();
 
-    const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
-    if (!auth.ok) {
-      return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
-    }
+    const auth = await requireAuth(req, sessionHint, body?.name, body?.pin);
+    if (!auth.ok) return auth.response;
 
     // Validate the lineup SHAPE exactly like /api/simulate: five picks, one per
     // slot (all slots, in range, no dupes), distinct players, well-formed.

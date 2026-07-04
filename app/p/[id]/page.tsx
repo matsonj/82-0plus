@@ -1,8 +1,8 @@
 "use client";
 
 import { use, useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { PageShell } from "@/components/layout/PageShell";
+import { Button, ButtonLink } from "@/components/ui";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { PrivateTournamentLobby } from "@/components/private/PrivateTournamentLobby";
 import { PrivateTournamentResult } from "@/components/private/PrivateTournamentResult";
@@ -113,9 +113,9 @@ export default function PrivateTournamentPage({
               Wrapping up…
             </p>
             <p className="font-display text-[13px] text-[var(--md-ink-muted)]">{errorMsg}</p>
-            <button className="md-btn md-btn--sm" onClick={() => void load()}>
+            <Button size="sm" onClick={() => void load()}>
               ↻ Retry
-            </button>
+            </Button>
           </div>
         )}
 
@@ -127,12 +127,14 @@ export default function PrivateTournamentPage({
             <p className="font-cond text-base font-semibold uppercase tracking-wide">
               {errorMsg ?? "Tournament not found."}
             </p>
-            <Link
+            <ButtonLink
               href="/tournament"
-              className="md-btn md-btn--sm md-btn--secondary mt-4 inline-flex"
+              size="sm"
+              variant="secondary"
+              className="mt-4 inline-flex"
             >
               My teams
-            </Link>
+            </ButtonLink>
           </div>
         )}
 

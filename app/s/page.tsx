@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { decodeShare } from "@/lib/shareCode";
 import { PageShell } from "@/components/layout/PageShell";
-import { Capsule } from "@/components/ui";
+import { ButtonLink, Capsule, Card } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -177,14 +176,15 @@ export default async function SharePage({
 
             {/* CTA */}
             <div className="mt-8 lg:mt-12">
-              <Link
+              <ButtonLink
                 href="/"
-                className="md-btn md-btn--lg flex w-full items-center justify-between"
+                size="lg"
+                className="flex w-full items-center justify-between"
                 style={{ maxWidth: 520 }}
               >
                 <span>Build your own season</span>
                 <span aria-hidden>→</span>
-              </Link>
+              </ButtonLink>
             </div>
           </div>
 
@@ -328,15 +328,15 @@ export default async function SharePage({
       ) : (
         /* ── No / invalid share link ── */
         <div className="relative z-10 mx-auto mt-12 w-full max-w-md">
-          <div className="md-card md-card--lift flex flex-col gap-4 p-6 text-center">
+          <Card lift className="flex flex-col gap-4 p-6 text-center">
             <p className="font-mono text-sm text-[var(--md-ink-muted)]">
               This share link is missing or invalid, but you can still build your own
               undefeated season.
             </p>
-            <Link href="/" className="md-btn md-btn--lg">
+            <ButtonLink href="/" size="lg">
               Build your own season →
-            </Link>
-          </div>
+            </ButtonLink>
+          </Card>
         </div>
       )}
 

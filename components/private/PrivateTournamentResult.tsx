@@ -18,7 +18,7 @@ import {
 import type { PrivateCompletedEntry } from "@/components/private/types";
 import { copyText } from "@/lib/copyText";
 import { SITE_URL } from "@/lib/site";
-import { Button, Capsule } from "@/components/ui";
+import { Button, Capsule, Crown } from "@/components/ui";
 import type { BracketTeam } from "@/lib/types";
 
 // ── Standings ordering (elimination round first) ──────────────────────────────
@@ -128,16 +128,6 @@ function rowTier(rankIndex: number, status: string | null | undefined, isBot: bo
   return "body";
 }
 
-// Champion crown (matches the bracket terminus + header badge).
-function CrownMark() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ flexShrink: 0 }}>
-      <path d="M3 7L7 11L12 4L17 11L21 7L19.5 19H4.5L3 7Z" fill="var(--md-ink)" />
-      <rect x="4.5" y="19.5" width="15" height="2.2" fill="var(--md-ink)" />
-    </svg>
-  );
-}
-
 // One leaderboard row: [Rk] [Team + conf·seed] [Reg] [Playoff] [Net] [Result].
 function StandingRow({
   rank,
@@ -205,7 +195,7 @@ function StandingRow({
       {/* Team + meta */}
       <div className="flex min-w-0 grow flex-col" style={{ gap: t.nameGap }}>
         <div className="flex items-center gap-2">
-          {tier === "champion" && <CrownMark />}
+          {tier === "champion" && <Crown size={20} />}
           <span
             className={`truncate font-archivo uppercase leading-[105%] ${t.name}`}
             style={{ fontWeight: t.nameWeight, color: nameColor }}
@@ -479,7 +469,7 @@ export function PrivateTournamentResult({
             className="mt-3 flex shrink-0 items-center gap-3 self-start border-2 border-[var(--md-ink)] px-4 py-3 md:mt-0"
             style={{ background: "var(--md-yellow)", boxShadow: "var(--md-shadow-sm)" }}
           >
-            <span className="text-[22px]">♛</span>
+            <Crown variant="glyph" size={22} />
             <div>
               <div className="font-cond text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--md-ink)]">
                 Champion

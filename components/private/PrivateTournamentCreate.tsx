@@ -17,7 +17,7 @@ import {
 } from "@/lib/privateTournament";
 import { SITE_URL } from "@/lib/site";
 import { validateManualBoard } from "@/lib/privateBoardRules";
-import { Button, ButtonLink, Capsule, CopyLinkField, NameField, Notice, PinField } from "@/components/ui";
+import { Button, ButtonLink, Capsule, Card, CopyLinkField, NameField, Notice, PinField } from "@/components/ui";
 
 // A single manual board slot the admin is filling: a decade (from /api/decades)
 // + a team chosen from /api/private-tournament/teams?decade=. Distinctness +
@@ -194,7 +194,7 @@ export function PrivateTournamentCreate({
   if (created) {
     const fullShare = `${SITE_URL}${created.shareUrl}`;
     return (
-      <div className="md-card md-card--lift mx-auto flex w-full max-w-md flex-col gap-4 p-5">
+      <Card lift className="mx-auto flex w-full max-w-md flex-col gap-4 p-5">
         <div className="text-center">
           <Capsule tone="teal" className="mb-2">
             Tournament created
@@ -219,7 +219,7 @@ export function PrivateTournamentCreate({
         >
           Open the lobby
         </ButtonLink>
-      </div>
+      </Card>
     );
   }
 

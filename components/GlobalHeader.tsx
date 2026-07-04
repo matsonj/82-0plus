@@ -10,6 +10,7 @@ import {
 } from "@/lib/tournamentLabels";
 import type { PrivateMode } from "@/lib/privateTournament";
 import { fetchHomeBootstrap } from "@/lib/homeBootstrap";
+import { Card } from "@/components/ui";
 
 // One private-tournament summary as returned by /api/private-tournament/notifications.
 interface NotifSummary {
@@ -317,8 +318,9 @@ export function GlobalHeader({
             </button>
 
           {open && (
-            <div
-              className="md-card md-card--lift absolute right-0 z-30 mt-2 w-72 p-3 text-left"
+            <Card
+              lift
+              className="absolute right-0 z-30 mt-2 w-72 p-3 text-left"
               style={{ background: "var(--md-white)" }}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -336,8 +338,8 @@ export function GlobalHeader({
               </div>
 
               {changelogViewing && (
-                <div
-                  className="md-card mb-2 flex flex-col gap-0.5 p-2"
+                <Card
+                  className="mb-2 flex flex-col gap-0.5 p-2"
                   style={{ background: "var(--md-paper-2)" }}
                 >
                   <span className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-blue)]">
@@ -346,7 +348,7 @@ export function GlobalHeader({
                   <span className="text-[12px] leading-snug text-[var(--md-ink)]">
                     {CHANGELOG.text}
                   </span>
-                </div>
+                </Card>
               )}
 
               <span className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
@@ -372,7 +374,7 @@ export function GlobalHeader({
                   </div>
                 )}
               </div>
-            </div>
+            </Card>
           )}
           </div>
 
@@ -393,9 +395,10 @@ export function GlobalHeader({
               </button>
 
               {userMenuOpen && (
-                <div
+                <Card
                   role="menu"
-                  className="md-card md-card--lift absolute right-0 z-30 mt-2 w-44 p-2 text-left"
+                  lift
+                  className="absolute right-0 z-30 mt-2 w-44 p-2 text-left"
                   style={{ background: "var(--md-white)" }}
                 >
                   <Link
@@ -415,7 +418,7 @@ export function GlobalHeader({
                   >
                     Log out
                   </button>
-                </div>
+                </Card>
               )}
             </div>
           ) : onSignIn ? (
