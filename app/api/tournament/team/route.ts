@@ -3,12 +3,15 @@ import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { jsonPublicCacheable } from "@/lib/publicCache";
 import { getTeamBracketRO } from "@/lib/tournamentReadQueries";
 import { deriveYou, stripBreakdown } from "@/lib/tournamentRun";
+import { isDebugEnabled } from "@/lib/debugFlag";
 import type { BracketResult, TournamentRunResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "1";
+// See lib/debugFlag.ts: NEXT_PUBLIC_DEBUG alone can't enable this in a
+// production build.
+const DEBUG = isDebugEnabled();
 
 // Public, no-PIN endpoint: a team's bracket isn't secret (the PIN only gates the
 // user's list of teams). GET /api/tournament/team?id=<team_id>. Reads through the
