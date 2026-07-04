@@ -21,7 +21,7 @@ function entry(over: Partial<FieldPlanEntry> = {}): FieldPlanEntry {
     userId: over.userId ?? `u${n}`,
     userName: over.userName ?? `USER${n}`,
     teamName: over.teamName ?? null,
-    status: over.status ?? "submitted",
+    submitted: over.submitted ?? true,
   };
 }
 
@@ -38,9 +38,9 @@ describe("planFinalField", () => {
 
   it("reserved-incomplete (registered/partial) become {USERNAME} BOT", () => {
     const size: PrivateSize = 4;
-    const a = entry({ userName: "ALICE", status: "submitted" });
-    const b = entry({ userName: "BOB", status: "registered" });
-    const c = entry({ userName: "CARA", status: "partial" });
+    const a = entry({ userName: "ALICE", submitted: true });
+    const b = entry({ userName: "BOB", submitted: false });
+    const c = entry({ userName: "CARA", submitted: false });
     const plan = planFinalField([a, b, c], size);
     expect(plan).toHaveLength(size);
     // a is human, b/c are reservedBots, and one generic fills the 4th slot.
@@ -80,7 +80,7 @@ describe("planFinalField", () => {
     // return exactly `size` slots, padding gaps with generic bots — so a public
     // tournament with kicked entrants still finalizes into a valid bracket.
     const size: PrivateSize = 4;
-    const plan = planFinalField([entry({ status: "submitted" })], size);
+    const plan = planFinalField([entry({ submitted: true })], size);
     expect(plan).toHaveLength(size);
     expect(plan[0]).toMatchObject({ kind: "human" });
     expect(plan.filter((s) => s.kind === "genericBot")).toHaveLength(3);
@@ -88,9 +88,9 @@ describe("planFinalField", () => {
 
   it("ordering is submitted humans → reserved bots → generic bots, deterministic", () => {
     const size: PrivateSize = 8;
-    const subA = entry({ userName: "A", status: "submitted" });
-    const reg = entry({ userName: "R", status: "registered" });
-    const subB = entry({ userName: "B", status: "submitted" });
+    const subA = entry({ userName: "A", submitted: true });
+    const reg = entry({ userName: "R", submitted: false });
+    const subB = entry({ userName: "B", submitted: true });
     // Pass in mixed order; submitted must come first regardless of input order.
     const plan1 = planFinalField([reg, subA, subB], size);
     const plan2 = planFinalField([reg, subA, subB], size);
@@ -103,7 +103,7 @@ describe("planFinalField", () => {
 
   it("always returns exactly size slots and clamps excess entries", () => {
     const size: PrivateSize = 4;
-    const many = Array.from({ length: 7 }, () => entry({ status: "submitted" }));
+    const many = Array.from({ length: 7 }, () => entry({ submitted: true }));
     const plan = planFinalField(many, size);
     expect(plan).toHaveLength(size);
     expect(plan.every((s) => s.kind === "human")).toBe(true);

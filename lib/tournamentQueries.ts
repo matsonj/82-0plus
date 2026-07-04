@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { query, type QueryOptions } from "./motherduck";
-import { getPlayerIndex, hydrateRoster, type IndexedPlayer } from "./queries";
+import {
+  getPlayerIndex,
+  hydrateRoster,
+  placeholderIndexedPlayer,
+  type IndexedPlayer,
+} from "./queries";
 import { simulateRoster, toScoring, type ScoringPlayer } from "./scoring";
 import { tierForSeedNet } from "./tier";
 import { queryRW } from "./oltpDb";
@@ -143,18 +148,26 @@ export async function hydrateTournamentRoster(
   picks: SimPick[],
   sixthPick: { entity_id: string; team: string; decade: number },
   options: QueryOptions = {},
+  { allowUnresolved = false }: { allowUnresolved?: boolean } = {},
 ): Promise<HydratedTournamentRoster> {
-  const { scoring, lines, players } = await hydrateRoster(picks, options);
+  const { scoring, lines, players } = await hydrateRoster(picks, options, {
+    allowUnresolved,
+  });
 
   const index = await getPlayerIndex(options);
   const byKey = new Map(
     index.map((p) => [`${p.entity_id}|${p.team}|${p.decade}`, p]),
   );
-  const sixthRow = byKey.get(
+  let sixthRow = byKey.get(
     `${sixthPick.entity_id}|${sixthPick.team}|${sixthPick.decade}`,
   );
   if (!sixthRow) {
-    throw new Error(`unknown sixth-man pick: ${sixthPick.entity_id}`);
+    // Display path (see hydrateRoster): a persisted sixth man dropped by a rebuild
+    // degrades to a placeholder rather than 500ing the whole response.
+    if (!allowUnresolved) {
+      throw new Error(`unknown sixth-man pick: ${sixthPick.entity_id}`);
+    }
+    sixthRow = placeholderIndexedPlayer(sixthPick);
   }
   const sixthMan = toScoring(sixthRow);
   const sixthInfo: BracketPlayer = {
