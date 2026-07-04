@@ -20,6 +20,8 @@ import type { GeneratedPrivateBot, PrivateBoard } from "./privateBoard";
 import { generatePrivateBots } from "./privateBoard";
 import type { PrivateSize } from "./privateTournament";
 import { simulateRoster } from "./scoring";
+import { UnresolvedRosterError } from "./queries";
+import { parsePicks, parseSixth } from "./rosterParse";
 import {
   buildTournamentTeam,
   getStatNorms,
@@ -115,7 +117,17 @@ export interface FieldPlanEntry {
   userId: string;
   userName: string;
   teamName: string | null;
-  status: "registered" | "partial" | "submitted" | "bot_replaced";
+  /**
+   * True iff this entry LOCKED A FULL SIX. Derived from roster PRESENCE
+   * (sixth_json persisted — only the submit path writes it, and it is never
+   * cleared), NEVER from the mutable `status` string. This matters for idempotency:
+   * finalize flips a degraded submitted entry (a locked roster whose stored player
+   * id a rebuild dropped) to `bot_replaced`, so a re-run must still classify it as
+   * a submitted entry from immutable data — otherwise it would be mistaken for an
+   * ordinary reserved bot and draw a DIFFERENT bot from the stream, changing the
+   * bracket. registered/partial (never locked a six) are NOT submitted.
+   */
+  submitted: boolean;
 }
 
 /** One planned bracket slot. */
@@ -128,12 +140,14 @@ export type FieldSlot =
  * Decide the bracket field composition, deterministically, for a tournament of
  * `size` slots. The rule (documented for the test):
  *
- *   1. SUBMITTED humans come first, in their incoming order (registration order
- *      — the caller passes entries oldest-first).
- *   2. RESERVED-INCOMPLETE entries (registered | partial — they joined but never
- *      locked a full six) become a "{USERNAME} BOT": a board-constrained bot that
- *      carries the entrant's name so the bracket shows who timed out. (A
- *      bot_replaced entry is treated the same — it was already handed off.)
+ *   1. SUBMITTED entries (those that LOCKED A FULL SIX — `entry.submitted`) come
+ *      first as humans, in incoming order (registration order — oldest-first).
+ *      A submitted entry whose stored roster later fails to resolve is still a
+ *      human slot here; runFinal degrades it to a "{USERNAME} BOT" itself, so the
+ *      classification never depends on the mutable bot_replaced status.
+ *   2. RESERVED-INCOMPLETE entries (never locked a six — `!entry.submitted`, i.e.
+ *      registered | partial) become a "{USERNAME} BOT": a board-constrained bot
+ *      that carries the entrant's name so the bracket shows who timed out.
  *   3. Any remaining slots up to `size` become GENERIC bots, named by the caller
  *      (here: "BOT 1", "BOT 2", …), filling the field so the bracket always runs.
  *
@@ -146,8 +160,10 @@ export function planFinalField(
   entries: FieldPlanEntry[],
   size: PrivateSize,
 ): FieldSlot[] {
-  const submitted = entries.filter((e) => e.status === "submitted");
-  const reserved = entries.filter((e) => e.status !== "submitted");
+  // Classify on roster PRESENCE (immutable), not `status` — a degraded submitted
+  // entry is flipped to bot_replaced but must re-classify identically on re-run.
+  const submitted = entries.filter((e) => e.submitted);
+  const reserved = entries.filter((e) => !e.submitted);
 
   const slots: FieldSlot[] = [];
   for (const e of submitted) {
@@ -214,12 +230,25 @@ export async function buildEntryTeam(
   name: string,
   options: QueryOptions = {},
 ): Promise<TournamentTeam> {
-  const picks = entry.rosterJson as SimPick[];
-  const sixth = entry.sixthJson as {
-    entity_id: string;
-    team: string;
-    decade: number;
-  };
+  // Validate the STORED roster's SHAPE with the SAME parser the submit path uses
+  // (5 distinct slots covering [G,FLEX,W,FLEX,B], distinct well-formed picks; a
+  // well-formed sixth). Any invalid stored shape — null/missing element, wrong
+  // length, dup slot, bad pick object, corrupt JSON, or a submit predating
+  // roster_json persistence — is an UNRESOLVABLE roster (same class as an unknown
+  // pick), so it degrades to a bot rather than crashing finalize with a TypeError
+  // or, worse, being scored as a real result.
+  const picks = parsePicks(entry.rosterJson);
+  const sixth = parseSixth(entry.sixthJson);
+  if (!picks || !sixth) {
+    throw new UnresolvedRosterError(
+      `entry ${entry.entryId}: missing or malformed stored roster`,
+    );
+  }
+  // STRICT hydration: an unresolvable stored pick throws UnresolvedRosterError (it
+  // is NOT degraded to a placeholder). This is the FINALIZE/compute path — its
+  // result is PERSISTED as a real standing — so we must never fabricate stats.
+  // runFinal catches ONLY UnresolvedRosterError and degrades the whole entry to a
+  // "{USERNAME} BOT"; a transient error propagates so finalize retries (#104).
   const hydrated = await hydrateTournamentRoster(picks, sixth, options);
   const seedNet =
     entry.seedNet != null && Number.isFinite(entry.seedNet)
@@ -333,7 +362,9 @@ export interface FinalRunResult {
   bracket: BracketResult; // stripBreakdown'd — safe to store + serve
   championName: string;
   entryResults: EntryFinalResult[];
-  botReplacedUserIds: string[]; // userIds of reserved-incomplete entries replaced
+  // userIds of entries a bot took over: reserved-incomplete entries (never locked a
+  // six) AND submitted entries whose stored roster no longer resolves (degraded).
+  botReplacedUserIds: string[];
 }
 
 /**
@@ -372,12 +403,46 @@ export async function runFinal(
 ): Promise<FinalRunResult> {
   const plan = planFinalField(entries, size);
 
-  // Generate enough bots to cover EVERY bot slot (reserved + generic) from one
-  // deterministic stream. reservedBots and genericBots both index into it: a
-  // reserved bot uses the i-th stream entry by its position among bot slots.
-  const botSlotCount = plan.filter(
-    (s) => s.kind === "reservedBot" || s.kind === "genericBot",
-  ).length;
+  // First pass — resolve each SUBMITTED human's stored roster (strict). A roster
+  // that references a player id a later index rebuild dropped (#104) throws here
+  // and CANNOT be fairly scored, so we must not fabricate stats and persist them
+  // as a real standing. Such an entry is degraded to a "{USERNAME} BOT" via the
+  // SAME bot-replacement path a reserved-incomplete entry uses (below), so no
+  // fabricated competitive result is ever written.
+  const humanTeams = new Map<string, TournamentTeam>(); // entryId → resolved team
+  const degradedEntryIds = new Set<string>();
+  for (const slot of plan) {
+    if (slot.kind !== "human") continue;
+    const row = entryRowsById.get(slot.entry.entryId);
+    if (!row) {
+      throw new Error(
+        `private finalize: missing row for submitted entry ${slot.entry.entryId}`,
+      );
+    }
+    const id = `entry:${slot.entry.entryId}`;
+    const name = slot.entry.teamName ?? slot.entry.userName;
+    try {
+      humanTeams.set(
+        slot.entry.entryId,
+        await buildEntryTeam(row, id, name, options),
+      );
+    } catch (err) {
+      // ONLY a genuinely unresolvable stored roster degrades to a bot. A transient
+      // failure (index/cache/DB, or a bug) must NOT be silently turned into a
+      // persisted bot standing — rethrow so finalize aborts and the lazy GET
+      // surfaces a retryable 5xx instead.
+      if (!(err instanceof UnresolvedRosterError)) throw err;
+      degradedEntryIds.add(slot.entry.entryId);
+    }
+  }
+
+  // Generate enough bots for every bot slot from one deterministic stream: the
+  // reserved-incomplete + generic filler slots AND any degraded human. Each bot is
+  // seeded `${seed}:${i}` so the stream is prefix-stable — reserved/generic keep
+  // their existing front indices (0..reservedBotCount-1) so a degraded entry never
+  // changes another entrant's bot; degraded humans draw from the stream tail.
+  const reservedBotCount = plan.filter((s) => s.kind !== "human").length;
+  const botSlotCount = reservedBotCount + degradedEntryIds.size;
   const bots = await generatePrivateBots(
     board,
     `${tournamentId}:final`,
@@ -391,32 +456,37 @@ export async function runFinal(
   }
 
   // Walk the plan, building each TournamentTeam and remembering which bracket id
-  // belongs to which entry (humans + reserved bots) so we can map results back.
+  // belongs to which entry (humans + reserved/degraded bots) so we map results back.
   const teams: TournamentTeam[] = [];
   const idToEntryId = new Map<string, string>(); // bracket teamId → entryId
   const botReplacedUserIds: string[] = [];
-  let botCursor = 0; // next index into `bots`
+  let frontCursor = 0; // reserved + generic bots (existing assignment, unchanged)
+  let tailCursor = reservedBotCount; // extra bots for degraded (unresolvable) humans
 
   for (const slot of plan) {
     if (slot.kind === "human") {
-      const row = entryRowsById.get(slot.entry.entryId);
-      if (!row) {
-        throw new Error(
-          `private finalize: missing row for submitted entry ${slot.entry.entryId}`,
-        );
-      }
       const id = `entry:${slot.entry.entryId}`;
-      const name = slot.entry.teamName ?? slot.entry.userName;
-      teams.push(await buildEntryTeam(row, id, name, options));
+      if (degradedEntryIds.has(slot.entry.entryId)) {
+        // Unresolvable stored roster → replace with a board bot under the entrant's
+        // name, exactly like a reserved-incomplete slot. Recorded in
+        // botReplacedUserIds so persistEntryFinals flips the entry to bot_replaced.
+        const bot = bots[tailCursor++];
+        teams.push(
+          await buildBotTeam(bot, id, reservedBotName(slot.entry.userName), options),
+        );
+        botReplacedUserIds.push(slot.entry.userId);
+      } else {
+        teams.push(humanTeams.get(slot.entry.entryId)!);
+      }
       idToEntryId.set(id, slot.entry.entryId);
     } else if (slot.kind === "reservedBot") {
-      const bot = bots[botCursor++];
+      const bot = bots[frontCursor++];
       const id = `entry:${slot.entry.entryId}`; // keep the entry's id so we map back
       teams.push(await buildBotTeam(bot, id, slot.botName, options));
       idToEntryId.set(id, slot.entry.entryId);
       botReplacedUserIds.push(slot.entry.userId);
     } else {
-      const bot = bots[botCursor++];
+      const bot = bots[frontCursor++];
       const id = `genbot:${slot.seedIndex}`;
       teams.push(await buildBotTeam(bot, id, slot.botName, options));
     }

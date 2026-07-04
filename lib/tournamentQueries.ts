@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { query, type QueryOptions } from "./motherduck";
-import { getPlayerIndex, hydrateRoster, type IndexedPlayer } from "./queries";
+import {
+  getPlayerIndex,
+  hydrateRoster,
+  UnresolvedRosterError,
+  type IndexedPlayer,
+} from "./queries";
 import { simulateRoster, toScoring, type ScoringPlayer } from "./scoring";
 import { tierForSeedNet } from "./tier";
 import { queryRW } from "./oltpDb";
@@ -154,7 +159,9 @@ export async function hydrateTournamentRoster(
     `${sixthPick.entity_id}|${sixthPick.team}|${sixthPick.decade}`,
   );
   if (!sixthRow) {
-    throw new Error(`unknown sixth-man pick: ${sixthPick.entity_id}`);
+    throw new UnresolvedRosterError(
+      `unknown sixth-man pick: ${sixthPick.entity_id}`,
+    );
   }
   const sixthMan = toScoring(sixthRow);
   const sixthInfo: BracketPlayer = {

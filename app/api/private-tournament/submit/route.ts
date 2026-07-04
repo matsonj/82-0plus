@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
 
     const submitted = await submitPrivateEntry({
       entryId: entry.entryId,
+      rosterJson: picks,
       sixthJson: sixthPick,
       captainSlot,
       rosterDisplay: { roster: entryTeam.roster, sixthMan: entryTeam.sixthManInfo },
