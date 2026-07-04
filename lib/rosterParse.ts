@@ -6,11 +6,11 @@
 // man). PROVENANCE (receipts / board match), eligibility, and off-list checks
 // live in the routes — this module is purely structural and has no I/O.
 
-import type { SlotKind } from "./positions";
 import type { SimPick } from "./types";
+import { LINEUP_KINDS } from "./lineup";
 
 // Must mirror the client lineup board (same as /api/simulate).
-export const KINDS: SlotKind[] = ["G", "FLEX", "W", "FLEX", "B"];
+export const KINDS = LINEUP_KINDS;
 
 /**
  * 5 entries, distinct slots covering all of [G,FLEX,W,FLEX,B], distinct players,

@@ -10,6 +10,7 @@ import type {
   PlayInResult,
 } from "@/lib/types";
 import { playInEarnedSeeds } from "@/lib/tournamentLabels";
+import { Crown } from "@/components/ui";
 
 // Derives a round label from the round's distance to the final (0 = final round).
 // Used by both the desktop tree and the mobile stacked view.
@@ -645,17 +646,7 @@ function ChampionColumn({
             }}
           >
             {/* Crown */}
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-              style={{ flexShrink: 0 }}
-              aria-hidden="true"
-            >
-              <path d="M3 7L7 11L12 4L17 11L21 7L19.5 19H4.5L3 7Z" fill="var(--md-ink)" />
-              <rect x="4.5" y="19.5" width="15" height="2.2" fill="var(--md-ink)" />
-            </svg>
+            <Crown size={22} />
             <span className="min-w-0 truncate font-cond text-[16px] font-bold uppercase tracking-[0.03em] text-[var(--md-ink)]">
               {isGhost ? "🤖 " : ""}
               {championName}
@@ -807,17 +798,7 @@ function MobileStackedBracket({
                 className="flex items-center gap-4 px-4 py-4"
                 style={{ background: "var(--md-yellow)", boxShadow: "var(--md-shadow-md)" }}
               >
-                <svg
-                  width="34"
-                  height="34"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                  style={{ flexShrink: 0 }}
-                  aria-hidden="true"
-                >
-                  <path d="M3 7L7 11L12 4L17 11L21 7L19.5 19H4.5L3 7Z" fill="var(--md-ink)" />
-                  <rect x="4.5" y="19.5" width="15" height="2.2" fill="var(--md-ink)" />
-                </svg>
+                <Crown size={34} />
                 <div className="min-w-0">
                   <div className="font-cond text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--md-ink)]">
                     Champion

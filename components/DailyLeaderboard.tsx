@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { RosterList, playerKey } from "@/components/BracketView";
-import { ModalFrame } from "@/components/ui";
+import { Crown, ModalFrame } from "@/components/ui";
 import type { SavedUser } from "@/lib/tournamentSession";
 
 // "2026-06-10" → "Jun 10" (plain calendar date, no TZ shift).
@@ -101,7 +101,6 @@ export function DailyLeaderboard({
       maxWidth="max-w-md"
       paddingClassName="p-0"
       className="flex max-h-[85vh] flex-col overflow-hidden"
-      overlayStyle={{ background: "rgba(21,17,14,0.7)" }}
       panelStyle={{ boxShadow: "var(--md-shadow-md)" }}
       headerClassName="border-b-2 border-[var(--md-coral)] bg-[var(--md-ink)] px-5 py-4"
       titleStyle={{ color: "var(--md-white)" }}
@@ -274,7 +273,7 @@ function Row({
 
         {/* Champion indicator */}
         <span className="w-5 shrink-0 text-center text-[13px]" aria-hidden>
-          {entry.perfect ? "♛" : ""}
+          {entry.perfect ? <Crown variant="glyph" /> : ""}
         </span>
       </button>
 
