@@ -2,9 +2,10 @@
 
 import type React from "react";
 import type { PublicPlayer } from "@/lib/types";
-import { SLOT_LABEL, type Role, type SlotKind } from "@/lib/positions";
+import { SLOT_LABEL, type SlotKind } from "@/lib/positions";
 import { canFill } from "@/lib/positions";
 import { splitPlayerName } from "@/lib/playerName";
+import { PositionChipGroup } from "@/components/ui";
 
 export interface LineupEntry {
   player: PublicPlayer;
@@ -14,23 +15,6 @@ export interface LineupEntry {
   // "" when the slot wasn't server-rolled (Daily's seeded slots) — Daily can't
   // enter the tournament, so it never needs provenance.
   receipt: string;
-}
-
-// Position chips are QUIET info (ink outline on stock) — "loud chrome, quiet
-// data". Position is shown on each player, never used as a loud accent.
-function PosChips({ positions }: { positions: Role[] }) {
-  return (
-    <span className="flex gap-0.5">
-      {positions.map((r) => (
-        <span
-          key={r}
-          className="border border-[var(--md-ink)] bg-[var(--md-white)] px-1 font-mono text-[9px] font-bold leading-[1.5] text-[var(--md-ink)]"
-        >
-          {r}
-        </span>
-      ))}
-    </span>
-  );
 }
 
 // ── Grid layout (mobile default, 5 columns) ─────────────────────────────────
@@ -86,7 +70,11 @@ function GridBoard({
 
             {entry ? (
               <div className="mt-1 flex flex-1 flex-col justify-between gap-1">
-                <PosChips positions={entry.player.positions} />
+                {/* Position chips stay a QUIET, bordered treatment here — "loud
+                    chrome, quiet data" — but the outline color is now sourced
+                    from the same canonical ROLE_COLOR map as the browse list
+                    and player-card modal, so it can't drift out of sync. */}
+                <PositionChipGroup positions={entry.player.positions} variant="outline" />
                 <div
                   className="font-archivo text-[11px] font-extrabold leading-tight break-words sm:text-[14px]"
                   style={{ fontVariationSettings: '"wdth" 90' }}

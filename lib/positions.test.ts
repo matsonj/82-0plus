@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { positionRank } from "./positions";
+import { ALL_ROLES, positionRank, ROLE_COLOR } from "./positions";
+
+describe("ROLE_COLOR", () => {
+  it("gives every role exactly one canonical color — the single source of\n     truth for the browse list, player-card modal, and lineup board chips\n     (issue #105: those three surfaces used to disagree)", () => {
+    for (const role of ALL_ROLES) {
+      expect(typeof ROLE_COLOR[role]).toBe("string");
+      expect(ROLE_COLOR[role]).toMatch(/^var\(--md-[a-z-]+\)$/);
+    }
+    // No two roles should share a color.
+    const values = ALL_ROLES.map((r) => ROLE_COLOR[r]);
+    expect(new Set(values).size).toBe(values.length);
+  });
+});
 
 describe("positionRank", () => {
   it("ranks pure and combo positions backcourt → frontcourt", () => {
