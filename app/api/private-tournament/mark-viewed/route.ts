@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { requireAuth } from "@/lib/apiAuth";
+import { isUuid } from "@/lib/uuid";
 import {
   getPrivateEntry,
   getPrivateTournament,
@@ -17,16 +18,13 @@ export const dynamic = "force-dynamic";
 // needsAttention() later treat the eventual final result as already-viewed, so
 // the entrant would never get the final-results badge. Idempotent + cheap.
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   try {
     const body = await req.json();
 
     const tournamentId = String(body?.tournamentId ?? "");
-    if (!UUID_RE.test(tournamentId)) {
+    if (!isUuid(tournamentId)) {
       return jsonWithSessionHint(sessionHint, { error: "invalid tournament id" }, { status: 400 });
     }
 

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { jsonPublicCacheable } from "@/lib/publicCache";
+import { isUuid } from "@/lib/uuid";
 import {
   entryDeadlineISO,
   isEntryExpired,
@@ -42,14 +43,11 @@ export const dynamic = "force-dynamic";
 //   via a request BODY instead. Creds verify against EXISTING accounts only — a
 //   public read NEVER creates one.
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function GET(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   try {
     const id = req.nextUrl.searchParams.get("id") ?? "";
-    if (!UUID_RE.test(id)) {
+    if (!isUuid(id)) {
       return jsonWithSessionHint(sessionHint, { error: "invalid tournament id" }, { status: 400 });
     }
 
@@ -164,7 +162,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
 
     const id = String(body?.tournamentId ?? "");
-    if (!UUID_RE.test(id)) {
+    if (!isUuid(id)) {
       return jsonWithSessionHint(sessionHint, { error: "invalid tournament id" }, { status: 400 });
     }
 

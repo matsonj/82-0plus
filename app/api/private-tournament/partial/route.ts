@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { requireAuth } from "@/lib/apiAuth";
+import { isUuid } from "@/lib/uuid";
 import { parsePicks } from "@/lib/rosterParse";
 import { savePrivatePartial } from "@/lib/privateTournamentQueries";
 import { buildTournamentTeam } from "@/lib/tournamentQueries";
@@ -22,9 +23,6 @@ export const dynamic = "force-dynamic";
 // completed entry. The validate→hydrate→sim pipeline is shared with submit via
 // lib/privateRoster; this route ORCHESTRATES it for the 5-only partial save.
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function POST(req: NextRequest) {
   const sessionHint = getSessionHint(req);
   const queryOptions = { sessionHint: sessionHint.value };
@@ -32,7 +30,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const tournamentId = String(body?.tournamentId ?? "");
-    if (!UUID_RE.test(tournamentId)) {
+    if (!isUuid(tournamentId)) {
       return jsonWithSessionHint(sessionHint, { error: "invalid tournament id" }, { status: 400 });
     }
 
