@@ -1,9 +1,16 @@
 import "server-only";
 import { track } from "@vercel/analytics/server";
-import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
 import { queryRW, ensureSchema } from "./oltpDb";
 import { getUsersByName, insertUser } from "./tournamentQueries";
 import { normalizeName, validateName, validatePin } from "./tournamentValidation";
+import { verifyPin, hashPin } from "./pinHash";
+import {
+  checkThrottle,
+  recordFailure,
+  recordSuccess,
+  type ThrottleStore,
+} from "./authRateLimit";
+import { pgThrottleStore } from "./authThrottleStore";
 
 // Server-side per-account daily-challenge completion. Daily play now requires the
 // same (name, PIN) arcade login the tournament uses, so completion is tracked per
@@ -41,7 +48,28 @@ export interface DailyResult {
 
 export type AuthResult =
   | { ok: true; userId: string; name: string; nameNorm: string }
-  | { ok: false; reason: string };
+  // `retryAfterMs` is set only when the failure is a rate-limit lockout (#107) —
+  // it lets the API layer answer 429 + Retry-After instead of a plain 401.
+  | { ok: false; reason: string; retryAfterMs?: number };
+
+/** Optional context for a credential check: the client IP (for the per-IP
+ *  throttle key) and, for tests, an injectable throttle store. */
+export interface AuthOptions {
+  /** Client IP — adds a per-IP throttle key alongside the per-account one. */
+  ip?: string | null;
+  /** Override the throttle store (defaults to the durable Postgres store). */
+  throttleStore?: ThrottleStore;
+}
+
+// Throttle keys for a credential attempt: the account NAME (what an attacker
+// fixes while varying the PIN) and, when known, the client IP (what an attacker
+// fixes while spraying names — and the anti-spam key for account creation). A
+// lock on EITHER blocks the attempt.
+function throttleKeys(nameNorm: string, ip?: string | null): string[] {
+  const keys = [`user:${nameNorm}`];
+  if (ip) keys.push(`ip:${ip}`);
+  return keys;
+}
 
 // In-flight create-or-match calls, keyed by (normalized name + PIN). The account
 // identity has no DB-level uniqueness (the PIN is stored as a per-row salted hash,
@@ -61,12 +89,13 @@ const inFlightAuth = new Map<string, Promise<AuthResult>>();
 export async function authenticate(
   rawName: string,
   rawPin: string,
+  opts: AuthOptions = {},
 ): Promise<AuthResult> {
   // Coalesce concurrent identical calls so a fresh login can't create duplicates.
   const key = JSON.stringify([normalizeName(String(rawName)), String(rawPin)]);
   const pending = inFlightAuth.get(key);
   if (pending) return pending;
-  const run = authenticateUncoalesced(rawName, rawPin).finally(() => {
+  const run = authenticateUncoalesced(rawName, rawPin, opts).finally(() => {
     inFlightAuth.delete(key);
   });
   inFlightAuth.set(key, run);
@@ -77,12 +106,11 @@ export async function authenticate(
  * Resolve a (name, PIN) pair to an EXISTING account only — normalize the name,
  * look up candidates, and return the one whose stored salted hash matches the PIN
  * (or null). NEVER creates an account, so it's safe for public read paths that
- * must not mint identities. Validates shape first; uses the RW user lookup so a
- * freshly registered account authenticates immediately (read-your-writes).
- *
- * `authenticate()` calls this first and only falls through to create-on-miss.
+ * must not mint identities. Uses the RW user lookup so a freshly registered
+ * account authenticates immediately (read-your-writes). No throttle — used
+ * internally by `authenticate()` and by the throttled public wrapper below.
  */
-export async function findExistingUserByCredentials(
+async function matchExistingUser(
   rawName: unknown,
   rawPin: unknown,
 ): Promise<{ userId: string; name: string; nameNorm: string } | null> {
@@ -93,34 +121,91 @@ export async function findExistingUserByCredentials(
   await ensureSchema();
   const nameNorm = normalizeName(name);
   for (const u of await getUsersByName(nameNorm)) {
-    const candidate = scryptSync(pin, u.pin_salt, 32);
-    const stored = Buffer.from(u.pin_hash, "hex");
-    if (candidate.length === stored.length && timingSafeEqual(candidate, stored)) {
+    if (verifyPin(pin, u.pin_hash, u.pin_salt)) {
       return { userId: u.user_id, name, nameNorm };
     }
   }
   return null;
 }
 
+/**
+ * Throttled, create-free credential match for PUBLIC read paths (e.g. the private
+ * tournament `you` lookup). Returns the matching account or null. A well-formed
+ * credential pair that DOESN'T match counts as a failed attempt (feeding the
+ * shared throttle); a match resets it. An absent/malformed pair is NOT a guess —
+ * anonymous page views hit this with empty creds and must never trip the limiter,
+ * so those short-circuit before touching the throttle.
+ *
+ * `authenticate()` does NOT call this (it uses matchExistingUser + its own
+ * throttle) so a single auth is never double-counted.
+ */
+export async function findExistingUserByCredentials(
+  rawName: unknown,
+  rawPin: unknown,
+  opts: AuthOptions = {},
+): Promise<{ userId: string; name: string; nameNorm: string } | null> {
+  const name = typeof rawName === "string" ? rawName : "";
+  const pin = typeof rawPin === "string" ? rawPin : "";
+  if (!name || !pin || !validateName(name).ok || !validatePin(pin)) return null;
+
+  const store = opts.throttleStore ?? pgThrottleStore;
+  const nameNorm = normalizeName(name);
+  const keys = throttleKeys(nameNorm, opts.ip);
+
+  // Locked → behave as "no match" (a read path never surfaces a 429; the caller
+  // just doesn't get their entrant state, which is the same as a miss).
+  if (!(await checkThrottle(store, keys)).allowed) return null;
+
+  const match = await matchExistingUser(name, pin);
+  if (match) {
+    await recordSuccess(store, keys);
+    return match;
+  }
+  await recordFailure(store, keys);
+  return null;
+}
+
 async function authenticateUncoalesced(
   rawName: string,
   rawPin: string,
+  opts: AuthOptions,
 ): Promise<AuthResult> {
   const nameCheck = validateName(rawName);
   if (!nameCheck.ok) return { ok: false, reason: nameCheck.reason };
   if (!validatePin(rawPin)) return { ok: false, reason: "PIN must be 4–6 digits" };
 
-  // Match an existing account first (normalize + lookup + PIN check, no create).
-  const existing = await findExistingUserByCredentials(rawName, rawPin);
-  if (existing) return { ok: true, ...existing };
-
-  // No match → create the account on first sight (ensureSchema already ran).
+  const store = opts.throttleStore ?? pgThrottleStore;
   const name = String(rawName);
   const nameNorm = normalizeName(name);
   const pin = String(rawPin);
-  const salt = randomBytes(16).toString("hex");
-  const pinHash = scryptSync(pin, salt, 32).toString("hex");
-  const userId = await insertUser({ name, nameNorm, pinHash, pinSalt: salt });
+  const keys = throttleKeys(nameNorm, opts.ip);
+
+  // Throttle gate AFTER shape validation, BEFORE any match or create: a locked key
+  // can neither guess an existing PIN nor mint a fresh account (bounding the
+  // create-on-miss row-creation vector as well as PIN brute-force).
+  const gate = await checkThrottle(store, keys);
+  if (!gate.allowed) {
+    return {
+      ok: false,
+      reason: "Too many attempts — wait a moment and try again.",
+      retryAfterMs: gate.retryAfterMs,
+    };
+  }
+
+  // Match an existing account first (normalize + lookup + PIN check, no create).
+  const existing = await matchExistingUser(name, pin);
+  if (existing) {
+    await recordSuccess(store, keys); // a verified identity clears the counter
+    return { ok: true, ...existing };
+  }
+
+  // No match → BOTH a PIN miss and an account-creation attempt. Count it against
+  // the throttle before creating, so unbounded account creation is bounded too.
+  // (A legitimate brand-new user costs exactly one failure here; their next auth
+  // matches this row and resets the counter.) ensureSchema already ran above.
+  await recordFailure(store, keys);
+  const { pinHash, pinSalt } = hashPin(pin);
+  const userId = await insertUser({ name, nameNorm, pinHash, pinSalt });
   // Telemetry: a brand-new account (first sight of this name+PIN). This is the
   // ONLY place a user row is created, so it catches signups from every entry
   // point (daily sign-in + tournament register/create). Never let an analytics

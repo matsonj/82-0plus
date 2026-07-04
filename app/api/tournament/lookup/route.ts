@@ -1,8 +1,11 @@
-import { scryptSync, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { validateName, validatePin, normalizeName } from "@/lib/tournamentValidation";
 import { getUsersByNameRO, getUserTeamsRO } from "@/lib/tournamentReadQueries";
+import { verifyPin } from "@/lib/pinHash";
+import { clientIp } from "@/lib/apiAuth";
+import { checkThrottle, recordFailure, recordSuccess } from "@/lib/authRateLimit";
+import { pgThrottleStore } from "@/lib/authThrottleStore";
 import type { TournamentLookupResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -29,22 +32,37 @@ export async function POST(req: NextRequest) {
     }
     const nameNorm = normalizeName(String(body.name));
 
+    // Rate limit (#107): this is a create-free PIN verifier, so it's a prime
+    // brute-force target. Share the account-name throttle key with authenticate()
+    // (`user:<nameNorm>`) so guesses across both paths count together, plus a
+    // per-IP key. A well-formed miss below records a failure; a hit resets.
+    const ip = clientIp(req);
+    const keys = ip ? [`user:${nameNorm}`, `ip:${ip}`] : [`user:${nameNorm}`];
+    const gate = await checkThrottle(pgThrottleStore, keys);
+    if (!gate.allowed) {
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "Too many attempts — wait a moment and try again." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(gate.retryAfterMs / 1000)) } },
+      );
+    }
+
     // Identity is the (name, PIN) pair — find the account whose PIN verifies
-    // among any accounts sharing this name. timingSafeEqual throws on mismatched
-    // lengths, so length-guard first. Same generic 404 on any miss (no enum).
-    // Public, no-PIN-gated table access goes through the dedicated read-only
-    // Postgres pool (no DDL, low-privilege DATABASE_URL_RO — see lib/oltpReadDb).
+    // among any accounts sharing this name (verifyPin is length-guarded +
+    // constant-time). Same generic 404 on any miss (no enum). Public, no-PIN-gated
+    // table access goes through the dedicated read-only Postgres pool (no DDL,
+    // low-privilege DATABASE_URL_RO — see lib/oltpReadDb).
     const matchingUserIds: string[] = [];
     for (const u of await getUsersByNameRO(nameNorm)) {
-      const candidate = scryptSync(pin, u.pin_salt, 32);
-      const stored = Buffer.from(u.pin_hash, "hex");
-      if (candidate.length === stored.length && timingSafeEqual(candidate, stored)) {
+      if (verifyPin(pin, u.pin_hash, u.pin_salt)) {
         matchingUserIds.push(u.user_id);
       }
     }
     if (matchingUserIds.length === 0) {
+      await recordFailure(pgThrottleStore, keys);
       return jsonWithSessionHint(sessionHint, NOT_FOUND, { status: 404 });
     }
+    await recordSuccess(pgThrottleStore, keys);
 
     const teams = (
       await Promise.all(matchingUserIds.map((uid) => getUserTeamsRO(uid)))

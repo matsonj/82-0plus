@@ -1,4 +1,3 @@
-import { scryptSync, timingSafeEqual } from "node:crypto";
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { validateName, validatePin } from "@/lib/tournamentValidation";
@@ -7,6 +6,10 @@ import {
   type PrivateTournamentSummary,
 } from "@/lib/privateTournament";
 import { getPrivateTournamentsByNameNorm } from "@/lib/privateTournamentQueries";
+import { verifyPin } from "@/lib/pinHash";
+import { clientIp } from "@/lib/apiAuth";
+import { checkThrottle, recordFailure, recordSuccess } from "@/lib/authRateLimit";
+import { pgThrottleStore } from "@/lib/authThrottleStore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,17 +37,31 @@ export async function POST(req: NextRequest) {
     }
     const nameNorm = normalizeTournamentName(String(body.name));
 
-    // Pick the tournament whose PIN verifies. timingSafeEqual throws on mismatched
-    // lengths, so length-guard first. Same generic 404 on any miss (no enum).
+    // Rate limit (#107): a create-free PIN verifier, so throttle brute-force. Keyed
+    // by the TOURNAMENT name (`pt:<nameNorm>` — a separate namespace from the
+    // account-auth `user:` keys, since this checks a tournament join PIN, not an
+    // account PIN) plus the client IP. A well-formed miss records a failure; a hit
+    // resets.
+    const ip = clientIp(req);
+    const keys = ip ? [`pt:${nameNorm}`, `ip:${ip}`] : [`pt:${nameNorm}`];
+    const gate = await checkThrottle(pgThrottleStore, keys);
+    if (!gate.allowed) {
+      return jsonWithSessionHint(
+        sessionHint,
+        { error: "Too many attempts — wait a moment and try again." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(gate.retryAfterMs / 1000)) } },
+      );
+    }
+
+    // Pick the tournament whose PIN verifies (verifyPin is length-guarded +
+    // constant-time). Same generic 404 on any miss (no enum).
     const candidates = await getPrivateTournamentsByNameNorm(nameNorm);
-    const match = candidates.find((t) => {
-      const candidate = scryptSync(pin, t.pinSalt, 32);
-      const stored = Buffer.from(t.pinHash, "hex");
-      return candidate.length === stored.length && timingSafeEqual(candidate, stored);
-    });
+    const match = candidates.find((t) => verifyPin(pin, t.pinHash, t.pinSalt));
     if (!match) {
+      await recordFailure(pgThrottleStore, keys);
       return jsonWithSessionHint(sessionHint, NOT_FOUND, { status: 404 });
     }
+    await recordSuccess(pgThrottleStore, keys);
 
     const summary: PrivateTournamentSummary = {
       tournamentId: match.tournamentId,

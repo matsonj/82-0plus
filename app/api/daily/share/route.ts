@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
-import { authenticate, getDailyResult } from "@/lib/dailyResults";
+import { getDailyResult } from "@/lib/dailyResults";
+import { requireAuth } from "@/lib/apiAuth";
 import { getUserTeams } from "@/lib/tournamentQueries";
 import { signDailyShare, toDailyShareRoster } from "@/lib/dailyShareToken";
 import { assertTournamentSecret } from "@/lib/secret";
@@ -23,10 +24,8 @@ export async function POST(req: NextRequest) {
     // Fail before authenticate() (which can create an account) if signing is
     // misconfigured — never mutate when we couldn't return a valid token anyway.
     assertTournamentSecret();
-    const auth = await authenticate(String(body?.name ?? ""), String(body?.pin ?? ""));
-    if (!auth.ok) {
-      return jsonWithSessionHint(sessionHint, { error: auth.reason }, { status: 401 });
-    }
+    const auth = await requireAuth(req, sessionHint, body?.name, body?.pin);
+    if (!auth.ok) return auth.response;
     const result = await getDailyResult(auth.userId, date);
     if (!result) {
       return jsonWithSessionHint(sessionHint, { error: "no result for that date" }, { status: 404 });

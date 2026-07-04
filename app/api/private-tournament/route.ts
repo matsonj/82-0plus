@@ -14,6 +14,7 @@ import {
   purgeStaleIncompleteEntries,
 } from "@/lib/privateTournamentQueries";
 import { findExistingUserByCredentials } from "@/lib/dailyResults";
+import { clientIp } from "@/lib/apiAuth";
 import { finalizePrivate } from "@/lib/privateTournamentFinalize";
 import type { BracketResult } from "@/lib/types";
 
@@ -172,8 +173,12 @@ export async function POST(req: NextRequest) {
       return jsonWithSessionHint(sessionHint, { error: "tournament not found" }, { status: 404 });
     }
 
-    // ---- Resolve entrant identity (existing accounts only; NEVER creates). ----
-    const viewer = await findExistingUserByCredentials(body?.name, body?.pin);
+    // ---- Resolve entrant identity (existing accounts only; NEVER creates). The
+    // shared throttle (#107) covers this create-free verifier too; a lockout just
+    // yields no entrant state (you:null), the same as a credential miss. ----
+    const viewer = await findExistingUserByCredentials(body?.name, body?.pin, {
+      ip: clientIp(req),
+    });
     if (!viewer) {
       // No creds / bad creds / no such account → no entrant-specific state.
       return jsonWithSessionHint(sessionHint, { you: null });
