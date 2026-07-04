@@ -11,7 +11,7 @@
 // overrides change them.
 // ============================================================================
 
-import type { ScoringPlayer } from "../scoring";
+import { toScoring } from "../scoring";
 import type { IndexedPlayer } from "../queries";
 import type { SimPick } from "../types";
 import type { HydratedTeam, PlayerMeta } from "./types";
@@ -54,31 +54,6 @@ export function buildDebutMap(pool: IndexedPlayer[]): Map<string, number> {
     if (p.debut != null && !map.has(p.entity_id)) map.set(p.entity_id, p.debut);
   }
   return map;
-}
-
-/** Map an indexed player into the scoring shape (mirrors tournamentQueries.toScoring). */
-function toScoring(p: IndexedPlayer): ScoringPlayer {
-  return {
-    gq: p.value,
-    season: p.best_season,
-    mpg: p.mpg,
-    pts: p.pts,
-    reb: p.reb,
-    ast: p.ast,
-    stl: p.stl,
-    blk: p.blk,
-    fga: p.fga,
-    fg3a: p.fg3a,
-    fg3m: p.fg3m,
-    fta: p.fta,
-    tov: p.tov,
-    fgm: p.fgm,
-    ftm: p.ftm,
-    tsplus: Number.isFinite(p.tsplus) ? p.tsplus : 1,
-    height_in: Number.isFinite(p.height_in) ? p.height_in : DEFAULT_HEIGHT,
-    pos: p.pos ?? null,
-    allDef: p.all_def ?? 0,
-  };
 }
 
 function metaOf(p: IndexedPlayer): PlayerMeta {
