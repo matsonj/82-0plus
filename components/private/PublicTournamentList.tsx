@@ -30,7 +30,7 @@ function timeLeft(expiresAt: string): string {
   return hrs < 48 ? `${hrs}h left` : `${Math.floor(hrs / 24)}d left`;
 }
 
-function PublicRow({ t }: { t: PublicTournamentSummary }) {
+function PublicRow({ t, entered }: { t: PublicTournamentSummary; entered: boolean }) {
   const { text: spots, full } = formatPublicSpots(t.entryCount, t.size);
   const ranked = t.mode === "hoopiq";
   return (
@@ -92,18 +92,40 @@ function PublicRow({ t }: { t: PublicTournamentSummary }) {
         </span>
       </span>
 
-      {/* Join affordance / Full state */}
-      <span
-        className="w-[58px] shrink-0 text-right font-cond text-[12px] font-semibold uppercase tracking-[0.06em]"
-        style={{ color: full ? "var(--md-coral-deep)" : "var(--md-cobalt)" }}
-      >
-        {full ? "Full" : "Join →"}
-      </span>
+      {/* Join affordance / Full state — or the "already in" pill (takes
+          precedence over Full; the row still links to the tournament) */}
+      {entered ? (
+        <span
+          className="shrink-0 font-cond text-[11px] font-semibold uppercase tracking-[0.06em]"
+          style={{
+            background: "var(--md-teal)",
+            color: "var(--md-white)",
+            border: "2px solid var(--md-ink)",
+            borderRadius: 999,
+            padding: "2px 11px",
+          }}
+        >
+          Entered ✓
+        </span>
+      ) : (
+        <span
+          className="w-[58px] shrink-0 text-right font-cond text-[12px] font-semibold uppercase tracking-[0.06em]"
+          style={{ color: full ? "var(--md-coral-deep)" : "var(--md-cobalt)" }}
+        >
+          {full ? "Full" : "Join →"}
+        </span>
+      )}
     </Link>
   );
 }
 
-export function PublicTournamentList() {
+export function PublicTournamentList({
+  enteredIds,
+}: {
+  // Tournament ids the current user has already entered (from the parent's
+  // /my feed) — those rows swap the Join affordance for an "Entered" pill.
+  enteredIds?: ReadonlySet<string>;
+}) {
   const [rows, setRows] = useState<PublicTournamentSummary[] | null>(null);
 
   useEffect(() => {
@@ -158,7 +180,11 @@ export function PublicTournamentList() {
       )}
       <div style={{ borderTop: "2px solid var(--md-ink)" }}>
         {rows.map((t) => (
-          <PublicRow key={t.tournamentId} t={t} />
+          <PublicRow
+            key={t.tournamentId}
+            t={t}
+            entered={enteredIds?.has(t.tournamentId) ?? false}
+          />
         ))}
       </div>
     </div>
