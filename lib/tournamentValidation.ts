@@ -147,13 +147,18 @@ export function validatePin(s: string): boolean {
 // ── Profanity (best-effort) ────────────────────────────────────────────────────
 
 // This is a kids-friendly arcade game, so we reject obviously-bad names. This is
-// a BEST-EFFORT substring filter, not a guarantee — a determined adult can still
-// smuggle something past it, and conversely it may catch an innocent substring
-// (the classic "Scunthorpe problem"). It is intentionally short and tasteful:
-// only unambiguous English profanities/slurs belong here. Keep it lean.
+// a BEST-EFFORT filter, not a guarantee — a determined adult can still smuggle
+// something past it. It is intentionally short and tasteful: only unambiguous
+// English profanities/slurs belong here. Keep it lean.
+//
+// Two lists, to dodge the classic "Scunthorpe problem": DENYLIST words are
+// matched as SUBSTRINGS (catches "XFUCKX"), so every entry must be a string that
+// can't appear inside an innocent word. Short words that do ("ASS" is in CLASSIC,
+// PASS, BASS, ASSIST…) live in EXACT_DENYLIST instead and only reject a name
+// when a whole TOKEN is that word — genuinely-bad compounds are listed
+// explicitly ("JACKASS").
 const DENYLIST: readonly string[] = [
   // common profanities
-  "ASS",
   "ASSHOLE",
   "BASTARD",
   "BITCH",
@@ -163,8 +168,10 @@ const DENYLIST: readonly string[] = [
   "DAMN",
   "DICK",
   "DOUCHE",
+  "DUMBASS",
   "FART",
   "FUCK",
+  "JACKASS",
   "PISS",
   "PRICK",
   "SHIT",
@@ -182,6 +189,22 @@ const DENYLIST: readonly string[] = [
   "SPIC",
   "TRANNY",
 ] as const;
+
+// Ambiguous short words: profane on their own, innocent inside longer words.
+// Checked TOKEN-BY-TOKEN, not by substring — names allow spaces, so we split the
+// (normalized and leet-folded) name into LETTER runs and reject if any whole
+// token equals an entry. Letter runs (not alphanumeric) so digit decoration
+// can't dodge the check: "ASS1"/"1ASS" tokenize to ["ASS"] and are rejected —
+// as are "ASS TEAM", "A$$" and "MY A55" (via the folded form) — while
+// "CLASSIC", "PASS THE ROCK", "PASS2" and "CLA55IC" sail through. Decorated
+// forms ("ASSX", "A551" → folds to "ASSI") pass: decoration is exactly what
+// innocent containment looks like, and this filter is best-effort by design.
+const EXACT_DENYLIST: readonly string[] = ["ASS"] as const;
+
+/** Split an (already uppercased) name into its letter-run tokens. */
+function tokenize(s: string): string[] {
+  return s.split(/[^A-Z]+/).filter((t) => t.length > 0);
+}
 
 // Leet-fold: collapse the symbol/digit tricks players use to dodge the filter
 // back to their letter (`CR@P`, `CR4P` → `CRAP`). Multi-char sequences (`()` → O,
@@ -213,13 +236,20 @@ function leetFold(s: string): string {
 }
 
 /**
- * Best-effort profanity check. Normalizes the input, then looks for any denylist
+ * Best-effort profanity check. Normalizes the input, then looks for any DENYLIST
  * word as a SUBSTRING of either the raw normalized name OR its leet-folded form.
- * Substring (not whole-word) matching is deliberate — names have no spaces, so a
- * banned word is usually embedded ("XFUCKX"). Exported so it's unit-testable.
+ * Substring matching is deliberate — a banned word is usually embedded
+ * ("XFUCKX") — but is only safe for words that can't hide in innocent names;
+ * EXACT_DENYLIST words are compared against whole letter-run TOKENS instead
+ * ("ASS", "ASS TEAM" and "ASS1" bad, "CLASSIC" fine). Exported so it's
+ * unit-testable.
  */
 export function isProfane(s: string): boolean {
   const name = normalizeName(s);
   const folded = leetFold(name);
-  return DENYLIST.some((w) => name.includes(w) || folded.includes(w));
+  const tokens = [...tokenize(name), ...tokenize(folded)];
+  return (
+    DENYLIST.some((w) => name.includes(w) || folded.includes(w)) ||
+    EXACT_DENYLIST.some((w) => tokens.includes(w))
+  );
 }
