@@ -190,7 +190,7 @@ export default async function SharePage({
 
           {/* ── RIGHT: roster panel — ink cover card ── */}
           <div
-            className="flex flex-1 flex-col border-2 border-[var(--md-coral)] p-6 lg:p-8"
+            className="flex flex-1 flex-col border-[3px] border-[var(--md-coral)] p-6 lg:p-8"
             style={{
               background: "var(--md-ink)",
               boxShadow: "var(--md-shadow-pop)",

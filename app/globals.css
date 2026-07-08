@@ -21,6 +21,9 @@
   --md-paper-2: #e1d9c6;      /* recessed wells / zebra fill */
   --md-paper-3: #cfc5ad;      /* hairlines, muted dividers */
   --md-white: #fbf8ef;        /* brightest "coated insert" stock — clean card / data field */
+  --md-ink-3: #0d0a08;        /* deepest band — sits BELOW ink, for dark hero bands / grounds */
+  --md-ink-line: #3a322a;     /* hairlines / dividers / borders ON ink (dark) grounds */
+  --md-cream-muted: #b8ac90;  /* muted label / caption text ON ink / dark grounds (AA-safe) */
 
   /* ---- Spot inks ---- */
   --md-yellow: #ffc400;       /* press-yellow — second ink: highlight, champion gold, badges */
@@ -45,6 +48,7 @@
   --md-shadow-md: 5px 5px 0 0 var(--md-ink);
   --md-shadow-lg: 8px 8px 0 0 var(--md-ink);
   --md-shadow-pop: 6px 6px 0 0 var(--md-coral); /* flame offset — hero CTA / cover cards */
+  --md-overlay: rgba(21, 17, 14, 0.75); /* modal / dialog scrim = --md-ink @ 75% */
 
   /* ---- Type: seven editorial voices (defined in app/layout.tsx) ---- */
   --font-cover: var(--font-anton), "Arial Narrow", sans-serif;          /* hero cover line */
@@ -177,7 +181,12 @@ body {
   .md-btn--ink { background: var(--md-ink); color: var(--md-white); border-color: var(--md-coral); }
   .md-btn--teal { background: var(--md-teal); color: var(--md-white); }
   .md-btn--yellow { background: var(--md-yellow); color: var(--md-ink); }
+  /* clean stock fill, flame text — the "quiet" primary (e.g. Draft on a card) */
+  .md-btn--invert { background: var(--md-white); color: var(--md-coral); }
   .md-btn--lg { padding: 17px 34px; font-size: 18px; }
+  /* hero CTA: heavier 3px border + flame-pop offset (result / cover surfaces) */
+  .md-btn--hero { padding: 17px 34px; font-size: 18px; border-width: 3px; box-shadow: var(--md-shadow-pop); }
+  .md-btn--hero:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 0 var(--md-coral); }
   .md-btn--sm { padding: 8px 14px; font-size: 12px; box-shadow: var(--md-shadow-sm); }
   .md-btn--sm:hover:not(:disabled) {
     transform: translate(-1px, -1px);
@@ -347,6 +356,10 @@ body {
   letter-spacing: 0.04em;
   /* misregistration double-shadow (2-color-press-slightly-off) */
   box-shadow: 3px 3px 0 var(--md-magenta), 5px 5px 0 var(--md-ink);
+}
+/* inline stamp treatment (e.g. TeamGradeBadge): single hard offset, no misregistration */
+.md-stamp--sm {
+  box-shadow: var(--md-shadow-sm);
 }
 
 /* ---------- Ticker / marquee ---------- */

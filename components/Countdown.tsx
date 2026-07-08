@@ -26,7 +26,7 @@ export function Countdown() {
   }, []);
 
   return (
-    <span className="tabular-nums" suppressHydrationWarning>
+    <span className="font-mono tabular-nums" suppressHydrationWarning>
       {left}
     </span>
   );

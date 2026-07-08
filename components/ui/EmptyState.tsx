@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/Card";
+import { cx } from "@/components/ui/classNames";
 
 export function EmptyState({
   title,
@@ -11,7 +12,7 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <Card className={`flex flex-col gap-1 p-5 text-center ${className ?? ""}`}>
+    <Card className={cx("flex flex-col gap-1 p-5 text-center", className)}>
       <div
         className="font-archivo leading-tight"
         style={{

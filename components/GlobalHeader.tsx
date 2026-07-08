@@ -217,7 +217,7 @@ export function GlobalHeader({
     "font-cond text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--md-paper)] transition-colors hover:text-[var(--md-coral)]";
   // Mobile menu row — full-width tap target, hairline-divided.
   const mobileLinkCls =
-    "block border-b border-[#3a322a] py-3 text-left font-cond text-[15px] font-semibold uppercase tracking-[0.12em] text-[var(--md-paper)] transition-colors hover:text-[var(--md-coral)]";
+    "block border-b border-[var(--md-ink-line)] py-3 text-left font-cond text-[15px] font-semibold uppercase tracking-[0.12em] text-[var(--md-paper)] transition-colors hover:text-[var(--md-coral)]";
   // Mobile menu rows (order mirrors the desktop nav). Sign In folds in here too —
   // the standalone chip/button is hidden below sm so the bar stays uncluttered.
   const menuItems: { label: string; href?: string; action?: () => void }[] = [
@@ -293,7 +293,7 @@ export function GlobalHeader({
 
           {right}
 
-          <span className="hidden h-6 w-px bg-[#3a322a] sm:block" />
+          <span className="hidden h-6 w-px bg-[var(--md-ink-line)] sm:block" />
 
           {/* Alerts: a press-yellow star at rest, flame when there's activity. */}
           <div className="relative">
@@ -301,12 +301,12 @@ export function GlobalHeader({
               type="button"
               aria-label={pop ? "Alerts (new activity)" : "Alerts"}
               onClick={() => (open ? closePanel() : openPanel())}
-              className="relative flex h-9 w-9 items-center justify-center border-2 border-[#3a322a] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5 sm:h-10 sm:w-10"
+              className="relative flex h-9 w-9 items-center justify-center border-2 border-[var(--md-ink-line)] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5 sm:h-10 sm:w-10"
               style={{ cursor: "pointer" }}
             >
               <span
                 aria-hidden
-                className="font-display leading-none transition-colors"
+                className="font-cond leading-none transition-colors"
                 style={{
                   fontSize: 18,
                   fontWeight: 700,
@@ -324,14 +324,14 @@ export function GlobalHeader({
               style={{ background: "var(--md-white)" }}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+                <span className="font-cond text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
                   Alerts
                 </span>
                 <button
                   type="button"
                   aria-label="Close"
                   onClick={closePanel}
-                  className="font-display text-sm text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
+                  className="font-cond text-sm text-[var(--md-ink-muted)] hover:text-[var(--md-coral)]"
                 >
                   ✕
                 </button>
@@ -342,7 +342,7 @@ export function GlobalHeader({
                   className="mb-2 flex flex-col gap-0.5 p-2"
                   style={{ background: "var(--md-paper-2)" }}
                 >
-                  <span className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-blue)]">
+                  <span className="font-cond text-[10px] font-bold uppercase tracking-wide text-[var(--md-blue)]">
                     {CHANGELOG.label}
                   </span>
                   <span className="text-[12px] leading-snug text-[var(--md-ink)]">
@@ -351,7 +351,7 @@ export function GlobalHeader({
                 </Card>
               )}
 
-              <span className="font-display text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+              <span className="font-cond text-[10px] font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
                 Tournaments
               </span>
               <div className="mt-1">
@@ -445,7 +445,7 @@ export function GlobalHeader({
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center border-2 border-[#3a322a] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5 sm:hidden"
+            className="flex h-9 w-9 shrink-0 items-center justify-center border-2 border-[var(--md-ink-line)] bg-[var(--md-ink-2)] transition-transform hover:-translate-y-0.5 sm:hidden"
             style={{ cursor: "pointer" }}
           >
             {menuOpen ? (
@@ -506,20 +506,24 @@ function NotifRow({
   return (
     <Link
       href={`/p/${t.tournamentId}`}
-      className="md-card flex flex-col gap-0.5 p-2 transition-transform hover:translate-x-[-1px] hover:translate-y-[-1px]"
-      style={{ background: "var(--md-paper-2)" }}
+      className="block transition-transform hover:translate-x-[-1px] hover:translate-y-[-1px]"
     >
-      <span className="font-display text-[13px] font-bold leading-tight break-words">
-        {t.tournamentName}
-      </span>
-      <span className="font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
-        {label} ·{" "}
-        {kind === "completed"
-          ? t.championName
-            ? `🏆 ${t.championName}`
-            : "Final ready"
-          : formatPrivateEntryStatus(t.entryStatus)}
-      </span>
+      <Card
+        className="flex flex-col gap-0.5 p-2"
+        style={{ background: "var(--md-paper-2)" }}
+      >
+        <span className="font-archivo text-[13px] font-bold leading-tight break-words">
+          {t.tournamentName}
+        </span>
+        <span className="font-cond text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+          {label} ·{" "}
+          {kind === "completed"
+            ? t.championName
+              ? `🏆 ${t.championName}`
+              : "Final ready"
+            : formatPrivateEntryStatus(t.entryStatus)}
+        </span>
+      </Card>
     </Link>
   );
 }

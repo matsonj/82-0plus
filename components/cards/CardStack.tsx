@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Card } from "@/components/ui/Card";
 
 export function CardStack({
   team,
@@ -27,10 +28,7 @@ export function CardStack({
           className="pointer-events-none absolute inset-0 -translate-y-1 translate-x-1 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)]"
         />
       )}
-      <div
-        className="relative flex flex-col border-2 border-[var(--md-ink)] bg-[var(--md-white)]"
-        style={{ boxShadow: "var(--md-shadow-md)" }}
-      >
+      <Card lift className="relative flex flex-col">
         <div className="flex items-center justify-between border-b border-[var(--md-paper-3)] bg-[var(--md-white)] px-2 py-1">
           <span className="font-cond text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--md-ink-muted)]">
             Deck
@@ -59,7 +57,7 @@ export function CardStack({
           </div>
         </div>
         <div className="h-[3px] w-full" style={{ background: "var(--md-coral)" }} />
-      </div>
+      </Card>
     </Link>
   );
 }

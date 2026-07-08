@@ -16,7 +16,7 @@ export function Notice({
 }) {
   const color =
     tone === "error"
-      ? "border-[var(--md-coral)] text-[var(--md-coral)]"
+      ? "border-[var(--md-coral-deep)] text-[var(--md-coral-deep)]"
       : tone === "success"
         ? "border-[var(--md-teal)] text-[var(--md-teal)]"
         : "border-[var(--md-ink)] text-[var(--md-ink-muted)]";

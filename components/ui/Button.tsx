@@ -2,8 +2,14 @@ import Link from "next/link";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 import { cx } from "@/components/ui/classNames";
 
-export type ButtonVariant = "primary" | "secondary" | "ink" | "teal" | "yellow";
-export type ButtonSize = "sm" | "md" | "lg";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ink"
+  | "teal"
+  | "yellow"
+  | "invert";
+export type ButtonSize = "sm" | "md" | "lg" | "hero";
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   primary: "",
@@ -11,12 +17,14 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   ink: "md-btn--ink",
   teal: "md-btn--teal",
   yellow: "md-btn--yellow",
+  invert: "md-btn--invert",
 };
 
 const SIZE_CLASS: Record<ButtonSize, string> = {
   sm: "md-btn--sm",
   md: "",
   lg: "md-btn--lg",
+  hero: "md-btn--hero",
 };
 
 type ButtonChromeProps = {

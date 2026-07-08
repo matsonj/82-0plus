@@ -63,7 +63,7 @@ export function DeleteTournamentControl({
             type="button"
             disabled={busy}
             onClick={confirmDelete}
-            className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-coral)] underline underline-offset-2 disabled:opacity-50"
+            className="font-cond text-xs font-bold uppercase tracking-wide text-[var(--md-coral)] underline underline-offset-2 disabled:opacity-50"
           >
             {busy ? "Deleting…" : "Confirm delete?"}
           </button>
@@ -71,7 +71,7 @@ export function DeleteTournamentControl({
             type="button"
             disabled={busy}
             onClick={() => setArmed(false)}
-            className="font-display text-xs uppercase tracking-wide text-[var(--md-ink-muted)] underline underline-offset-2 disabled:opacity-50"
+            className="font-cond text-xs uppercase tracking-wide text-[var(--md-ink-muted)] underline underline-offset-2 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -80,13 +80,13 @@ export function DeleteTournamentControl({
         <button
           type="button"
           onClick={() => setArmed(true)}
-          className="font-display text-xs uppercase tracking-wide text-[var(--md-coral)] underline underline-offset-2"
+          className="font-cond text-xs uppercase tracking-wide text-[var(--md-coral)] underline underline-offset-2"
         >
           Delete tournament
         </button>
       )}
       {error && (
-        <p className="font-display text-[11px] text-[var(--md-coral)]">{error}</p>
+        <p className="font-cond text-[11px] text-[var(--md-coral)]">{error}</p>
       )}
     </div>
   );

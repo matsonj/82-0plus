@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import { PageShell } from "@/components/layout/PageShell";
-import { Button, ButtonLink } from "@/components/ui";
+import { Button, ButtonLink, Card } from "@/components/ui";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { PrivateTournamentLobby } from "@/components/private/PrivateTournamentLobby";
 import { PrivateTournamentResult } from "@/components/private/PrivateTournamentResult";
@@ -105,25 +105,19 @@ export default function PrivateTournamentPage({
         )}
 
         {status === "retry" && (
-          <div
-            className="mx-auto flex max-w-md flex-col items-center gap-3 border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-5 text-center"
-            style={{ boxShadow: "var(--md-shadow-md)" }}
-          >
+          <Card lift className="mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
             <p className="font-cond text-base font-semibold uppercase tracking-wide">
               Wrapping up…
             </p>
-            <p className="font-display text-[13px] text-[var(--md-ink-muted)]">{errorMsg}</p>
+            <p className="font-sans text-[13px] text-[var(--md-ink-muted)]">{errorMsg}</p>
             <Button size="sm" onClick={() => void load()}>
               ↻ Retry
             </Button>
-          </div>
+          </Card>
         )}
 
         {status === "error" && (
-          <div
-            className="mx-auto max-w-md border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-5 text-center"
-            style={{ boxShadow: "var(--md-shadow-md)" }}
-          >
+          <Card lift className="mx-auto max-w-md p-5 text-center">
             <p className="font-cond text-base font-semibold uppercase tracking-wide">
               {errorMsg ?? "Tournament not found."}
             </p>
@@ -135,7 +129,7 @@ export default function PrivateTournamentPage({
             >
               My teams
             </ButtonLink>
-          </div>
+          </Card>
         )}
 
         {status === "ok" && data?.status === "open" && (

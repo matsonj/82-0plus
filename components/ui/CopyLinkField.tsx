@@ -92,7 +92,7 @@ export function CopyLinkField({
         </div>
       )}
       {hint && (
-        <span className="font-mono text-[11px] text-[var(--md-ink-muted)]">
+        <span className="font-sans text-[11px] text-[var(--md-ink-muted)]">
           {hint}
         </span>
       )}

@@ -244,19 +244,19 @@ export function DailyShareLanding({
 
         {/* ── Self-link note ── */}
         {isSelfLink && (
-          <p className="mt-4 font-mono text-[13px] text-[var(--md-ink-muted)]">
+          <p className="mt-4 font-sans text-[13px] text-[var(--md-ink-muted)]">
             This is your own share link. Send it to friends to see who can beat your run.
           </p>
         )}
 
         {/* ── Loading / Error / Sign-in states ── */}
         {state.kind === "loading" && (
-          <p className="mt-6 font-mono text-[13px] text-[var(--md-ink-muted)]">
+          <p className="mt-6 font-sans text-[13px] text-[var(--md-ink-muted)]">
             Checking your account…
           </p>
         )}
         {state.kind === "error" && (
-          <p className="mt-6 font-mono text-[13px]" style={{ color: "var(--md-coral)" }}>
+          <p className="mt-6 font-sans text-[13px]" style={{ color: "var(--md-coral)" }}>
             Couldn&rsquo;t reach the league. Try again.
           </p>
         )}
@@ -323,13 +323,13 @@ export function DailyShareLanding({
         {state.kind === "play" && (
           <div className="mt-8">
             {sharer && !isSelfLink && (
-              <p className="mb-4 font-mono text-[14px] text-[var(--md-ink)]">
+              <p className="mb-4 font-sans text-[14px] text-[var(--md-ink)]">
                 <strong style={{ color: "var(--md-coral)" }}>{sharer.name}</strong>{" "}
                 went{" "}
-                <strong>
+                <strong className="font-mono">
                   {sharer.wins}&ndash;{sharer.losses}
                 </strong>{" "}
-                ({sign(sharer.margin)}). The same five team/era rolls are waiting for you.
+                (<span className="font-mono">{sign(sharer.margin)}</span>). The same five team/era rolls are waiting for you.
               </p>
             )}
             <a
@@ -356,13 +356,13 @@ export function DailyShareLanding({
       {state.kind === "signin" && (
         <div className="relative z-10 mt-8 w-full max-w-md">
           {sharer && !isSelfLink && (
-            <p className="mb-4 font-mono text-[14px] text-[var(--md-ink)]">
+            <p className="mb-4 font-sans text-[14px] text-[var(--md-ink)]">
               <strong style={{ color: "var(--md-coral)" }}>{sharer.name}</strong>{" "}
               went{" "}
-              <strong>
+              <strong className="font-mono">
                 {sharer.wins}&ndash;{sharer.losses}
               </strong>{" "}
-              ({sign(sharer.margin)}). Sign in to take on the challenge.
+              (<span className="font-mono">{sign(sharer.margin)}</span>). Sign in to take on the challenge.
             </p>
           )}
           <DailySignIn
@@ -630,7 +630,7 @@ function GqDiff({
       style={{
         background: v.ahead ? "var(--md-yellow)" : "var(--md-coral)",
         color: v.ahead ? "var(--md-ink)" : "var(--md-white)",
-        boxShadow: v.ahead ? "2px 2px 0 0 #e0218a" : "2px 2px 0 0 var(--md-yellow)",
+        boxShadow: v.ahead ? "2px 2px 0 0 var(--md-magenta)" : "2px 2px 0 0 var(--md-yellow)",
         padding: v.big ? "4px 12px" : "3px 10px",
         fontSize: v.big ? 18 : 15,
         lineHeight: v.big ? "20px" : "16px",
@@ -745,7 +745,9 @@ function YourPicks({ you }: { you: DailyResult }) {
         {(["#", "Team · Era", "Player", "PTS", "REB", "AST"] as const).map((h) => (
           <span
             key={h}
-            className="font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]"
+            className={`font-cond text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)] ${
+              h === "PTS" || h === "REB" || h === "AST" ? "text-right" : ""
+            }`}
           >
             {h}
           </span>

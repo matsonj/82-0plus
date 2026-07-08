@@ -28,8 +28,7 @@ import { TournamentEntry } from "@/components/TournamentEntry";
 import { PageShell } from "@/components/layout/PageShell";
 import { HomeMenu } from "@/components/home/HomeMenu";
 import { HomeLiveBar } from "@/components/home/HomeLiveBar";
-import Link from "next/link";
-import { Button, Capsule, Card } from "@/components/ui";
+import { Button, ButtonLink, Capsule, Card } from "@/components/ui";
 import { HowToPlay } from "@/components/HowToPlay";
 import { Countdown } from "@/components/Countdown";
 import { track } from "@vercel/analytics";
@@ -1092,7 +1091,7 @@ export default function Home() {
               the field once submitted; otherwise joinable public tournaments, only
               when one has room. */}
           {enteredTournament ? (
-            <div className="mt-4 flex flex-col gap-2 border-t border-white/16 pt-4">
+            <div className="mt-4 flex flex-col gap-2 border-t border-[var(--md-ink-line)] pt-4">
               <span className="text-[13px] text-[var(--md-paper-3)]">
                 {enteredTournament.needsFinish ? (
                   <>Your entry in {enteredTournament.name} isn&rsquo;t finished.</>
@@ -1102,10 +1101,11 @@ export default function Home() {
                   <>You&rsquo;re in {enteredTournament.count} tournaments.</>
                 )}
               </span>
-              <Link
+              <ButtonLink
                 href={enteredTournament.href}
-                className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] px-4 py-2.5 font-cond text-[14px] font-semibold uppercase tracking-[0.06em] text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
-                style={{ background: "var(--md-yellow)" }}
+                variant="yellow"
+                fullWidth
+                className="justify-between"
               >
                 <span className="inline-flex items-center gap-2">
                   <span
@@ -1122,17 +1122,18 @@ export default function Home() {
                   )}
                 </span>
                 <span aria-hidden>→</span>
-              </Link>
+              </ButtonLink>
             </div>
           ) : joinablePublicCount && joinablePublicCount > 0 ? (
-            <div className="mt-4 flex flex-col gap-2 border-t border-white/16 pt-4">
+            <div className="mt-4 flex flex-col gap-2 border-t border-[var(--md-ink-line)] pt-4">
               <span className="text-[13px] text-[var(--md-paper-3)]">
                 Daily&rsquo;s in the books — now go for a ring.
               </span>
-              <Link
+              <ButtonLink
                 href={joinPublicHref}
-                className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] px-4 py-2.5 font-cond text-[14px] font-semibold uppercase tracking-[0.06em] text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
-                style={{ background: "var(--md-yellow)" }}
+                variant="yellow"
+                fullWidth
+                className="justify-between"
               >
                 <span className="inline-flex items-center gap-2">
                   <span
@@ -1148,7 +1149,7 @@ export default function Home() {
                   </span>
                   <span aria-hidden>→</span>
                 </span>
-              </Link>
+              </ButtonLink>
             </div>
           ) : null}
         </>
@@ -1161,19 +1162,20 @@ export default function Home() {
             The same five team/era rolls for everyone today. Build your roster,
             then compare records.
           </p>
-          <button
-            className="mt-5 flex w-full items-center justify-between gap-3 border-[2.5px] border-[var(--md-paper)] bg-[var(--md-coral)] p-4 text-left text-[var(--md-white)] transition-transform hover:-translate-y-0.5 disabled:opacity-70"
-            style={{ boxShadow: "6px 6px 0 0 var(--md-ink-2)" }}
+          <Button
+            size="hero"
+            fullWidth
+            className="mt-5 justify-between"
             disabled={dailyChecking}
             onClick={() => playDaily()}
           >
             <span className="font-cond text-[19px] font-bold uppercase tracking-[0.07em]">
               Play today&rsquo;s challenge
             </span>
-            <span className="font-display text-xl font-bold" aria-hidden>
+            <span className="font-cond text-xl font-bold" aria-hidden>
               →
             </span>
-          </button>
+          </Button>
           <div className="mt-3 flex items-center gap-2">
             <span aria-hidden>🔒</span>
             <span className="font-byline text-[12px] text-[var(--md-paper-3)]">
@@ -1191,7 +1193,7 @@ export default function Home() {
       )}
       {dailyGateError && (
         <div className="mt-3 flex w-full flex-col items-center gap-2 border-2 border-[var(--md-coral)] bg-[var(--md-ink-2)] p-3">
-          <p className="font-display text-[13px] text-[var(--md-coral)]">
+          <p className="font-sans text-[13px] text-[var(--md-coral)]">
             {dailyGateError}
           </p>
           <Button
@@ -1307,7 +1309,7 @@ export default function Home() {
       {phase === "play" && !booting && !result && !loaded && (
         <section className="relative z-10 mx-auto mt-6 w-full max-w-lg">
           <Card lift className="p-5 text-center">
-            <p className="font-display text-base font-bold">
+            <p className="font-sans text-base font-bold">
               Couldn&rsquo;t start the game.
             </p>
             <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
@@ -1337,7 +1339,7 @@ export default function Home() {
       {phase === "play" && loaded && !result && error && (
         <div className="relative z-10 mx-auto mt-6 max-w-lg">
           <Card className="border-[var(--md-coral)] p-4">
-            <p className="font-display text-sm">{error}</p>
+            <p className="font-sans text-sm">{error}</p>
           </Card>
         </div>
       )}
@@ -1455,7 +1457,7 @@ export default function Home() {
 
           {draftDone && (
             <div className="flex flex-col items-center gap-3">
-              <div className="font-display text-sm">
+              <div className="font-sans text-sm">
                 Five drafted, positions covered. Time to find out.
               </div>
               <Button
@@ -1472,7 +1474,7 @@ export default function Home() {
       )}
 
       {phase === "play" && booting && !result && (
-        <div className="relative z-10 py-20 text-center font-display text-sm text-[var(--md-ink-muted)]">
+        <div className="relative z-10 py-20 text-center font-sans text-sm text-[var(--md-ink-muted)]">
           Spinning up the league…
         </div>
       )}

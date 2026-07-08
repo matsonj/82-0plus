@@ -145,7 +145,7 @@ function TheFiveCard({
       style={{
         fontSize: 12,
         letterSpacing: "0.16em",
-        color: "#9a8f79",
+        color: "var(--md-cream-muted)",
         ...(width ? { width, flexShrink: 0 } : { flex: 1 }),
       }}
     >
@@ -171,7 +171,7 @@ function TheFiveCard({
             style={{
               fontSize: 12,
               letterSpacing: "0.16em",
-              color: "#9a8f79",
+              color: "var(--md-cream-muted)",
               width: statW,
               flexShrink: 0,
               marginLeft: gqGap,
@@ -226,7 +226,7 @@ function TheFiveCard({
           bottom: 0,
           right: gqDividerRight,
           width: 1,
-          background: "#4a4036",
+          background: "var(--md-ink-line)",
           pointerEvents: "none",
         }}
       />
@@ -256,7 +256,7 @@ function TheFiveCard({
                   style={{
                     width: 26,
                     height: 26,
-                    border: "1.5px solid var(--md-yellow)",
+                    border: "2px solid var(--md-yellow)",
                     color: "var(--md-yellow)",
                     fontSize: 14,
                   }}
@@ -274,7 +274,7 @@ function TheFiveCard({
                 </div>
                 <div
                   className="font-mono leading-none mt-1"
-                  style={{ fontSize: 12, letterSpacing: "0.02em", color: "#7a7060" }}
+                  style={{ fontSize: 12, letterSpacing: "0.02em", color: "var(--md-cream-muted)" }}
                 >
                   {firstName} · {r.team} &rsquo;{yearStr}
                 </div>
@@ -338,7 +338,7 @@ function MobileFiveTable({
   const headStyle = {
     fontSize: 10,
     letterSpacing: "0.08em",
-    color: "#5c564b",
+    color: "var(--md-ink-muted)",
   } as const;
   return (
     <div className="lg:hidden">
@@ -352,7 +352,7 @@ function MobileFiveTable({
         </h3>
         <span
           className="font-mono uppercase"
-          style={{ fontSize: 11, letterSpacing: "0.06em", color: "#7a7060" }}
+          style={{ fontSize: 11, letterSpacing: "0.06em", color: "var(--md-ink-muted)" }}
         >
           Starters
         </span>
@@ -404,7 +404,7 @@ function MobileFiveTable({
           const row = (
             <div
               className="flex items-center gap-1 py-[11px]"
-              style={{ borderBottom: isLast ? "2px solid var(--md-ink)" : "1px solid #c9c0ad" }}
+              style={{ borderBottom: isLast ? "2px solid var(--md-ink)" : "1px solid var(--md-paper-3)" }}
             >
               {/* Filled ink seed chip with gold numeral */}
               <span
@@ -424,7 +424,7 @@ function MobileFiveTable({
                 </div>
                 <div
                   className="font-mono uppercase leading-none"
-                  style={{ fontSize: 11, letterSpacing: "0.04em", color: "#7a7060" }}
+                  style={{ fontSize: 11, letterSpacing: "0.04em", color: "var(--md-ink-muted)" }}
                 >
                   {r.team} &rsquo;{yearStr}
                 </div>
@@ -464,7 +464,7 @@ function MobileFiveTable({
         {/* GQ divider — hairline fencing the rating off from the box scores. */}
         <div
           aria-hidden
-          style={{ position: "absolute", top: 0, bottom: 0, right: 45, width: 1, background: "#b8ac90", pointerEvents: "none" }}
+          style={{ position: "absolute", top: 0, bottom: 0, right: 45, width: 1, background: "var(--md-cream-muted)", pointerEvents: "none" }}
         />
       </div>
     </div>
@@ -942,24 +942,10 @@ export function ResultsPanel({
                     Ineligible: a quiet ledger note explaining the 40-win gate (NOT
                     a button). Absent action: nothing renders here. */}
                 {onEnterTournament && isEligible && (
-                  <button
-                    type="button"
-                    onClick={onEnterTournament}
-                    className="inline-flex w-full items-center justify-center gap-3 font-cond font-bold uppercase transition-transform hover:-translate-y-0.5"
-                    style={{
-                      background: "var(--md-coral)",
-                      color: "var(--md-white)",
-                      border: "3px solid var(--md-ink)",
-                      boxShadow: "6px 6px 0 0 var(--md-ink)",
-                      fontSize: 17,
-                      letterSpacing: "0.12em",
-                      padding: "18px 24px",
-                      cursor: "pointer",
-                    }}
-                  >
+                  <Button size="hero" fullWidth onClick={onEnterTournament}>
                     {entryCtaLabel ?? "Enter Playoffs"}
                     <span style={{ fontSize: 18 }}>→</span>
-                  </button>
+                  </Button>
                 )}
 
                 {onEnterTournament && !isEligible && (
@@ -979,44 +965,26 @@ export function ResultsPanel({
                     flex-1 so they fill the same span as row 1. When there's no
                     primary row above, Share leads here. */}
                 <div className="flex w-full items-stretch gap-3 lg:gap-4">
-                  <button
-                    type="button"
+                  <Button
+                    variant="ink"
+                    size="hero"
+                    className="flex-1"
                     onClick={share}
                     disabled={!shareBlob || !shareReady}
-                    className="inline-flex flex-1 items-center justify-center gap-2.5 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
-                    style={{
-                      background: "var(--md-ink)",
-                      color: "var(--md-white)",
-                      border: "2px solid var(--md-coral)",
-                      boxShadow: "6px 6px 0 0 var(--md-coral)",
-                      fontSize: 16,
-                      letterSpacing: "0.12em",
-                      padding: "16px 22px",
-                      cursor: "pointer",
-                    }}
                   >
                     <span style={{ fontSize: 15 }}>↑</span>
                     {shareBlob && shareReady ? "Share Result" : "Preparing…"}
-                  </button>
+                  </Button>
 
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="hero"
+                    className="flex-1"
                     onClick={onReset}
-                    className="inline-flex flex-1 items-center justify-center gap-2 font-cond font-semibold uppercase transition-transform hover:-translate-y-0.5"
-                    style={{
-                      background: "var(--md-paper)",
-                      color: "var(--md-ink)",
-                      border: "1.5px solid var(--md-ink)",
-                      boxShadow: "6px 6px 0 0 var(--md-ink)",
-                      fontSize: 15,
-                      letterSpacing: "0.1em",
-                      padding: "16px 22px",
-                      cursor: "pointer",
-                    }}
                   >
                     <span>↺</span>
                     {resetLabel ?? "Play Again"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

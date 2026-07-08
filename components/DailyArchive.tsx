@@ -8,21 +8,23 @@ import {
   fmtNet,
   type DayEntry,
 } from "@/lib/dailyHistory";
+import { Stamp as PressStamp } from "@/components/ui";
 
-// SLAM newsprint tints that have no --md-* token of their own (the design system
-// owns the brand spots — ink/coral/yellow/magenta/paper/white — but the scorecard
-// grid needs a few warmer newsprint values between them). Kept here as named
-// constants, mirroring lib/dailyHistory.ts, rather than scattered hex. Source of
+// SLAM scorecard tints. Anything with an equivalent --md-* token now points at it
+// via var(--md-*) (kept as named constants so the semantics stay legible and the
+// on-light vs on-dark ground choice is explicit). The remaining literals are the
+// warm scorecard grounds and the two faintest numeral greys — newsprint values
+// that sit BETWEEN the brand spots and have no token of their own. Source of
 // truth: Paper artboards G9N-0 / GZ5-0 (page 5-0).
 const CELL_FILL = "#F3EEE2"; // played-cell stock: a hair warmer than --md-white
 const CHAMP_WASH = "#FBF0C8"; // champion cell wash (press-yellow at ~12%)
-const HAIRLINE = "#C9C0AE"; // played-cell border / dashed + dotted gridlines
-const NUM_MUTED = "#9A8F79"; // small date + #rank numerals on a played cell
+const HAIRLINE = "var(--md-paper-3)"; // played-cell border / dashed + dotted gridlines
+const NUM_MUTED = "var(--md-ink-muted)"; // small date numerals on a played (light) cell
 const NUM_FAINT = "#C2B8A4"; // missed-cell "—" and its date
 const NUM_DOTTED = "#CFC6B3"; // future-cell date (lightest)
-const DARK_DIVIDER = "#34291F"; // hairlines inside the ink box-score strip
-const DARK_LABEL = "#9A8F79"; // muted labels on the ink strip (warm, on near-black)
-const WORST_RED = "#FF5347"; // flame, lifted for legibility on the ink strip
+const DARK_DIVIDER = "var(--md-ink-line)"; // hairlines inside the ink box-score strip
+const DARK_LABEL = "var(--md-cream-muted)"; // muted labels on the ink strip (AA-safe on dark)
+const WORST_RED = "var(--md-coral-deep)"; // flame-deep — marks the worst day
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
@@ -96,9 +98,11 @@ function fmtAvg(n: number): string {
   return r > 0 ? `+${s}` : s;
 }
 
-/** One column of the black SEASON AT A GLANCE strip. Press-yellow value, muted
- *  Oswald label; the worst-day column overrides to flame. The right border is the
- *  dark hairline between columns (the last column omits it). */
+/** One column of the black SEASON AT A GLANCE strip. Figures render in neutral
+ *  cream mono (House Rule — spot color never touches the numbers); the worst-day
+ *  column is the one label-backed flame-deep figure, and TITLES is the single
+ *  press-yellow hero cell (crown-backed). The right border is the dark hairline
+ *  between columns (the last column omits it). */
 function StatCell({
   label,
   labelFull,
@@ -149,38 +153,40 @@ function StatValue({ value, color }: { value: string; color: string }) {
  *  centred net (which lives behind it on its own row). */
 function Stamp({ kind }: { kind: "champion" | "top10" }) {
   if (kind === "champion") {
+    // Press-yellow misregistration stamp (magenta+ink double shadow via <Stamp
+    // shadow="double">); tilt clamped from -11° into the -4°..+5° range.
     return (
-      <div
-        className="pointer-events-none absolute -left-2.5 -top-3 flex origin-top-left items-center gap-1 border-[1.5px] border-solid px-1.5 py-0.5 sm:-left-3.5 sm:-top-4 sm:gap-1.5 sm:border-2 sm:px-2.5 sm:py-1"
-        style={{
-          rotate: "-11deg",
-          background: "var(--md-yellow)",
-          borderColor: "var(--md-ink)",
-          boxShadow: "var(--md-magenta) 3px 3px 0, var(--md-ink) 5px 5px 0",
-        }}
+      <PressStamp
+        background="var(--md-yellow)"
+        color="var(--md-ink)"
+        shadow="double"
+        tilt={false}
+        className="pointer-events-none absolute -left-2.5 -top-3 origin-top-left gap-1 px-1.5 py-0.5 sm:-left-3.5 sm:-top-4 sm:gap-1.5 sm:px-2.5 sm:py-1"
+        style={{ transform: "rotate(-4deg)" }}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" className="sm:h-[15px] sm:w-[15px]" style={{ flexShrink: 0 }}>
           <CrownPath fill="var(--md-ink)" />
         </svg>
         <span className="font-marker text-[9px] leading-none text-[var(--md-ink)] sm:text-[17px]">CHAMP</span>
-      </div>
+      </PressStamp>
     );
   }
+  // Smaller flame stamp, single hard ink offset (no misregistration); tilt clamped
+  // from 8° to the +5° ceiling.
   return (
-    <div
-      className="pointer-events-none absolute -left-2 -top-2.5 flex origin-top-left items-center gap-0.5 border-[1.5px] border-solid px-1 py-0.5 sm:-left-2.5 sm:-top-3 sm:gap-1 sm:border-2 sm:px-2.5 sm:py-1"
-      style={{
-        rotate: "8deg",
-        background: "var(--md-coral)",
-        borderColor: "var(--md-ink)",
-        boxShadow: "var(--md-ink) 4px 4px 0",
-      }}
+    <PressStamp
+      background="var(--md-coral)"
+      color="var(--md-white)"
+      shadow="sm"
+      tilt={false}
+      className="pointer-events-none absolute -left-2 -top-2.5 origin-top-left gap-0.5 px-1 py-0.5 sm:-left-2.5 sm:-top-3 sm:gap-1 sm:px-2.5 sm:py-1"
+      style={{ transform: "rotate(5deg)", boxShadow: "var(--md-ink) 4px 4px 0" }}
     >
       <svg width="8" height="8" viewBox="0 0 24 24" className="sm:h-[11px] sm:w-[11px]" style={{ flexShrink: 0 }}>
         <StarPath fill="var(--md-white)" />
       </svg>
       <span className="font-marker text-[8px] leading-none text-[var(--md-white)] sm:text-[13px]">TOP 10%</span>
-    </div>
+    </PressStamp>
   );
 }
 
@@ -227,8 +233,8 @@ export function DailyArchive({
               LAST 30 DAYS
             </span>
             <span
-              className="h-5.5 w-11 shrink-0 sm:h-7.5 sm:w-16"
-              style={{ rotate: "-6deg", background: "var(--md-coral)", boxShadow: "var(--md-shadow-sm)" }}
+              className="h-6 w-11 shrink-0 sm:h-8 sm:w-16"
+              style={{ background: "var(--md-coral)", boxShadow: "var(--md-shadow-sm)" }}
             />
           </div>
         </div>
@@ -245,7 +251,7 @@ export function DailyArchive({
       {/* SEASON AT A GLANCE — black box-score strip */}
       <div className="mt-5 flex w-full flex-col bg-[var(--md-ink)]">
         <div
-          className="flex items-center justify-between px-3.5 pb-2.5 pt-2.75 sm:px-5 sm:pb-2.75 sm:pt-3.25"
+          className="flex items-center justify-between px-3.5 pb-2.5 pt-3 sm:px-5 sm:pb-3 sm:pt-3"
           style={{ borderBottom: `1px solid ${DARK_DIVIDER}` }}
         >
           <span className="font-cond text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--md-yellow)] sm:text-[13px] sm:tracking-[0.18em]">
@@ -257,17 +263,17 @@ export function DailyArchive({
         </div>
         <div className="flex w-full">
           <StatCell label="Best" labelFull="Best Day">
-            <StatValue value={summary.bestDay != null ? fmtNet(summary.bestDay) : "—"} color="var(--md-yellow)" />
+            <StatValue value={summary.bestDay != null ? fmtNet(summary.bestDay) : "—"} color="var(--md-paper)" />
           </StatCell>
           <StatCell label="Worst" labelFull="Worst Day">
             <StatValue value={summary.worstDay != null ? fmtNet(summary.worstDay) : "—"} color={WORST_RED} />
           </StatCell>
           <StatCell label="Avg" labelFull="Avg Net">
-            <StatValue value={summary.avgNet != null ? fmtAvg(summary.avgNet) : "—"} color="var(--md-yellow)" />
+            <StatValue value={summary.avgNet != null ? fmtAvg(summary.avgNet) : "—"} color="var(--md-paper)" />
           </StatCell>
           <StatCell label="Streak" labelFull="Current Streak">
             <span className="flex items-baseline gap-1 sm:gap-1.5">
-              <StatValue value={String(summary.streak)} color="var(--md-yellow)" />
+              <StatValue value={String(summary.streak)} color="var(--md-paper)" />
               <span className="hidden font-cond text-xs font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)] sm:inline">
                 Days
               </span>

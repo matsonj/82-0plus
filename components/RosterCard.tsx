@@ -1,13 +1,14 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
+import { Card } from "@/components/ui/Card";
 
 // ── Shared "your five" roster card shell ──────────────────────────────────────
 // ONE dark card used by both the draft board ("YOUR ROSTER", artboard 87X-0) and
 // the result spread ("THE FIVE", artboard 894-0). The chrome is identical across
 // both: near-black warm ink ground with a subtle radial darkening, a flame-red 3px
 // frame + flame-red 6px hard offset shadow, an Anton title + muted Oswald label in
-// the header, and a near-black (#0E0B09) column-header band.
+// the header, and a near-black (--md-ink-3) column-header band.
 //
 // Only the BODY differs:
 //   • draft variant  → the LineupBoard list rows (slot chips + SET/ASSIGN/N/A)
@@ -17,24 +18,24 @@ import type { CSSProperties, ReactNode } from "react";
 // own rows as `children`. Behaviour (slot-fill, career-card clicks, etc.) stays in
 // the callers — this is pure chrome.
 
-// The near-black header band. The mocks (87X-0 / 894-0) use a flat #0E0B09 bar that
-// is *darker* than the card ground; --md-ink-2 (#221c17) is a LIFTED surface (wrong
-// direction), so we use the literal near-black from the artboards.
-const BAND_BG = "#0E0B09";
-// Row hairline between players — warm near-ink from the artboards.
-const ROW_HAIRLINE = "#2E2820";
+// The near-black header band. The mocks (87X-0 / 894-0) use a bar that is *darker*
+// than the card ground; --md-ink-2 (#221c17) is a LIFTED surface (wrong direction),
+// so we use --md-ink-3, the deepest band token (sits below --md-ink).
+const BAND_BG = "var(--md-ink-3)";
+// Row hairline between players — the shared hairline/divider token for ink grounds.
+const ROW_HAIRLINE = "var(--md-ink-line)";
 
-// The card ground: --md-ink plus the radial darkening lifted straight from the
-// Paper artboards (oklab corner gradient → a hand-tuned rgb equivalent so it works
-// without oklab support). Both cards share it; THE FIVE just nudges the focal point.
+// The card ground darkening. The base cover chrome (ink bg, 3px flame border,
+// flame-pop shadow, cream text) comes from <Card cover>; here we only override the
+// backdrop — the cover halftone is swapped for the artboards' radial darkening
+// (--md-ink-2 focal → --md-ink-3 corners). `backgroundSize: auto` defeats cover's
+// 8px halftone tiling so the gradient renders as one smooth wash. Both cards share
+// it; THE FIVE just nudges the focal point.
 function groundStyle(focal: "center" | "top-left"): CSSProperties {
   const at = focal === "center" ? "50% 50%" : "30% 18%";
   return {
-    background: "var(--md-ink)",
-    backgroundImage: `radial-gradient(circle farthest-corner at ${at}, #211a15 0%, #14100d 100%)`,
-    border: "3px solid var(--md-coral)",
-    boxShadow: "var(--md-shadow-pop)",
-    color: "var(--md-white)",
+    backgroundImage: `radial-gradient(circle farthest-corner at ${at}, var(--md-ink-2) 0%, var(--md-ink-3) 100%)`,
+    backgroundSize: "auto",
   };
 }
 
@@ -69,7 +70,8 @@ export function RosterCard({
   style?: CSSProperties;
 }) {
   return (
-    <div
+    <Card
+      cover
       className={`w-full overflow-hidden ${className}`}
       style={{ ...groundStyle(groundFocal), ...style }}
     >
@@ -88,7 +90,7 @@ export function RosterCard({
         {rightLabel != null && (
           <span
             className="font-cond font-semibold uppercase tracking-[0.18em] shrink-0"
-            style={{ fontSize: 13, color: "#7a7060" }}
+            style={{ fontSize: 13, color: "var(--md-cream-muted)" }}
           >
             {rightLabel}
           </span>
@@ -121,7 +123,7 @@ export function RosterCard({
         {children}
         {footer}
       </div>
-    </div>
+    </Card>
   );
 }
 

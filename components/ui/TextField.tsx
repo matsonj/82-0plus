@@ -40,7 +40,7 @@ export function TextField({
       {hint && (
         <span
           className={cx(
-            "font-mono",
+            "font-sans",
             hintTextClassName,
             hintColorClassName,
             hintClassName,

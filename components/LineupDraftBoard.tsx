@@ -260,7 +260,7 @@ export function LineupDraftBoard({
   // slots out from under the user's finger. Keeping it put keeps the target fixed.
   const RollCard = () =>
     !allPlaced && source ? (
-      <div className="md-card--cover p-4 sm:p-6">
+      <Card cover className="p-4 sm:p-6">
         <div
           className="flex items-end justify-between pb-3"
           style={{ borderBottom: "1px solid var(--md-paper)", boxShadow: "0 4px 0 -1px var(--md-paper)" }}
@@ -285,7 +285,7 @@ export function LineupDraftBoard({
           />
           {controls && controls({ pending: pending !== null, rolling })}
         </div>
-      </div>
+      </Card>
     ) : null;
 
   // ── Shared player list section ────────────────────────────────────────────
@@ -341,19 +341,19 @@ export function LineupDraftBoard({
             <>
               <span
                 className="font-cond font-semibold uppercase shrink-0"
-                style={{ fontSize: 12, letterSpacing: "0.16em", color: "#9a8f79", width: 54 }}
+                style={{ fontSize: 12, letterSpacing: "0.16em", color: "var(--md-cream-muted)", width: 54 }}
               >
                 Slot
               </span>
               <span
                 className="flex-1 font-cond font-semibold uppercase"
-                style={{ fontSize: 12, letterSpacing: "0.16em", color: "#9a8f79" }}
+                style={{ fontSize: 12, letterSpacing: "0.16em", color: "var(--md-cream-muted)" }}
               >
                 Player
               </span>
               <span
                 className="font-cond font-semibold uppercase text-right"
-                style={{ fontSize: 12, letterSpacing: "0.16em", color: "#9a8f79" }}
+                style={{ fontSize: 12, letterSpacing: "0.16em", color: "var(--md-cream-muted)" }}
               >
                 Status
               </span>

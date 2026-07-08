@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ButtonLink } from "@/components/ui";
 
 // Full-bleed "live public tournaments" beacon, shown under the masthead on the
 // home menu. Flame red is THE SLAM live-beacon / CTA ink (type on flame is cream);
@@ -82,10 +82,11 @@ export function HomeLiveBar({
             </span>
           )}
         </div>
-        <Link
+        <ButtonLink
           href={entered ? entered.href : href}
-          className="inline-flex shrink-0 items-center gap-2 border-2 border-[var(--md-ink)] px-3 py-1.5 font-cond text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--md-ink)] transition-transform hover:-translate-y-0.5 sm:px-4 sm:py-2 sm:text-[13px]"
-          style={{ background: "var(--md-yellow)", boxShadow: "var(--md-shadow-sm)" }}
+          variant="yellow"
+          size="sm"
+          className="shrink-0"
         >
           {entered ? (
             entered.needsFinish ? (
@@ -99,7 +100,7 @@ export function HomeLiveBar({
             <>Join the field</>
           )}{" "}
           <span aria-hidden>→</span>
-        </Link>
+        </ButtonLink>
       </div>
     </div>
   );

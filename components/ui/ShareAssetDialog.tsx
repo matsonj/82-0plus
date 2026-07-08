@@ -32,7 +32,7 @@ export function ShareAssetDialog({
         alt={imageAlt}
         className="mt-3 w-full border-2 border-[var(--md-ink)]"
       />
-      <p className="mt-2 text-center font-mono text-[12px] leading-snug text-[var(--md-ink-muted)]">
+      <p className="mt-2 text-center font-sans text-[12px] leading-snug text-[var(--md-ink-muted)]">
         <strong>Right-click to copy and share.</strong>{" "}
         {autoCopied
           ? "The link is already on your clipboard."
