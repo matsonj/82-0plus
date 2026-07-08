@@ -196,7 +196,9 @@ const DENYLIST: readonly string[] = [
 // token equals an entry. Letter runs (not alphanumeric) so digit decoration
 // can't dodge the check: "ASS1"/"1ASS" tokenize to ["ASS"] and are rejected —
 // as are "ASS TEAM", "A$$" and "MY A55" (via the folded form) — while
-// "CLASSIC", "PASS THE ROCK", "PASS2" and "CLA55IC" sail through.
+// "CLASSIC", "PASS THE ROCK", "PASS2" and "CLA55IC" sail through. Decorated
+// forms ("ASSX", "A551" → folds to "ASSI") pass: decoration is exactly what
+// innocent containment looks like, and this filter is best-effort by design.
 const EXACT_DENYLIST: readonly string[] = ["ASS"] as const;
 
 /** Split an (already uppercased) name into its letter-run tokens. */
