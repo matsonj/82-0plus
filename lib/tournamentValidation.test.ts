@@ -134,6 +134,37 @@ describe("isProfane", () => {
     expect(isProfane("GOAT")).toBe(false);
     expect(isProfane("HOOPS")).toBe(false);
   });
+
+  it("exact-only words don't flag innocent containers (Scunthorpe)", () => {
+    expect(isProfane("CLASSIC")).toBe(false);
+    expect(isProfane("Classic Clash")).toBe(false);
+    expect(isProfane("PASS THE ROCK")).toBe(false);
+    expect(isProfane("BASS")).toBe(false);
+    expect(isProfane("PASS2")).toBe(false); // trailing digit doesn't split PASS
+    expect(isProfane("CLA55IC")).toBe(false); // folds to CLASSIC, one letter run
+  });
+
+  it("exact-only words still catch the word itself (and its leet form)", () => {
+    expect(isProfane("ASS")).toBe(true); // whole name
+    expect(isProfane("A$$")).toBe(true); // leet-folds to ASS
+  });
+
+  it("exact-only words are caught as a standalone token in a spaced name", () => {
+    expect(isProfane("ASS TEAM")).toBe(true);
+    expect(isProfane("THE ASS CREW")).toBe(true);
+    expect(isProfane("MY A55")).toBe(true); // token leet-folds to ASS
+  });
+
+  it("digit decoration doesn't hide an exact-only word (letter-run tokens)", () => {
+    expect(isProfane("ASS1")).toBe(true);
+    expect(isProfane("1ASS")).toBe(true);
+  });
+
+  it("bad ASS-compounds stay substring-banned", () => {
+    expect(isProfane("ASSHOLE")).toBe(true);
+    expect(isProfane("JACKASS")).toBe(true);
+    expect(isProfane("xDUMBASSx")).toBe(true); // embedded
+  });
 });
 
 describe("validateName — profanity", () => {
