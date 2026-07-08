@@ -25,12 +25,14 @@ export function HomeMenu({
   // The signed-in user's own open entries (from the home bootstrap). When set, the
   // primary yellow cell drops the join hook and points at their own entry instead.
   // `needsFinish` = an entry's lineup isn't submitted yet (href targets it).
-  // null/undefined = signed out or not entered.
+  // `joinAnother` = all submitted but other public fields still have room (href
+  // targets the browsable list). null/undefined = signed out or not entered.
   entered?: {
     count: number;
     name: string | null;
     href: string;
     needsFinish: boolean;
+    joinAnother: boolean;
   } | null;
 }) {
   return (
@@ -127,8 +129,8 @@ export function HomeMenu({
           <div className="flex flex-1 flex-col gap-2">
             {/* Primary: Join public — fills the height, count when available.
                 One open tournament → its lobby; 2+ → the browsable list. Already
-                entered → the cell points at the user's own entry instead
-                (finish an unsubmitted lineup, or see the field once submitted). */}
+                entered → finish an unsubmitted lineup, join another open field
+                if any remain, or see the field once there's nothing left to join. */}
             <ButtonLink
               href={entered ? entered.href : joinPublicHref}
               variant="yellow"
@@ -138,6 +140,8 @@ export function HomeMenu({
                 {entered ? (
                   entered.needsFinish ? (
                     <>Finish your lineup</>
+                  ) : entered.joinAnother ? (
+                    <>You&rsquo;re in · Join another</>
                   ) : (
                     <>You&rsquo;re in · See the field</>
                   )

@@ -187,11 +187,16 @@ export default function Home() {
   // When exactly one public tournament still has slots, deep-link straight to its
   // lobby instead of a one-row list. null when there are 0 or 2+.
   const [soloJoinablePublicId, setSoloJoinablePublicId] = useState<string | null>(null);
+  // IDs of the joinable tournaments — cross-referenced against the user's own
+  // entries (which arrive independently off the bootstrap call) to tell "you're
+  // in the only open field" apart from "there are others left to join".
+  const [joinablePublicIds, setJoinablePublicIds] = useState<string[]>([]);
   // Open tournaments (public or private) where the signed-in account already has
   // an entry — straight off the bootstrap call's notifications. When non-empty,
   // the "join a public tournament" enticements flip to point at the user's own
-  // bracket instead of selling them a field they're already in. Empty when signed
-  // out or not entered anywhere.
+  // bracket — unless other joinable public fields remain, in which case they
+  // pitch joining another (see `enteredTournament`). Empty when signed out or
+  // not entered anywhere.
   const [pendingTournaments, setPendingTournaments] = useState<NotifSummary[]>([]);
   useEffect(() => {
     let active = true;
@@ -218,6 +223,11 @@ export default function Home() {
             ? String(joinable[0]?.tournamentId ?? "") || null
             : null,
         );
+        setJoinablePublicIds(
+          joinable
+            .map((t) => String(t?.tournamentId ?? ""))
+            .filter(Boolean),
+        );
       })
       .catch(() => {
         /* leave null — the affordances just won't show a count */
@@ -234,13 +244,20 @@ export default function Home() {
       : "/tournament?tab=private&intent=public";
   // Entered-state swap for the join CTAs. An unsubmitted entry (registered/
   // partial) is the urgent case — unfinished lineups get bot-replaced — so it
-  // wins: target the first one and push "finish". All submitted: a lone entry
-  // deep-links to its lobby (name shown where there's room), 2+ go to the My
-  // Tournaments list.
+  // wins: target the first one and push "finish". All submitted: if other
+  // joinable public tournaments remain (`joinAnother`), pitch joining one via
+  // the browsable list (which marks the user's own field with an ENTERED pill);
+  // otherwise a lone entry deep-links to its lobby (name shown where there's
+  // room), 2+ go to the My Tournaments list. Both inputs land async, so
+  // `joinAnother` stays false until each has resolved.
   const hasEnteredOpenTournament = pendingTournaments.length > 0;
   const unfinishedEntries = pendingTournaments.filter(
     (t) => t.entryStatus !== "submitted",
   );
+  const enteredIds = new Set(pendingTournaments.map((t) => t.tournamentId));
+  const otherJoinableCount = joinablePublicIds.filter(
+    (id) => !enteredIds.has(id),
+  ).length;
   const enteredTournament = hasEnteredOpenTournament
     ? unfinishedEntries.length > 0
       ? {
@@ -248,6 +265,7 @@ export default function Home() {
           name: unfinishedEntries[0].tournamentName,
           href: `/p/${unfinishedEntries[0].tournamentId}`,
           needsFinish: true,
+          joinAnother: false,
         }
       : {
           count: pendingTournaments.length,
@@ -256,10 +274,13 @@ export default function Home() {
               ? pendingTournaments[0].tournamentName
               : null,
           href:
-            pendingTournaments.length === 1
-              ? `/p/${pendingTournaments[0].tournamentId}`
-              : "/tournament?tab=private",
+            otherJoinableCount > 0
+              ? "/tournament?tab=private&intent=public"
+              : pendingTournaments.length === 1
+                ? `/p/${pendingTournaments[0].tournamentId}`
+                : "/tournament?tab=private",
           needsFinish: false,
+          joinAnother: otherJoinableCount > 0,
         }
     : null;
   // Whether today's completion has resolved (results fetched, or no account to
@@ -1087,9 +1108,10 @@ export default function Home() {
             </button>
           </div>
           {/* Caught your daily? Strong CTA toward the next hook at peak engagement.
-              Already in an open tournament → finish an unsubmitted lineup, or see
-              the field once submitted; otherwise joinable public tournaments, only
-              when one has room. */}
+              Already in an open tournament → finish an unsubmitted lineup; once
+              submitted, join another open public field if any remain, else see
+              the field. Otherwise joinable public tournaments, only when one has
+              room. */}
           {enteredTournament ? (
             <div className="mt-4 flex flex-col gap-2 border-t border-[var(--md-ink-line)] pt-4">
               <span className="text-[13px] text-[var(--md-paper-3)]">
@@ -1115,6 +1137,8 @@ export default function Home() {
                   />
                   {enteredTournament.needsFinish ? (
                     <>Finish your lineup</>
+                  ) : enteredTournament.joinAnother ? (
+                    <>Join another tournament</>
                   ) : enteredTournament.count === 1 ? (
                     <>See the field</>
                   ) : (
