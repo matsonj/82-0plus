@@ -6,7 +6,7 @@ import {
   formatPublicSpots,
   type PublicTournamentSummary,
 } from "@/lib/privateTournament";
-import { LoadingState } from "@/components/ui";
+import { Capsule, LoadingState } from "@/components/ui";
 
 // The public "open to everyone" browse list, shown in the Private tab. Anonymous:
 // fetches GET /api/private-tournament/public on mount (no creds). Each row links
@@ -53,37 +53,20 @@ function PublicRow({ t, entered }: { t: PublicTournamentSummary; entered: boolea
 
       {/* Mode + size capsules (hidden on the narrowest widths) */}
       <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
-        <span
-          className="font-cond text-[11px] font-semibold uppercase tracking-[0.06em]"
-          style={{
-            background: ranked ? "var(--md-ink)" : "var(--md-coral)",
-            color: "var(--md-white)",
-            border: "2px solid var(--md-ink)",
-            borderRadius: 999,
-            padding: "2px 11px",
-          }}
-        >
+        <Capsule tone={ranked ? "ink" : "coral"} className="text-[11px]">
           {shortMode(t.mode)}
-        </span>
-        <span
-          className="font-cond text-[11px] font-semibold uppercase tracking-[0.06em]"
-          style={{
-            background: "var(--md-paper-2)",
-            color: "var(--md-ink)",
-            border: "2px solid var(--md-ink)",
-            borderRadius: 999,
-            padding: "2px 11px",
-          }}
-        >
+        </Capsule>
+        <Capsule tone="default" className="text-[11px]">
           {t.size} teams
-        </span>
+        </Capsule>
       </span>
 
-      {/* Live joined count */}
+      {/* Live joined count — red only when full AND backed by the "Full" label
+          below (never color the count alone; entered rows show no such label). */}
       <span className="flex w-[74px] shrink-0 flex-col items-end">
         <span
           className="font-mono text-[16px] font-bold tabular-nums"
-          style={{ color: full ? "var(--md-coral-deep)" : "var(--md-ink)" }}
+          style={{ color: full && !entered ? "var(--md-coral-deep)" : "var(--md-ink)" }}
         >
           {spots}
         </span>
@@ -95,18 +78,9 @@ function PublicRow({ t, entered }: { t: PublicTournamentSummary; entered: boolea
       {/* Join affordance / Full state — or the "already in" pill (takes
           precedence over Full; the row still links to the tournament) */}
       {entered ? (
-        <span
-          className="shrink-0 font-cond text-[11px] font-semibold uppercase tracking-[0.06em]"
-          style={{
-            background: "var(--md-teal)",
-            color: "var(--md-white)",
-            border: "2px solid var(--md-ink)",
-            borderRadius: 999,
-            padding: "2px 11px",
-          }}
-        >
+        <Capsule tone="teal" className="shrink-0 text-[11px]">
           Entered ✓
-        </span>
+        </Capsule>
       ) : (
         <span
           className="w-[58px] shrink-0 text-right font-cond text-[12px] font-semibold uppercase tracking-[0.06em]"

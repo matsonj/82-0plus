@@ -176,7 +176,7 @@ function YourTeamCard({
         <div className="flex shrink-0 items-center gap-3 font-mono text-[13px] tabular-nums">
           <div className="flex flex-col items-center leading-tight">
             <span className="font-cond text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">Net</span>
-            <span className="font-bold" style={{ color: team.seedNet >= 0 ? "var(--md-teal)" : "var(--md-coral)" }}>
+            <span className="font-bold" style={{ color: team.seedNet >= 0 ? "var(--md-teal)" : "var(--md-coral-deep)" }}>
               {fmtNet(team.seedNet)}
             </span>
           </div>
@@ -569,11 +569,6 @@ export function TournamentResults({
               <Button
                 size="lg"
                 className="flex items-center gap-2"
-                style={{
-                  background: "var(--md-coral)",
-                  color: "var(--md-white)",
-                  borderColor: "var(--md-ink)",
-                }}
                 onClick={share}
                 disabled={!shareReady}
               >

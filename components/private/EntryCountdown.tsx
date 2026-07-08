@@ -50,5 +50,7 @@ export function EntryCountdown({
     return () => clearInterval(id);
   }, [expiresAt, compact]);
 
-  return <span className="tabular-nums">{left}</span>;
+  // font-mono: digits are the data voice regardless of the caller's own font
+  // (call sites wrap this in font-cond labels; the numerals must stay mono).
+  return <span className="font-mono tabular-nums">{left}</span>;
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/classNames";
 
 export function ModalFrame({
@@ -47,17 +48,13 @@ export function ModalFrame({
   const overlay = (
     <div
       className={cx("fixed inset-0 z-50 flex items-center justify-center p-4", overlayClassName)}
-      style={{ background: "rgba(21,17,14,0.75)", ...overlayStyle }}
+      style={{ background: "var(--md-overlay)", ...overlayStyle }}
       onClick={onClose}
     >
-      <div
+      <Card
+        lift
         className={cx("w-full", paddingClassName, maxWidth, className)}
-        style={{
-          background: "var(--md-white)",
-          border: "2px solid var(--md-ink)",
-          boxShadow: "var(--md-shadow-lg)",
-          ...panelStyle,
-        }}
+        style={panelStyle}
         onClick={(event) => event.stopPropagation()}
       >
         <div className={cx("flex items-start justify-between gap-3", headerClassName)}>
@@ -90,7 +87,7 @@ export function ModalFrame({
         </div>
         {children}
         {footer}
-      </div>
+      </Card>
     </div>
   );
 

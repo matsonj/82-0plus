@@ -100,6 +100,10 @@ interface LobbyCardSlots {
   children: ReactNode;
 }
 
+// Hand-rolled `.md-card` (not <Card>) is JUSTIFIED here: this element IS the
+// interactive Link/button root, and <Card> renders its own div — nesting a div
+// inside a button/anchor when the button/anchor itself needs the card chrome
+// isn't an option, so the class is applied directly to the interactive tag.
 const CARD_CLASS =
   "md-card w-full overflow-hidden p-0 text-left transition-transform hover:translate-x-[-2px] hover:translate-y-[-2px]";
 

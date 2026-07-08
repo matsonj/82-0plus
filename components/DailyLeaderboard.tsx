@@ -249,7 +249,7 @@ function Row({
           )}
           <span
             className="shrink-0 font-mono text-[9px]"
-            style={{ color: entry.isYou ? "rgba(251,248,239,0.6)" : "var(--md-ink-muted)" }}
+            style={{ color: entry.isYou ? "color-mix(in srgb, var(--md-white) 60%, transparent)" : "var(--md-ink-muted)" }}
           >
             {open ? "▴" : "▾"}
           </span>
@@ -266,7 +266,7 @@ function Row({
         {/* Net rating — fixed width right-aligned */}
         <span
           className="w-10 shrink-0 text-right font-mono text-[11px] tabular-nums"
-          style={{ color: entry.isYou ? "rgba(251,248,239,0.7)" : "var(--md-ink-muted)" }}
+          style={{ color: entry.isYou ? "color-mix(in srgb, var(--md-white) 70%, transparent)" : "var(--md-ink-muted)" }}
         >
           {sign(entry.margin)}
         </span>

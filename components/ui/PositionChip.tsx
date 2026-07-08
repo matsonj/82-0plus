@@ -32,7 +32,7 @@ export function PositionChip({
   if (variant === "outline") {
     return (
       <span
-        className={`border px-1 font-mono text-[9px] font-bold leading-[1.5] ${className}`}
+        className={`border-2 px-1 font-mono text-[9px] font-bold leading-[1.5] ${className}`}
         style={{ borderColor: color, background: "var(--md-white)", color }}
       >
         {role}
@@ -41,7 +41,7 @@ export function PositionChip({
   }
   return (
     <span
-      className={`border border-[var(--md-ink)] px-1 text-[10px] font-bold text-[var(--md-white)] ${className}`}
+      className={`border-2 border-[var(--md-ink)] px-1 text-[10px] font-bold text-[var(--md-white)] ${className}`}
       style={{ background: color }}
     >
       {role}

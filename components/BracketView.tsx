@@ -196,7 +196,7 @@ function SeriesTeamRow({
   circleColor?: string;
 }) {
   const nameColor = won ? "var(--md-ink)" : "var(--md-ink-muted)";
-  const scoreColor = won ? "var(--md-coral)" : "var(--md-ink-muted)";
+  const scoreColor = won ? "var(--md-teal)" : "var(--md-coral-deep)";
 
   return (
     <div
@@ -267,7 +267,7 @@ function SeriesCard({
   const hiIsYou = series.hiId === youId;
   const loIsYou = series.loId === youId;
 
-  // Rows show the CLINCHING game's box score per team (winner in coral); the
+  // Rows show the CLINCHING game's box score per team (winner in court-green); the
   // "<winner> wins W–L" footer carries the series result (Google-bracket style).
   const lastGame = series.games[series.games.length - 1];
   const boxScore = (id: string) =>
@@ -855,7 +855,7 @@ type PlayInRowState = {
 
 function PlayInTeamRow({ row }: { row: PlayInRowState }) {
   const nameColor = row.won ? "var(--md-ink)" : "var(--md-ink-muted)";
-  const scoreColor = row.won ? "var(--md-coral)" : "var(--md-ink-muted)";
+  const scoreColor = row.won ? "var(--md-teal)" : "var(--md-coral-deep)";
   return (
     <div
       className="flex items-center gap-2 px-3 py-1.5"

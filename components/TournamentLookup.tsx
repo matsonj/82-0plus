@@ -322,7 +322,7 @@ function TeamCard({
       }
     >
       {/* Reg + Bracket records */}
-      <div className="flex gap-0 border-t-2 border-y-2 border-[var(--md-ink)]">
+      <div className="flex gap-0 border-y-2 border-[var(--md-ink)]">
         <div className="flex-1 px-4 py-2.5">
           <div className="font-cond text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--md-ink-muted)]">Regular</div>
           <div className="mt-0.5 font-mono text-[18px] font-bold tabular-nums leading-none">
@@ -444,7 +444,7 @@ function PrivateRowDesktop({ row }: { row: MyPrivateRow }) {
               Playoff
             </span>
             {s.cloaked ? (
-              <span className="inline-block" style={{ width: 44, height: 14, borderRadius: 3, background: "var(--md-paper-3)" }} />
+              <span className="inline-block" style={{ width: 44, height: 14, background: "var(--md-paper-3)" }} />
             ) : s.hasRec ? (
               <span className="font-bold text-[var(--md-ink)]">{s.recW}–{s.recL}</span>
             ) : (
@@ -454,7 +454,7 @@ function PrivateRowDesktop({ row }: { row: MyPrivateRow }) {
           {/* OUTCOME lane */}
           <span className="shrink-0" style={{ width: 150 }}>
             {s.cloaked ? (
-              <span className="inline-block" style={{ width: 96, height: 14, borderRadius: 3, background: "var(--md-paper-3)" }} />
+              <span className="inline-block" style={{ width: 96, height: 14, background: "var(--md-paper-3)" }} />
             ) : (
               <span
                 className="font-mono text-[12px]"
@@ -507,7 +507,7 @@ function PrivateCardMobile({ row }: { row: MyPrivateRow }) {
     >
       <div className="flex items-baseline justify-between gap-3 border-t-2 border-[var(--md-ink)] px-4 py-2.5">
         {s.cloaked ? (
-          <span className="inline-block" style={{ width: 72, height: 22, borderRadius: 3, background: "var(--md-paper-3)" }} />
+          <span className="inline-block" style={{ width: 72, height: 22, background: "var(--md-paper-3)" }} />
         ) : (
           <span className="font-mono text-[22px] font-bold tabular-nums">
             {s.hasRec ? <>{s.recW}–{s.recL}</> : "—"}

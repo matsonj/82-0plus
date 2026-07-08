@@ -228,7 +228,7 @@ function RosterPanel({
       className={`flex flex-col gap-1 p-6 ${className ?? ""}`}
       style={{
         background: "var(--md-ink)",
-        border: "2.5px solid var(--md-coral)",
+        border: "3px solid var(--md-coral)",
         boxShadow: "6px 6px 0 0 var(--md-ink-2)",
       }}
     >
@@ -312,7 +312,7 @@ function RightCell({ kind }: { kind: "set" | "crownable" | "captain" | "drafting
     return <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.06em] text-[var(--md-ink-muted)]">Bench</span>;
   }
   return (
-    <span className="w-[78px] shrink-0 border-[1.5px] py-[3px] text-center font-cond text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--md-ink-muted)]" style={{ borderColor: "#3a322a" }}>
+    <span className="w-[78px] shrink-0 border-[1.5px] py-[3px] text-center font-cond text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--md-ink-muted)]" style={{ borderColor: "var(--md-ink-line)" }}>
       Set
     </span>
   );

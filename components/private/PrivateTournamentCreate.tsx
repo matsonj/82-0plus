@@ -17,7 +17,17 @@ import {
 } from "@/lib/privateTournament";
 import { SITE_URL } from "@/lib/site";
 import { validateManualBoard } from "@/lib/privateBoardRules";
-import { Button, ButtonLink, Capsule, Card, CopyLinkField, NameField, Notice, PinField } from "@/components/ui";
+import {
+  Button,
+  ButtonLink,
+  Capsule,
+  Card,
+  CopyLinkField,
+  NameField,
+  Notice,
+  PinField,
+  SegmentedControl,
+} from "@/components/ui";
 
 // A single manual board slot the admin is filling: a decade (from /api/decades)
 // + a team chosen from /api/private-tournament/teams?decade=. Distinctness +
@@ -224,12 +234,13 @@ export function PrivateTournamentCreate({
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className="md-card md-card--lift mx-auto flex w-full max-w-md flex-col gap-4 p-5"
-    >
+    // The <form> is the required interactive/submit root (Enter-to-submit,
+    // onSubmit) — it can't itself be a <Card> div, so the card chrome is
+    // nested inside it instead of hand-rolling `.md-card md-card--lift` here.
+    <form onSubmit={submit} className="mx-auto flex w-full max-w-md">
+      <Card lift className="flex w-full flex-col gap-4 p-5">
       <div>
-        <div className="font-display text-xl font-bold">
+        <div className="font-archivo text-xl font-bold">
           Create a tournament
         </div>
         <p className="mt-1 text-[13px] text-[var(--md-ink-muted)]">
@@ -240,16 +251,16 @@ export function PrivateTournamentCreate({
       {/* Admin account — who hosts. From the saved session, else collected. */}
       {hasSaved ? (
         <div className="flex items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-paper-2)] px-3 py-2">
-          <span className="font-display text-[13px]">
+          <span className="font-sans text-[13px]">
             Hosting as{" "}
-            <strong className="text-[var(--md-orange-deep)]">
+            <strong className="text-[var(--md-coral-deep)]">
               {adminName}
             </strong>
           </span>
         </div>
       ) : (
         <div className="flex flex-col gap-3 border-2 border-dashed border-[var(--md-ink)] p-3">
-          <span className="font-display text-[11px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+          <span className="font-cond text-[11px] uppercase tracking-wide text-[var(--md-ink-muted)]">
             Your account (the host)
           </span>
           <NameField
@@ -321,10 +332,10 @@ export function PrivateTournamentCreate({
         </span>
         <span className="flex flex-col gap-1">
           <span className="flex items-center gap-2">
-            <span className="font-display text-sm font-bold">List publicly</span>
+            <span className="font-cond text-sm font-bold">List publicly</span>
             {isPublic && (
               <span
-                className="font-display text-[10px] font-bold uppercase tracking-wide"
+                className="font-cond text-[10px] font-bold uppercase tracking-wide"
                 style={{ background: "var(--md-cobalt)", color: "var(--md-white)", padding: "2px 7px" }}
               >
                 Listed
@@ -339,115 +350,84 @@ export function PrivateTournamentCreate({
 
       {/* Mode. */}
       <div className="flex flex-col gap-1">
-        <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+        <span className="font-cond text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
           Mode
         </span>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setMode("hoopiq")}
-            className="md-card p-2 text-left"
-            style={{
-              background:
-                mode === "hoopiq" ? "var(--md-ink)" : "var(--md-white)",
-              color: mode === "hoopiq" ? "var(--md-white)" : "var(--md-ink)",
-              borderWidth: mode === "hoopiq" ? 3 : 2,
-              cursor: "pointer",
-            }}
-          >
-            <div className="font-display text-sm font-bold">Ranked</div>
-            <div className="font-display text-[10px] opacity-80">
-              Stats hidden
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("classic")}
-            className="md-card p-2 text-left"
-            style={{
-              background:
-                mode === "classic" ? "var(--md-yellow)" : "var(--md-white)",
-              borderWidth: mode === "classic" ? 3 : 2,
-              cursor: "pointer",
-            }}
-          >
-            <div className="font-display text-sm font-bold">Classic</div>
-            <div className="font-display text-[10px] text-[var(--md-ink-muted)]">
-              Stats shown
-            </div>
-          </button>
-        </div>
+        <SegmentedControl
+          className="[&>button]:flex-1 [&>button]:p-2 [&>button]:text-left"
+          value={mode}
+          onChange={setMode}
+          options={[
+            {
+              value: "hoopiq",
+              label: (
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-cond text-sm font-bold normal-case tracking-normal">Ranked</span>
+                  <span className="font-sans text-[10px] normal-case tracking-normal opacity-80">Stats hidden</span>
+                </span>
+              ),
+            },
+            {
+              value: "classic",
+              label: (
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-cond text-sm font-bold normal-case tracking-normal">Classic</span>
+                  <span className="font-sans text-[10px] normal-case tracking-normal opacity-80">Stats shown</span>
+                </span>
+              ),
+            },
+          ]}
+        />
       </div>
 
       {/* Size. */}
       <div className="flex flex-col gap-1">
-        <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+        <span className="font-cond text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
           Field size
         </span>
-        <div className="flex flex-wrap gap-2">
-          {PRIVATE_SIZES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSize(s)}
-              className="border-2 border-[var(--md-ink)] px-3 py-1.5 font-display text-sm font-bold"
-              style={{
-                background: size === s ? "var(--md-ink)" : "var(--md-white)",
-                color: size === s ? "var(--md-white)" : "var(--md-ink)",
-                cursor: "pointer",
-              }}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={String(size)}
+          onChange={(v) => setSize(Number(v) as PrivateSize)}
+          options={PRIVATE_SIZES.map((s) => ({ value: String(s), label: String(s) }))}
+        />
       </div>
 
       {/* Board mode. */}
       <div className="flex flex-col gap-1">
-        <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
+        <span className="font-cond text-xs font-bold uppercase tracking-wide text-[var(--md-ink-muted)]">
           Board
         </span>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setBoardMode("blind")}
-            className="md-card p-2 text-left"
-            style={{
-              background:
-                boardMode === "blind" ? "var(--md-yellow)" : "var(--md-white)",
-              borderWidth: boardMode === "blind" ? 3 : 2,
-              cursor: "pointer",
-            }}
-          >
-            <div className="font-display text-sm font-bold">Blind</div>
-            <div className="font-display text-[10px] text-[var(--md-ink-muted)]">
-              Auto-generated six
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setBoardMode("manual")}
-            className="md-card p-2 text-left"
-            style={{
-              background:
-                boardMode === "manual" ? "var(--md-yellow)" : "var(--md-white)",
-              borderWidth: boardMode === "manual" ? 3 : 2,
-              cursor: "pointer",
-            }}
-          >
-            <div className="font-display text-sm font-bold">Manual</div>
-            <div className="font-display text-[10px] text-[var(--md-ink-muted)]">
-              Pick the six teams
-            </div>
-          </button>
-        </div>
+        <SegmentedControl
+          className="[&>button]:flex-1 [&>button]:p-2 [&>button]:text-left"
+          value={boardMode}
+          onChange={setBoardMode}
+          options={[
+            {
+              value: "blind",
+              label: (
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-cond text-sm font-bold normal-case tracking-normal">Blind</span>
+                  <span className="font-sans text-[10px] normal-case tracking-normal opacity-80">Auto-generated six</span>
+                </span>
+              ),
+            },
+            {
+              value: "manual",
+              label: (
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-cond text-sm font-bold normal-case tracking-normal">Manual</span>
+                  <span className="font-sans text-[10px] normal-case tracking-normal opacity-80">Pick the six teams</span>
+                </span>
+              ),
+            },
+          ]}
+        />
       </div>
 
       {/* Manual board: decade-first dropdown, then a team dropdown for that decade. */}
       {boardMode === "manual" && (
         <div className="flex flex-col gap-2 border-2 border-dashed border-[var(--md-ink)] p-3">
-          <span className="font-display text-[11px] text-[var(--md-ink-muted)]">
+          <span className="font-sans text-[11px] text-[var(--md-ink-muted)]">
             Slots 1–5 are the starters [G · FLEX · W · FLEX · B]; slot 6 is the
             bench (sixth man). Pick a decade, then a team.
           </span>
@@ -455,7 +435,7 @@ export function PrivateTournamentCreate({
             const teams = s.decade !== null ? teamsByDecade[s.decade] : undefined;
             return (
               <div key={i} className="flex items-center gap-2">
-                <span className="w-6 shrink-0 font-display text-[11px] font-bold text-[var(--md-ink-muted)]">
+                <span className="w-6 shrink-0 font-cond text-[11px] font-bold text-[var(--md-ink-muted)]">
                   {i === 5 ? "6th" : i + 1}
                 </span>
                 <select
@@ -503,7 +483,7 @@ export function PrivateTournamentCreate({
             );
           })}
           {manualErr && (
-            <span className="font-display text-[11px] text-[var(--md-coral)]">
+            <span className="font-sans text-[11px] text-[var(--md-coral)]">
               {manualErr}
             </span>
           )}
@@ -511,7 +491,7 @@ export function PrivateTournamentCreate({
       )}
 
       {error && (
-        <Notice tone="error" textClassName="font-display text-sm">
+        <Notice tone="error" textClassName="font-sans text-sm">
           {error}
         </Notice>
       )}
@@ -534,6 +514,7 @@ export function PrivateTournamentCreate({
           </Button>
         )}
       </div>
+      </Card>
     </form>
   );
 }

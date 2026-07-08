@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TournamentMode } from "@/lib/types";
 import { type RevealScript, type RevealRound } from "@/lib/revealPath";
-import { Button } from "@/components/ui";
+import { Button, Stamp } from "@/components/ui";
 
 // Per-beat dwell times (ms). Game beats run ~30% quicker than the first pass;
 // elimination beats still run slower for tension.
@@ -112,7 +112,7 @@ function SeedBadge({ seed, you }: { seed: number; you?: boolean }) {
 function RoundMeter({ total, current }: { total: number; current: number }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#7a7264]">
+      <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--md-cream-muted)]">
         Round {current} / {total}
       </span>
       <div className="flex items-center gap-1.5">
@@ -122,7 +122,7 @@ function RoundMeter({ total, current }: { total: number; current: number }) {
             style={{
               width: 14, height: 14,
               background: i < current ? "var(--md-cobalt)" : "transparent",
-              border: i < current ? "none" : "1.5px solid #4a443b",
+              border: i < current ? "none" : "2px solid var(--md-ink-line)",
               boxSizing: "border-box",
             }}
           />
@@ -136,7 +136,7 @@ function RoundMeter({ total, current }: { total: number; current: number }) {
 function Matchup({ round }: { round: RevealRound }) {
   return (
     <div key={round.roundAbsIndex} className="sim-drop-in flex flex-col gap-2.5">
-      <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#7a7264]">
+      <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--md-cream-muted)]">
         {round.roundName} · Best of {round.bestOf}
       </span>
       <div
@@ -152,7 +152,7 @@ function Matchup({ round }: { round: RevealRound }) {
         </div>
         <span className="font-mono text-[13px] font-bold text-[var(--md-paper)]">{round.you.regW}–{round.you.regL}</span>
       </div>
-      <span className="pl-3 font-mono text-[11px] lowercase text-[#7a7264]">vs</span>
+      <span className="pl-3 font-mono text-[11px] lowercase text-[var(--md-cream-muted)]">vs</span>
       <div className="flex items-center justify-between gap-2 pl-3">
         <div className="flex items-center gap-2">
           <SeedBadge seed={round.opp.seed} />
@@ -160,7 +160,7 @@ function Matchup({ round }: { round: RevealRound }) {
             {round.opp.name}
           </span>
         </div>
-        <span className="font-mono text-[13px] font-bold text-[#9a9081]">{round.opp.regW}–{round.opp.regL}</span>
+        <span className="font-mono text-[13px] font-bold text-[var(--md-cream-muted)]">{round.opp.regW}–{round.opp.regL}</span>
       </div>
     </div>
   );
@@ -178,7 +178,7 @@ function GameRowView({
         boxShadow: newest ? "inset 3px 0 0 0 var(--md-cobalt)" : undefined,
       }}
     >
-      <span className="w-[60px] font-mono text-[12px] text-[#9a9081]">GAME {g.gameNo}</span>
+      <span className="w-[60px] font-mono text-[12px] text-[var(--md-cream-muted)]">GAME {g.gameNo}</span>
       <span className="flex w-[34px] shrink-0 items-center justify-center">
         {chipped ? (
           <span
@@ -192,7 +192,7 @@ function GameRowView({
             {g.won ? "W" : "L"}
           </span>
         ) : (
-          <span style={{ width: 20, height: 15, border: "1.5px dashed #4a443b", boxSizing: "border-box" }} />
+          <span style={{ width: 20, height: 15, border: "2px dashed var(--md-ink-line)", boxSizing: "border-box" }} />
         )}
       </span>
       <span className="flex-1 text-right font-mono text-[13px] font-bold text-[var(--md-paper)]">
@@ -328,7 +328,7 @@ export function SimulateReveal({
         <RoundMeter total={script.totalRounds} current={rnd.roundAbsIndex + 1} />
         <Matchup round={rnd} />
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#5c564b]">The Series</span>
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--md-ink-muted)]">The Series</span>
           <span className="font-mono text-[13px] font-bold" style={{ color: l > w ? "var(--md-coral)" : "var(--md-teal-bright)" }}>{w}–{l}</span>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -342,7 +342,7 @@ export function SimulateReveal({
   };
   const tensionStyleFor = (f: Frame): React.CSSProperties | undefined =>
     f.elimSeparator && !f.outcomeInline
-      ? { background: "#1a0f0d", boxShadow: "8px 8px 0 0 var(--md-coral), inset 0 0 0 2px var(--md-coral-deep)" }
+      ? { background: "var(--md-ink-3)", boxShadow: "8px 8px 0 0 var(--md-coral), inset 0 0 0 2px var(--md-coral-deep)" }
       : undefined;
 
   // ── gate (resting) ──
@@ -350,7 +350,7 @@ export function SimulateReveal({
     return panel(
       <div className="flex flex-1 flex-col justify-between gap-6">
         <div className="flex flex-col gap-2">
-          <span className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-[#7a7264]">{kicker(mode)}</span>
+          <span className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--md-cream-muted)]">{kicker(mode)}</span>
           <span className="font-cover text-[38px] uppercase leading-[0.92] text-[var(--md-paper)]">Your Run<br />Awaits</span>
         </div>
         <div className="flex flex-col items-center gap-3">
@@ -362,7 +362,7 @@ export function SimulateReveal({
           >
             <span className="font-cover text-[24px] uppercase tracking-[0.04em]">▶ Simulate</span>
           </Button>
-          <span className="font-mono text-[12px] text-[#7a7264]">press to run all {script.totalRounds} rounds</span>
+          <span className="font-mono text-[12px] text-[var(--md-cream-muted)]">press to run all {script.totalRounds} rounds</span>
         </div>
       </div>,
       { justifyContent: "stretch" },
@@ -391,18 +391,26 @@ export function SimulateReveal({
         >
           <div className="flex flex-1 flex-col items-center justify-center gap-5 py-4">
             {champion ? (
-              <div
-                className="flex flex-col items-center justify-center px-7 py-4"
-                style={{ rotate: "-5deg", background: "var(--md-yellow)", border: "3px solid var(--md-ink)", boxShadow: "var(--md-magenta) 4px 4px 0px, var(--md-ink) 8px 8px 0px" }}
+              <Stamp
+                background="var(--md-yellow)"
+                color="var(--md-ink)"
+                shadow="double"
+                tilt={false}
+                className="flex-col px-7 py-4"
+                style={{ transform: "rotate(-5deg)", border: "3px solid var(--md-ink)", boxShadow: "var(--md-magenta) 4px 4px 0px, var(--md-ink) 8px 8px 0px" }}
               >
                 <span className="font-cond text-[13px] font-semibold uppercase tracking-[0.2em] text-[var(--md-ink)]">♛ daily82 ♛</span>
                 <span className="font-cover text-[46px] uppercase leading-none text-[var(--md-ink)]">Champions</span>
-                <span className="font-mono text-[11px] font-bold tracking-[0.06em] text-[var(--md-ink)]">{script.rounds[0]?.you.name ?? ""}</span>
-              </div>
+                <span className="font-mono text-[11px] font-bold normal-case tracking-[0.06em] text-[var(--md-ink)]">{script.rounds[0]?.you.name ?? ""}</span>
+              </Stamp>
             ) : (
-              <div
-                className="flex flex-col items-center justify-center px-6 py-3.5"
-                style={{ rotate: "-8deg", background: "var(--md-ink)", border: "3px solid var(--md-coral)", boxShadow: "var(--md-magenta) 4px 4px 0px, #5c564b 8px 8px 0px" }}
+              <Stamp
+                background="var(--md-ink)"
+                color="var(--md-coral)"
+                shadow="double"
+                tilt={false}
+                className="flex-col px-6 py-3.5"
+                style={{ transform: "rotate(-4deg)", border: "3px solid var(--md-coral)", boxShadow: "var(--md-magenta) 4px 4px 0px, var(--md-ink-muted) 8px 8px 0px" }}
               >
                 <span className="font-cover text-[40px] uppercase leading-none text-[var(--md-coral)]">Eliminated</span>
                 {lastRound && (
@@ -410,10 +418,10 @@ export function SimulateReveal({
                     {lastRound.roundName.toUpperCase()} · LOST {lastRound.seriesW}–{lastRound.seriesL}
                   </span>
                 )}
-              </div>
+              </Stamp>
             )}
             {script.end.kind === "eliminated" && (
-              <span className="font-mono text-[13px] text-[#9a9081]">finished {script.end.finish}</span>
+              <span className="font-mono text-[13px] text-[var(--md-cream-muted)]">finished {script.end.finish}</span>
             )}
           </div>
           <Button

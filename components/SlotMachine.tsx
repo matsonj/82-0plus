@@ -378,7 +378,7 @@ export function SlotMachine({
       {/* Era reel — same in-flow-result trick (this is the box that was
           collapsing to "-" because it has no fixed height). */}
       <div
-        className={`md-reel inline-flex items-center justify-center border-2 border-[var(--md-ink)] bg-[var(--md-ink)] leading-none text-[var(--md-paper)] ${eraCls}`}
+        className={`md-reel md-badge leading-none ${eraCls}`}
         style={archivo}
       >
         <div

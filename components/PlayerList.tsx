@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { GameMode, PublicPlayer } from "@/lib/types";
 import type { Role } from "@/lib/positions";
 import { CardGlyph, type CardPlayer, usePlayerCardDeck } from "@/components/PlayerCard";
-import { Button, Capsule, PositionChipGroup, SegmentedControl } from "@/components/ui";
+import { Button, Capsule, Card, PositionChipGroup, SegmentedControl } from "@/components/ui";
 
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -157,7 +157,7 @@ export function PlayerList({
       {/* Ranked/Daily hide stats, so the roster's order isn't self-evident the
           way Classic's sort chips make it. A small caption signals the MPG sort. */}
       {mode !== "classic" && status === "ok" && rows.length > 0 && (
-        <div className="px-0.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+        <div className="px-0.5 font-cond text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
           ↓ Sorted by minutes per game
         </div>
       )}
@@ -174,7 +174,7 @@ export function PlayerList({
             className="gap-1"
           />
           <label className="ml-auto flex shrink-0 items-center gap-1.5">
-            <span className="font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+            <span className="font-cond text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
               Sort
             </span>
             <span className="relative inline-flex items-center">
@@ -182,7 +182,7 @@ export function PlayerList({
                 value={sortKey}
                 onChange={(e) => setSortKey(e.target.value as SortKey)}
                 aria-label="Sort players by"
-                className="appearance-none border-2 border-[var(--md-ink)] bg-[var(--md-white)] py-1 pl-2.5 pr-7 font-display text-[12px] font-bold uppercase tracking-wide text-[var(--md-ink)]"
+                className="appearance-none border-2 border-[var(--md-ink)] bg-[var(--md-white)] py-1 pl-2.5 pr-7 font-cond text-[12px] font-bold uppercase tracking-wide text-[var(--md-ink)]"
               >
                 {SORTS.map((s) => (
                   <option key={s.key} value={s.key}>
@@ -210,18 +210,15 @@ export function PlayerList({
         </div>
       )}
 
-      <div
-        className="md-scroll max-h-[18rem] overflow-auto border-2 border-[var(--md-ink)] bg-[var(--md-white)]"
-        style={{ boxShadow: "var(--md-shadow-md)" }}
-      >
+      <Card lift className="md-scroll max-h-[18rem] overflow-auto">
         {status === "loading" && (
-          <div className="px-3 py-6 text-center font-display text-sm text-[var(--md-ink-muted)]">
+          <div className="px-3 py-6 text-center font-sans text-sm text-[var(--md-ink-muted)]">
             Loading roster…
           </div>
         )}
         {status === "error" && (
           <div className="flex flex-col items-center gap-2 px-3 py-6 text-center">
-            <div className="font-display text-sm text-[var(--md-coral)]">
+            <div className="font-sans text-sm text-[var(--md-coral)]">
               Couldn&rsquo;t load this roster.
             </div>
             <Button
@@ -234,7 +231,7 @@ export function PlayerList({
         )}
         {noneEligible && (
           <div className="flex flex-col items-center gap-2 px-3 py-6 text-center">
-            <div className="font-display text-sm text-[var(--md-ink-muted)]">
+            <div className="font-sans text-sm text-[var(--md-ink-muted)]">
               No one here fits your open slots.
             </div>
             {allowRespin ? (
@@ -244,7 +241,7 @@ export function PlayerList({
             ) : (
               // Daily mode is a fixed, seeded challenge — no random respin. Move
               // an already-drafted player to free up a slot {team} can fill.
-              <div className="max-w-[16rem] font-display text-xs text-[var(--md-ink-muted)]">
+              <div className="max-w-[16rem] font-sans text-xs text-[var(--md-ink-muted)]">
                 Tap a drafted player, then an open slot, to rearrange and free a
                 spot {team} can fill.
               </div>
@@ -252,7 +249,7 @@ export function PlayerList({
           </div>
         )}
         {status === "ok" && !noneEligible && rows.length === 0 && (
-          <div className="px-3 py-6 text-center font-display text-sm text-[var(--md-ink-muted)]">
+          <div className="px-3 py-6 text-center font-sans text-sm text-[var(--md-ink-muted)]">
             {all.length === 0
               ? // Empty roster — e.g. a stale/typed combo URL with no such team+era.
                 `No roster on record for ${team} in the ${decade}s.`
@@ -322,7 +319,7 @@ export function PlayerList({
               <div className="shrink-0 text-right">
                 {mode === "classic" && p.mpg !== null ? (
                   <>
-                    <div className="font-display text-sm font-bold text-[var(--md-coral)]">
+                    <div className="font-display text-sm font-bold text-[var(--md-ink)]">
                       {sortKey === "mpg" ? p.mpg : (p[sortKey] ?? 0)}
                     </div>
                     <div className="font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
@@ -353,7 +350,7 @@ export function PlayerList({
             </div>
             );
           })}
-      </div>
+      </Card>
 
       {playerCardCarousel}
     </div>

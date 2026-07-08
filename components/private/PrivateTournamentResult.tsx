@@ -546,7 +546,7 @@ export function PrivateTournamentResult({
           ))}
         </div>
         {you && (
-          <div className="flex items-center gap-1.5 font-display text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
+          <div className="flex items-center gap-1.5 font-sans text-[10px] uppercase tracking-wide text-[var(--md-ink-muted)]">
             <span className="inline-block h-3 w-3" style={{ background: "var(--md-cobalt)" }} />
             <span>★ your team</span>
           </div>
@@ -564,17 +564,17 @@ export function PrivateTournamentResult({
               >
                 {myEntry.teamName ?? myEntry.userName}
               </span>
-              <span className="font-display text-[13px] text-[var(--md-ink-muted)]">finished</span>
+              <span className="font-sans text-[13px] text-[var(--md-ink-muted)]">finished</span>
               <span className="font-cover text-[var(--md-ink)]" style={{ fontSize: 22, textTransform: "uppercase" }}>
                 Top {myRank}
               </span>
               {myStatus && (
-                <span className="font-display text-[13px] text-[var(--md-ink-muted)]">· {myStatus}</span>
+                <span className="font-sans text-[13px] text-[var(--md-ink-muted)]">· {myStatus}</span>
               )}
             </>
           )}
           {!myRank && (
-            <span className="font-display text-[13px] text-[var(--md-ink-muted)]">
+            <span className="font-sans text-[13px] text-[var(--md-ink-muted)]">
               {data.championName ? `Champion: ${data.championName}` : "Tournament complete"}
             </span>
           )}

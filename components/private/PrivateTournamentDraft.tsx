@@ -303,7 +303,7 @@ export function PrivateTournamentDraft({
     return (
       <Card lift className="mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
         <Capsule tone="teal">Team submitted</Capsule>
-        <p className="font-display text-sm text-[var(--md-ink-muted)]">
+        <p className="font-sans text-sm text-[var(--md-ink-muted)]">
           Your six are locked in. Watch this tournament for the final bracket.
         </p>
         <ButtonLink href={`/p/${tournamentId}`} size="lg" variant="teal">
@@ -318,7 +318,7 @@ export function PrivateTournamentDraft({
     return (
       <Card lift className="mx-auto flex max-w-md flex-col items-center gap-3 p-5 text-center">
         <Capsule tone="coral">Time&rsquo;s up</Capsule>
-        <p className="font-display text-sm text-[var(--md-ink-muted)]">
+        <p className="font-sans text-sm text-[var(--md-ink-muted)]">
           Your 10-minute window closed and your slot was freed. If there&rsquo;s
           still room, you can rejoin and draft again.
         </p>
@@ -404,9 +404,9 @@ export function PrivateTournamentDraft({
 
       {allPlaced && (
         <Card lift className="flex flex-col items-center gap-3 p-5 text-center">
-          <div className="font-display text-base font-bold">Starting five locked.</div>
+          <div className="font-sans text-base font-bold">Starting five locked.</div>
           {partialError && (
-            <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-display text-sm text-[var(--md-coral)]">
+            <div className="border-2 border-[var(--md-coral)] bg-[var(--md-white)] p-2 font-sans text-sm text-[var(--md-coral)]">
               {partialError}
             </div>
           )}

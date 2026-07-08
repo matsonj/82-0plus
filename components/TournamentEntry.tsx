@@ -497,7 +497,7 @@ export function TournamentEntry({
                   in-draft RollCard) so the spinner animation doesn't fade against
                   the light page background. */}
               {currentDecade !== null && (
-                <div className="md-card--cover p-4 sm:p-6">
+                <Card cover className="p-4 sm:p-6">
                   <div
                     className="flex items-end justify-between pb-3"
                     style={{ borderBottom: "1px solid var(--md-paper)", boxShadow: "0 4px 0 -1px var(--md-paper)" }}
@@ -526,7 +526,7 @@ export function TournamentEntry({
                       </Button>
                     )}
                   </div>
-                </div>
+                </Card>
               )}
               {benchReelSettled && currentTeam && currentDecade !== null && !rolling ? (
                 <PlayerList
@@ -571,7 +571,7 @@ export function TournamentEntry({
                   className="flex flex-col gap-3 p-5 sm:p-6"
                   style={{
                     background: "var(--md-ink)",
-                    border: "2.5px solid var(--md-yellow)",
+                    border: "3px solid var(--md-yellow)",
                     boxShadow: "6px 6px 0 0 var(--md-yellow)",
                   }}
                 >
@@ -589,7 +589,7 @@ export function TournamentEntry({
                             : "Flex"}
                     </span>
                   </div>
-                  <span className="font-cover text-[34px] uppercase leading-[0.9] text-[var(--md-paper)] sm:text-[42px]">
+                  <span className="font-archivo text-[34px] uppercase leading-[0.9] text-[var(--md-paper)] sm:text-[42px]">
                     {lineup[captainSlot]!.player.player_name}
                   </span>
                   <span className="font-archivo text-[14px] font-semibold text-[var(--md-paper-3)]">

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 import type { GameMode } from "@/lib/types";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ButtonLink } from "@/components/ui";
 
 export function HomeMenu({
   dateline,
@@ -129,9 +129,10 @@ export function HomeMenu({
                 One open tournament → its lobby; 2+ → the browsable list. Already
                 entered → the cell points at the user's own entry instead
                 (finish an unsubmitted lineup, or see the field once submitted). */}
-            <Link
+            <ButtonLink
               href={entered ? entered.href : joinPublicHref}
-              className="flex flex-1 items-center justify-between gap-2 border-2 border-[var(--md-ink)] bg-[var(--md-yellow)] px-4 py-2 text-[var(--md-ink)] transition-transform hover:-translate-y-0.5"
+              variant="yellow"
+              className="flex-1 justify-between"
             >
               <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em]">
                 {entered ? (
@@ -147,22 +148,26 @@ export function HomeMenu({
                 )}
               </span>
               <span aria-hidden>→</span>
-            </Link>
+            </ButtonLink>
 
-            {/* Secondary: Join private + Create — two ghost buttons */}
+            {/* Secondary: Join private + Create — two secondary buttons */}
             <div className="grid grid-cols-2 gap-2">
-              <Link
+              <ButtonLink
                 href="/tournament?tab=private&intent=join"
-                className="border-2 border-white/55 px-3 py-2 text-center font-cond text-[12px] font-semibold uppercase tracking-[0.08em] transition-colors hover:bg-white/10"
+                variant="secondary"
+                size="sm"
+                fullWidth
               >
                 Join private
-              </Link>
-              <Link
+              </ButtonLink>
+              <ButtonLink
                 href="/tournament?tab=private&intent=create"
-                className="border-2 border-white/55 px-3 py-2 text-center font-cond text-[12px] font-semibold uppercase tracking-[0.08em] transition-colors hover:bg-white/10"
+                variant="secondary"
+                size="sm"
+                fullWidth
               >
                 Create
-              </Link>
+              </ButtonLink>
             </div>
           </div>
         </div>
@@ -245,7 +250,7 @@ function ModeCard({
       <div
         className={`flex items-center justify-between border-t pt-3 font-cond text-[12px] font-semibold uppercase tracking-[0.12em] ${
           dark
-            ? "border-[#2a231c] text-[var(--md-paper-3)]"
+            ? "border-[var(--md-ink-line)] text-[var(--md-paper-3)]"
             : "border-[var(--md-ink)]/20 text-[var(--md-ink-muted)]"
         }`}
       >

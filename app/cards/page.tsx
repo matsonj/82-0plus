@@ -7,6 +7,7 @@ import { PlayerList } from "@/components/PlayerList";
 import { PageShell } from "@/components/layout/PageShell";
 import { CardsSearchHeader } from "@/components/cards/CardsSearchHeader";
 import { CardStack } from "@/components/cards/CardStack";
+import { Card } from "@/components/ui/Card";
 
 interface Combo {
   team: string;
@@ -337,24 +338,25 @@ function TeamStack({ team, query }: { team: string; query: string }) {
             <Link
               key={c.decade}
               href={cardsHref({ team, decade: c.decade, q: query })}
-              className="group flex flex-col border-2 border-[var(--md-ink)] bg-[var(--md-white)] p-4 text-left transition-transform hover:-translate-y-0.5"
-              style={{ boxShadow: "var(--md-shadow-md)" }}
+              className="group block transition-transform hover:-translate-y-0.5"
             >
-              <div
-                className="font-cover leading-none"
-                style={{ fontSize: "clamp(28px, 6vw, 40px)", letterSpacing: "-0.01em" }}
-              >
-                {c.decade}s
-              </div>
-              <div className="mt-2 font-cond text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">
-                {team}
-              </div>
-              <div
-                className="font-cond mt-0.5 text-[11px] font-bold uppercase tracking-[0.06em]"
-                style={{ color: "var(--md-coral)" }}
-              >
-                {c.count} players
-              </div>
+              <Card lift className="flex flex-col p-4 text-left">
+                <div
+                  className="font-cover leading-none"
+                  style={{ fontSize: "clamp(28px, 6vw, 40px)", letterSpacing: "-0.01em" }}
+                >
+                  {c.decade}s
+                </div>
+                <div className="mt-2 font-cond text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--md-ink-muted)]">
+                  {team}
+                </div>
+                <div
+                  className="font-cond mt-0.5 text-[11px] font-bold uppercase tracking-[0.06em]"
+                  style={{ color: "var(--md-coral)" }}
+                >
+                  {c.count} players
+                </div>
+              </Card>
             </Link>
           ))}
         </div>

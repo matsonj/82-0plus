@@ -12,7 +12,7 @@ import { SITE_URL } from "@/lib/site";
 import { PrivateTournamentDraft } from "@/components/private/PrivateTournamentDraft";
 import { EntryCountdown } from "@/components/private/EntryCountdown";
 import { DeleteTournamentControl } from "@/components/private/DeleteTournamentControl";
-import { Button, Capsule, CopyLinkField, NameField, Notice, PinField } from "@/components/ui";
+import { Button, Capsule, Card, CopyLinkField, NameField, Notice, PinField } from "@/components/ui";
 import type {
   PrivateLobbyResponse,
   PrivateRegisterResponse,
@@ -180,7 +180,7 @@ export function PrivateTournamentLobby({
           </div>
 
           {data.entries.length === 0 ? (
-            <p className="mt-4 font-display text-[13px] text-[var(--md-ink-muted)]">
+            <p className="mt-4 font-sans text-[13px] text-[var(--md-ink-muted)]">
               No one&rsquo;s joined yet. Be the first.
             </p>
           ) : (
@@ -198,7 +198,11 @@ export function PrivateTournamentLobby({
                       gridTemplateColumns: "32px 1fr 80px",
                       paddingTop: 9,
                       paddingBottom: 9,
-                      background: isMine ? "var(--md-yellow)" : undefined,
+                      // Same cobalt "mine" tint as the results page — never
+                      // yellow, that's spot color leaking into a data row.
+                      background: isMine
+                        ? "color-mix(in srgb, var(--md-cobalt) 14%, transparent)"
+                        : undefined,
                     }}
                   >
                     <span className="pl-1 font-mono text-[12px] tabular-nums text-[var(--md-ink-muted)]">
@@ -248,7 +252,7 @@ export function PrivateTournamentLobby({
           )}
 
           {/* Bracket note */}
-          <p className="mt-4 flex items-start gap-2 font-display text-[12px] text-[var(--md-ink-muted)]">
+          <p className="mt-4 flex items-start gap-2 font-sans text-[12px] text-[var(--md-ink-muted)]">
             <span className="mt-0.5 shrink-0 text-[10px]">{"{}"}</span>
             <span>The bracket is drawn once all {data.size} entrants lock in their rosters or when the clock runs out, whichever comes first.</span>
           </p>
@@ -284,7 +288,7 @@ export function PrivateTournamentLobby({
                     {you.provisionalStatus ? ` · ${you.provisionalStatus}` : ""}
                   </div>
                 )}
-                <p className="font-display text-[12px] text-[var(--md-ink-muted)]">
+                <p className="font-sans text-[12px] text-[var(--md-ink-muted)]">
                   Final results post once every slot is in (or the window closes).
                 </p>
               </div>
@@ -309,7 +313,7 @@ export function PrivateTournamentLobby({
                   </>
                 )}
                 {hasSaved && (
-                  <div className="font-display text-[13px]">
+                  <div className="font-sans text-[13px]">
                     Playing as{" "}
                     <strong className="text-[var(--md-coral-deep)]">{name}</strong>
                   </div>
@@ -361,15 +365,16 @@ export function PrivateTournamentLobby({
           )}
         </div>
 
-        {/* RIGHT: invite card (dark ink, cobalt accent) */}
+        {/* RIGHT: invite card (dark ink, cobalt accent — matches the rest of
+            the Private Tournament surface; the flame border/pop is reserved
+            for the coral CTA voice, not this money card). */}
         <div className="shrink-0 md:w-[340px]">
-          <div
-            className="flex flex-col gap-4 border-2 border-[var(--md-coral)] p-5"
+          <Card
+            cover
+            className="flex flex-col gap-4 p-5"
             style={{
-              background: "var(--md-ink)",
-              backgroundImage: "radial-gradient(var(--md-ink-2) 1.4px, transparent 1.5px)",
-              backgroundSize: "8px 8px",
-              boxShadow: "var(--md-shadow-pop)",
+              borderColor: "var(--md-cobalt)",
+              boxShadow: "6px 6px 0 0 var(--md-cobalt)",
             }}
           >
             <div>
@@ -392,7 +397,7 @@ export function PrivateTournamentLobby({
               buttonFullWidth
               buttonPrefix={<span>⎘</span>}
               displayValue={fullShare.replace(/^https?:\/\//, "")}
-              displayClassName="border-2 border-[#3a322a] px-3 py-2 text-[var(--md-paper)]"
+              displayClassName="border-2 border-[var(--md-ink-line)] px-3 py-2 text-[var(--md-paper)]"
               displayStyle={{ background: "var(--md-ink-2)" }}
             />
 
@@ -408,40 +413,40 @@ export function PrivateTournamentLobby({
             >
               <svg width="100%" height="80" viewBox="0 0 220 80" fill="none" xmlns="http://www.w3.org/2000/svg">
                 {/* Left bracket arms */}
-                <rect x="0" y="10" width="30" height="2" fill="#CFC5AD" />
-                <rect x="0" y="30" width="30" height="2" fill="#CFC5AD" />
-                <rect x="30" y="10" width="2" height="22" fill="#CFC5AD" />
-                <rect x="30" y="21" width="20" height="2" fill="#CFC5AD" />
+                <rect x="0" y="10" width="30" height="2" fill="var(--md-paper-3)" />
+                <rect x="0" y="30" width="30" height="2" fill="var(--md-paper-3)" />
+                <rect x="30" y="10" width="2" height="22" fill="var(--md-paper-3)" />
+                <rect x="30" y="21" width="20" height="2" fill="var(--md-paper-3)" />
 
-                <rect x="0" y="50" width="30" height="2" fill="#CFC5AD" />
-                <rect x="0" y="70" width="30" height="2" fill="#CFC5AD" />
-                <rect x="30" y="50" width="2" height="22" fill="#CFC5AD" />
-                <rect x="30" y="61" width="20" height="2" fill="#CFC5AD" />
+                <rect x="0" y="50" width="30" height="2" fill="var(--md-paper-3)" />
+                <rect x="0" y="70" width="30" height="2" fill="var(--md-paper-3)" />
+                <rect x="30" y="50" width="2" height="22" fill="var(--md-paper-3)" />
+                <rect x="30" y="61" width="20" height="2" fill="var(--md-paper-3)" />
 
                 {/* Middle */}
-                <rect x="50" y="21" width="2" height="42" fill="#CFC5AD" />
-                <rect x="50" y="42" width="20" height="2" fill="#CFC5AD" />
+                <rect x="50" y="21" width="2" height="42" fill="var(--md-paper-3)" />
+                <rect x="50" y="42" width="20" height="2" fill="var(--md-paper-3)" />
 
                 {/* Champion (dashed) */}
-                <rect x="70" y="35" width="30" height="14" stroke="#E5261F" strokeWidth="1.5" strokeDasharray="4 2" fill="none" />
+                <rect x="70" y="35" width="30" height="14" stroke="var(--md-coral)" strokeWidth="1.5" strokeDasharray="4 2" fill="none" />
 
                 {/* Right bracket arms */}
-                <rect x="190" y="10" width="30" height="2" fill="#CFC5AD" />
-                <rect x="190" y="30" width="30" height="2" fill="#CFC5AD" />
-                <rect x="188" y="10" width="2" height="22" fill="#CFC5AD" />
-                <rect x="168" y="21" width="22" height="2" fill="#CFC5AD" />
+                <rect x="190" y="10" width="30" height="2" fill="var(--md-paper-3)" />
+                <rect x="190" y="30" width="30" height="2" fill="var(--md-paper-3)" />
+                <rect x="188" y="10" width="2" height="22" fill="var(--md-paper-3)" />
+                <rect x="168" y="21" width="22" height="2" fill="var(--md-paper-3)" />
 
-                <rect x="190" y="50" width="30" height="2" fill="#CFC5AD" />
-                <rect x="190" y="70" width="30" height="2" fill="#CFC5AD" />
-                <rect x="188" y="50" width="2" height="22" fill="#CFC5AD" />
-                <rect x="168" y="61" width="22" height="2" fill="#CFC5AD" />
+                <rect x="190" y="50" width="30" height="2" fill="var(--md-paper-3)" />
+                <rect x="190" y="70" width="30" height="2" fill="var(--md-paper-3)" />
+                <rect x="188" y="50" width="2" height="22" fill="var(--md-paper-3)" />
+                <rect x="168" y="61" width="22" height="2" fill="var(--md-paper-3)" />
 
                 {/* Right middle */}
-                <rect x="168" y="21" width="2" height="42" fill="#CFC5AD" />
-                <rect x="150" y="42" width="20" height="2" fill="#CFC5AD" />
+                <rect x="168" y="21" width="2" height="42" fill="var(--md-paper-3)" />
+                <rect x="150" y="42" width="20" height="2" fill="var(--md-paper-3)" />
               </svg>
             </div>
-          </div>
+          </Card>
 
           <p className="mt-3 font-display text-[12px] leading-snug text-[var(--md-ink-muted)]">
             Once all {data.size} entrants submit their rosters, seeds lock and the bracket is drawn. If the clock runs out first, it draws with whoever&rsquo;s in.

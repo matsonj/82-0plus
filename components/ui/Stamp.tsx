@@ -18,7 +18,7 @@ export function Stamp({
   background,
   color,
   shadow = "double",
-  tilt = true,
+  tilt,
   minWidth,
   title,
   className = "",
@@ -35,16 +35,18 @@ export function Stamp({
   style?: CSSProperties;
   children: ReactNode;
 }) {
-  const chrome = shadow === "double" ? "md-stamp" : "border-2 border-[var(--md-ink)]";
+  const chrome = shadow === "double" ? "md-stamp" : "border-2 border-[var(--md-ink)] md-stamp--sm";
+  // "sm" defaults to upright (no tilt) per the docstring above; callers may
+  // still opt a "sm" stamp into a tilt (or opt a "double" one out) explicitly.
+  const effectiveTilt = tilt ?? shadow !== "sm";
   return (
     <span
       className={`${chrome} inline-flex items-center justify-center ${className}`}
       style={{
         background,
         color,
-        ...(tilt ? { transform: "rotate(2deg)" } : {}),
+        ...(effectiveTilt ? { transform: "rotate(2deg)" } : {}),
         ...(minWidth !== undefined ? { minWidth } : {}),
-        ...(shadow === "sm" ? { boxShadow: "var(--md-shadow-sm)" } : {}),
         ...style,
       }}
       title={title}

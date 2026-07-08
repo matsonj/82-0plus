@@ -146,7 +146,7 @@ function ListBoard({
         const bg = isSelected
           ? "var(--md-yellow)"
           : isTarget
-            ? "rgba(229,38,31,0.12)" // warm coral wash on dark
+            ? "color-mix(in srgb, var(--md-coral) 12%, transparent)" // warm coral wash on dark
             : "transparent";
 
         // Target slots get a full coral box border; selected gets yellow box border;

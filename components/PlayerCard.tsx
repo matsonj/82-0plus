@@ -78,6 +78,23 @@ export function usePlayerCardDeck({
   return { activeCardIndex: index, carousel, closeCard, openCard, prefetchCard };
 }
 
+// Tracks the user's `prefers-reduced-motion` setting (reactively). Mirrors the
+// matchMedia check used in SimulateReveal; used to disable the carousel's
+// depth-of-field blur + slide transition for motion-sensitive users.
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function")
+      return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return reduced;
+}
+
 const gq100 = (gq: number) => Math.round(gq * 100);
 // Tolerate null/undefined cells (e.g. a season with zero shot attempts) so a
 // sparse career card renders instead of throwing on .toFixed.
@@ -88,7 +105,7 @@ const f1 = (n: number | null | undefined) =>
 export function CardGlyph({ size = 16 }: { size?: number }) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden role="img">
-      <rect x="2.5" y="1.5" width="11" height="13" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <rect x="2.5" y="1.5" width="11" height="13" rx="0" fill="none" stroke="currentColor" strokeWidth="1.3" />
       <line x1="4.6" y1="5" x2="11.4" y2="5" stroke="currentColor" strokeWidth="1.3" />
       <line x1="4.6" y1="8" x2="11.4" y2="8" stroke="currentColor" strokeWidth="1.1" />
       <line x1="4.6" y1="10.5" x2="9" y2="10.5" stroke="currentColor" strokeWidth="1.1" />
@@ -257,7 +274,7 @@ function GqChart({
                     width={bw}
                     height={bh}
                     fill="var(--md-white)"
-                    rx={1}
+                    rx={0}
                   />
                   <text
                     x={cx}
@@ -393,7 +410,7 @@ function FullCard({
   })();
 
   return (
-    <Card className="flex max-h-[86vh] w-full flex-col overflow-hidden p-0" style={{ boxShadow: "var(--md-shadow-md)" }}>
+    <Card lift className="flex max-h-[86vh] w-full flex-col overflow-hidden p-0">
       {/* ── CAREER CARD header bar — flame accent strip ── */}
       <div
         className="flex items-center justify-between border-b-2 border-[var(--md-ink)] px-4 py-2"
@@ -413,7 +430,7 @@ function FullCard({
             <Button
               type="button"
               size="sm"
-              style={{ background: "var(--md-white)", color: "var(--md-coral)", borderColor: "var(--md-ink)" }}
+              variant="invert"
               onClick={onDraft}
               disabled={!draftable}
               title={draftable ? "Draft this player" : "No open slot fits his position"}
@@ -746,6 +763,7 @@ export function PlayerCardCarousel({
   canDraft?: (index: number) => boolean;
 }) {
   const [cur, setCur] = useState(index);
+  const reducedMotion = usePrefersReducedMotion();
 
   const clamp = useCallback(
     (i: number) => Math.max(0, Math.min(players.length - 1, i)),
@@ -802,11 +820,15 @@ export function PlayerCardCarousel({
           // real cards waiting in the deck rather than transparent ghosts. Cards
           // beyond the ±1 window stay hidden (0) as they slide off-stage.
           opacity: isCenter ? 1 : off === 1 ? 1 : 0,
-          filter: isCenter ? "none" : "blur(3px)",
+          // Depth-of-field blur on off-focus cards — dropped under reduced motion
+          // (it's a motion/effect cue, and the slide transition below is gated too).
+          filter: isCenter || reducedMotion ? "none" : "blur(3px)",
           zIndex: 30 - off * 10,
           pointerEvents: off <= 1 ? "auto" : "none",
-          transitionProperty: "transform, opacity, filter",
-          transitionDuration: "320ms",
+          // Static under reduced motion: cards jump between positions instead of
+          // sliding, and the blur snaps rather than animating.
+          transitionProperty: reducedMotion ? "none" : "transform, opacity, filter",
+          transitionDuration: reducedMotion ? "0ms" : "320ms",
           transitionTimingFunction: "cubic-bezier(0.22, 0.61, 0.36, 1)",
         };
         return (

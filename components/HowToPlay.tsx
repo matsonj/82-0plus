@@ -39,8 +39,8 @@ export function HowToPlay({
       maxWidth="max-w-md"
       paddingClassName="p-6"
       className="max-h-[85vh] overflow-auto"
-      overlayStyle={{ background: "rgba(56,56,56,0.55)" }}
-      titleClassName="font-display"
+      overlayStyle={{ background: "var(--md-overlay)" }}
+      titleClassName="font-archivo"
       titleStyle={{ fontSize: 24, fontWeight: 700 }}
       footer={
         <Button
