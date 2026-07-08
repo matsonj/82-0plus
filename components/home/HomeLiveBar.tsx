@@ -5,8 +5,8 @@ import { ButtonLink } from "@/components/ui";
 // the JOIN chip is a press-yellow stamp (ink type). Renders nothing when no listed
 // tournaments still have room, so it never shows a dead "0 open" bar. A signed-in
 // user already in an open tournament sees their own entry instead of the join hook
-// (`entered`) — a push to finish an unsubmitted lineup, or a pointer at the field
-// once submitted.
+// (`entered`) — a push to finish an unsubmitted lineup, a pitch to join another
+// open field if any remain, or a pointer at their own once there's nothing left.
 //
 // Full-bleed trick (same as GlobalHeader): width:100vw + marginLeft:calc(50% - 50vw)
 // breaks it out of the PageShell max-width; body has overflow-x:hidden to absorb
@@ -25,12 +25,15 @@ export function HomeLiveBar({
   // The signed-in user's own open entries (from the home bootstrap). When set, the
   // bar stops selling the join hook and points at their own entry instead — name
   // for a lone entry, count for several. `needsFinish` = an entry's lineup isn't
-  // submitted yet (href targets it). null/undefined = signed out or not entered.
+  // submitted yet (href targets it). `joinAnother` = all submitted but other
+  // public fields still have room (href targets the browsable list).
+  // null/undefined = signed out or not entered.
   entered?: {
     count: number;
     name: string | null;
     href: string;
     needsFinish: boolean;
+    joinAnother: boolean;
   } | null;
 }) {
   if (count <= 0) return null;
@@ -91,6 +94,8 @@ export function HomeLiveBar({
           {entered ? (
             entered.needsFinish ? (
               <>Finish your lineup</>
+            ) : entered.joinAnother ? (
+              <>Join another</>
             ) : entered.count === 1 ? (
               <>See the field</>
             ) : (
