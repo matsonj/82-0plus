@@ -1164,6 +1164,7 @@ export default function Home() {
           </p>
           <Button
             size="hero"
+            variant="invert"
             fullWidth
             className="mt-5 justify-between"
             disabled={dailyChecking}

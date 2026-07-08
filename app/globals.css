@@ -184,9 +184,13 @@ body {
   /* clean stock fill, flame text — the "quiet" primary (e.g. Draft on a card) */
   .md-btn--invert { background: var(--md-white); color: var(--md-coral); }
   .md-btn--lg { padding: 17px 34px; font-size: 18px; }
-  /* hero CTA: heavier 3px border + flame-pop offset (result / cover surfaces) */
-  .md-btn--hero { padding: 17px 34px; font-size: 18px; border-width: 3px; box-shadow: var(--md-shadow-pop); }
-  .md-btn--hero:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 0 var(--md-coral); }
+  /* hero CTA: heavier 3px border + larger padding. Resting shadow is INK
+     (flame is the FILL, not a resting glow) — the flame "pop" is the hover
+     affordance. The ink-fill variant is the inverse: it keeps a coral pop so
+     a flame primary and an ink Share never sit as two competing red fields. */
+  .md-btn--hero { padding: 17px 34px; font-size: 18px; border-width: 3px; box-shadow: 6px 6px 0 0 var(--md-ink); }
+  .md-btn--hero:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: var(--md-shadow-pop); }
+  .md-btn--ink.md-btn--hero { box-shadow: 6px 6px 0 0 var(--md-coral); }
   .md-btn--sm { padding: 8px 14px; font-size: 12px; box-shadow: var(--md-shadow-sm); }
   .md-btn--sm:hover:not(:disabled) {
     transform: translate(-1px, -1px);
