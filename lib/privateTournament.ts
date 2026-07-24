@@ -132,6 +132,15 @@ export function privateFormatLabel(size: number): string {
     : `${size}-Team · Single Elim`;
 }
 
+/** SHORT form of the above, for compact row subtitles that already carry the mode
+ *  ("Ranked · 8 teams" → "Ranked · Head-to-Head"). Deliberately drops the "Best of
+ *  7" tail privateFormatLabel adds: in a one-line list row the extra clause pushes
+ *  the subtitle past its slot, and the series length isn't what a scanner needs
+ *  there. Use privateFormatLabel on the roomier lobby/result bylines instead. */
+export function privateSizeLabel(size: number): string {
+  return isHeadToHead(size) ? "Head-to-Head" : `${size} teams`;
+}
+
 /** How to name the field when saying who still has to submit: "both entrants" for
  *  head-to-head (2 reads wrong as "all 2"), else "all N entrants". */
 export function privateEntrantsPhrase(size: number): string {

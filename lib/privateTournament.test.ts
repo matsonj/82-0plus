@@ -14,6 +14,7 @@ import {
   normalizeTournamentName,
   privateEntrantsPhrase,
   privateFormatLabel,
+  privateSizeLabel,
   privateModeLabel,
   validateCreateParams,
   type CreatePrivateParams,
@@ -165,7 +166,7 @@ describe("expiryHoursForSize", () => {
   });
 });
 
-describe("privateFormatLabel / privateEntrantsPhrase", () => {
+describe("privateFormatLabel / privateSizeLabel / privateEntrantsPhrase", () => {
   it("names head-to-head instead of claiming a single-elim tree", () => {
     expect(privateFormatLabel(2)).toBe("Head-to-Head · Best of 7");
     expect(privateEntrantsPhrase(2)).toBe("both entrants");
@@ -175,6 +176,16 @@ describe("privateFormatLabel / privateEntrantsPhrase", () => {
     expect(privateFormatLabel(8)).toBe("8-Team · Single Elim");
     expect(privateFormatLabel(20)).toBe("20-Team · Single Elim");
     expect(privateEntrantsPhrase(8)).toBe("all 8 entrants");
+  });
+
+  // The compact row form drops the "Best of 7" tail — a list-row subtitle already
+  // carries the mode ("Ranked · Head-to-Head") and has no room for the clause.
+  it("privateSizeLabel is the short row form", () => {
+    expect(privateSizeLabel(2)).toBe("Head-to-Head");
+    expect(privateSizeLabel(8)).toBe("8 teams");
+    expect(privateSizeLabel(20)).toBe("20 teams");
+    // It must NOT smuggle in the series-length clause the byline form adds.
+    expect(privateSizeLabel(2)).not.toContain("Best of");
   });
 });
 
