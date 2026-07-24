@@ -9,6 +9,7 @@ import {
 } from "@/lib/privateTournamentQueries";
 import { buildTournamentTeam } from "@/lib/tournamentQueries";
 import { getStatNorms, runProvisional } from "@/lib/privateTournamentRun";
+import { isHeadToHead } from "@/lib/privateTournament";
 import {
   allSlotsSubmitted,
   finalizePrivate,
@@ -110,16 +111,21 @@ export async function POST(req: NextRequest) {
     });
 
     // ---- Frozen provisional run vs board bots (stable per entry). ----
-    const statNorms = await getStatNorms(queryOptions);
-    const prov = await runProvisional(
-      entryTeam,
-      tournament.board,
-      tournamentId,
-      entry.entryId,
-      tournament.size,
-      statNorms,
-      queryOptions,
-    );
+    // SKIPPED for head-to-head: a size-2 provisional is this entry vs ONE bot, so
+    // it resolves to "Champion" or "Lost Finals" — it would read as the match
+    // result before the opponent has even drafted. Nulls here leave the columns
+    // empty and the lobby's `!= null` guard hides the line entirely.
+    const prov = isHeadToHead(tournament.size)
+      ? null
+      : await runProvisional(
+          entryTeam,
+          tournament.board,
+          tournamentId,
+          entry.entryId,
+          tournament.size,
+          await getStatNorms(queryOptions),
+          queryOptions,
+        );
 
     const submitted = await submitPrivateEntry({
       entryId: entry.entryId,
@@ -127,11 +133,11 @@ export async function POST(req: NextRequest) {
       sixthJson: sixthPick,
       captainSlot,
       rosterDisplay: { roster: entryTeam.roster, sixthMan: entryTeam.sixthManInfo },
-      provisionalRecordW: prov.recordW,
-      provisionalRecordL: prov.recordL,
+      provisionalRecordW: prov?.recordW ?? null,
+      provisionalRecordL: prov?.recordL ?? null,
       // The result label (e.g. "Champion", "Lost Play-In") — a PrivateResultLabel,
-      // distinct from the tournament's open/completed lifecycle.
-      provisionalStatus: prov.status,
+      // distinct from the tournament's open/completed lifecycle. Null for H2H.
+      provisionalStatus: prov?.status ?? null,
       teamName,
     });
     if (!submitted.ok) {
@@ -166,7 +172,8 @@ export async function POST(req: NextRequest) {
     return jsonWithSessionHint(sessionHint, {
       status: "submitted",
       finalized,
-      provisional: { recordW: prov.recordW, recordL: prov.recordL, status: prov.status },
+      // null for head-to-head, which runs no provisional (see above).
+      provisional: prov,
       teamId: entryTeam.id,
       redirect: `/p/${tournamentId}`,
     });

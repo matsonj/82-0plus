@@ -7,7 +7,12 @@ import {
   validatePin,
   NAME_MAX_LEN,
 } from "@/lib/tournamentValidation";
-import { privateModeLabel } from "@/lib/privateTournament";
+import {
+  isHeadToHead,
+  privateEntrantsPhrase,
+  privateFormatLabel,
+  privateModeLabel,
+} from "@/lib/privateTournament";
 import { SITE_URL } from "@/lib/site";
 import { PrivateTournamentDraft } from "@/components/private/PrivateTournamentDraft";
 import { EntryCountdown } from "@/components/private/EntryCountdown";
@@ -131,7 +136,7 @@ export function PrivateTournamentLobby({
           {data.name}
         </h1>
         <div className="font-byline text-[11px] uppercase tracking-[0.1em] text-[var(--md-ink-muted)]">
-          Hosted by {data.adminName} · {data.size}-Team · Single Elim · {privateModeLabel(data.mode)}
+          Hosted by {data.adminName} · {privateFormatLabel(data.size)} · {privateModeLabel(data.mode)}
         </div>
       </div>
 
@@ -254,7 +259,7 @@ export function PrivateTournamentLobby({
           {/* Bracket note */}
           <p className="mt-4 flex items-start gap-2 font-sans text-[12px] text-[var(--md-ink-muted)]">
             <span className="mt-0.5 shrink-0 text-[10px]">{"{}"}</span>
-            <span>The bracket is drawn once all {data.size} entrants lock in their rosters or when the clock runs out, whichever comes first.</span>
+            <span>The bracket is drawn once {privateEntrantsPhrase(data.size)} lock in their rosters or when the clock runs out, whichever comes first.</span>
           </p>
 
           {/* Draft / status CTA — shown below table on mobile, above invite on desktop */}
@@ -403,7 +408,7 @@ export function PrivateTournamentLobby({
 
             {/* Slots + bracket preview */}
             <div className="font-cond text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--md-paper-3)]">
-              ■ {data.size} Slots · Single Elim
+              ■ {isHeadToHead(data.size) ? "Head-to-Head · Best of 7" : `${data.size} Slots · Single Elim`}
             </div>
 
             {/* Simple bracket silhouette */}
@@ -449,7 +454,7 @@ export function PrivateTournamentLobby({
           </Card>
 
           <p className="mt-3 font-display text-[12px] leading-snug text-[var(--md-ink-muted)]">
-            Once all {data.size} entrants submit their rosters, seeds lock and the bracket is drawn. If the clock runs out first, it draws with whoever&rsquo;s in.
+            Once {privateEntrantsPhrase(data.size)} submit their rosters, seeds lock and the bracket is drawn. If the clock runs out first, it draws with whoever&rsquo;s in.
           </p>
         </div>
       </div>

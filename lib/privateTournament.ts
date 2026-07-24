@@ -22,8 +22,9 @@ export type PrivateMode = "classic" | "hoopiq";
 /** How the six-slot board is chosen (see lib/privateBoard.ts). */
 export type PrivateBoardMode = "blind" | "manual";
 
-/** Field size — the number of entrants (and bracket teams). */
-export type PrivateSize = 4 | 8 | 12 | 16 | 20;
+/** Field size — the number of entrants (and bracket teams). Size 2 is HEAD-TO-HEAD:
+ *  a single best-of-7 Final between the host and one opponent. */
+export type PrivateSize = 2 | 4 | 8 | 12 | 16 | 20;
 
 /** Lifecycle: "open" while accepting entries, "completed" once finalized. */
 export type PrivateStatus = "open" | "completed";
@@ -36,7 +37,20 @@ export type PrivateStatus = "open" | "completed";
 export type PrivateResultLabel = string;
 
 /** The legal field sizes, in ascending order. */
-export const PRIVATE_SIZES: readonly PrivateSize[] = [4, 8, 12, 16, 20];
+export const PRIVATE_SIZES: readonly PrivateSize[] = [2, 4, 8, 12, 16, 20];
+
+/** True iff `size` is the head-to-head field (2 entrants → a single Final). H2H
+ *  differs from the larger fields in three ways, all keyed off this predicate:
+ *  a 1-hour open window (see expiryHoursForSize), no provisional standing (a
+ *  1-bot provisional would just spoil the result), and its own "Head-to-Head"
+ *  copy in place of "N-Team".
+ *
+ *  Takes a plain `number`, not PrivateSize: sizes arrive from the DB and the API
+ *  responses untyped, and every caller is a display/branch decision, not a
+ *  validation gate (validateCreateParams owns that). */
+export function isHeadToHead(size: number): boolean {
+  return size === 2;
+}
 
 /** Per-entry lifecycle. registered = joined, no roster yet; partial = mid-draft;
  *  submitted = a complete six locked in; bot_replaced = the entrant timed out and
@@ -106,6 +120,31 @@ export interface PrivateEntrySummary {
 /** Public label for the mode. hoopiq is the Ranked game; classic shows stats. */
 export function privateModeLabel(mode: PrivateMode): "Ranked" | "Classic" {
   return mode === "hoopiq" ? "Ranked" : "Classic";
+}
+
+/** The format phrase for a field — the byline/meta descriptor. Head-to-head reads
+ *  "Head-to-Head · Best of 7": there is exactly ONE series, so "Single Elim" (a
+ *  claim about a multi-round tree) says nothing, while the best-of-7 length is the
+ *  fact a player actually wants. Every other size keeps "N-Team · Single Elim". */
+export function privateFormatLabel(size: number): string {
+  return isHeadToHead(size)
+    ? "Head-to-Head · Best of 7"
+    : `${size}-Team · Single Elim`;
+}
+
+/** SHORT form of the above, for compact row subtitles that already carry the mode
+ *  ("Ranked · 8 teams" → "Ranked · Head-to-Head"). Deliberately drops the "Best of
+ *  7" tail privateFormatLabel adds: in a one-line list row the extra clause pushes
+ *  the subtitle past its slot, and the series length isn't what a scanner needs
+ *  there. Use privateFormatLabel on the roomier lobby/result bylines instead. */
+export function privateSizeLabel(size: number): string {
+  return isHeadToHead(size) ? "Head-to-Head" : `${size} teams`;
+}
+
+/** How to name the field when saying who still has to submit: "both entrants" for
+ *  head-to-head (2 reads wrong as "all 2"), else "all N entrants". */
+export function privateEntrantsPhrase(size: number): string {
+  return isHeadToHead(size) ? "both entrants" : `all ${size} entrants`;
 }
 
 /** Render the "X / Y joined" count for a public tournament row, plus whether it's
@@ -183,7 +222,7 @@ export function validateCreateParams(
     typeof size !== "number" ||
     !PRIVATE_SIZES.includes(size as PrivateSize)
   ) {
-    return { ok: false, reason: "size must be 4, 8, 12, 16 or 20" };
+    return { ok: false, reason: "size must be 2, 4, 8, 12, 16 or 20" };
   }
 
   const boardMode = input.boardMode;
@@ -208,8 +247,23 @@ export function validateCreateParams(
 
 // ── Expiry ─────────────────────────────────────────────────────────────────
 
-/** A private tournament's open window, in hours, before it auto-finalizes. */
+/** A private tournament's DEFAULT open window, in hours, before it auto-finalizes.
+ *  Applies to every field size except head-to-head — go through
+ *  expiryHoursForSize rather than reading this constant directly. */
 export const EXPIRY_HOURS = 24;
+
+/** Head-to-head's open window, in hours. Much shorter than the multi-entrant
+ *  default: a 2-player match is meant to be played back-to-back while both
+ *  players are around, so a no-show resolves in an hour instead of a day. */
+export const H2H_EXPIRY_HOURS = 1;
+
+/** The open window (in hours) for a field of `size` entrants. Head-to-head gets
+ *  H2H_EXPIRY_HOURS; every other size gets EXPIRY_HOURS. The create route turns
+ *  this into the stored `expires_at`, so a tournament keeps the window it was
+ *  created under even if these numbers later change. */
+export function expiryHoursForSize(size: PrivateSize): number {
+  return isHeadToHead(size) ? H2H_EXPIRY_HOURS : EXPIRY_HOURS;
+}
 
 /**
  * True iff `expiresAtISO` is in the past relative to `nowMs` (epoch millis). The

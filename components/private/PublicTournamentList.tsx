@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   formatPublicSpots,
+  isHeadToHead,
   type PublicTournamentSummary,
 } from "@/lib/privateTournament";
 import { Capsule, LoadingState } from "@/components/ui";
@@ -57,7 +58,7 @@ function PublicRow({ t, entered }: { t: PublicTournamentSummary; entered: boolea
           {shortMode(t.mode)}
         </Capsule>
         <Capsule tone="default" className="text-[11px]">
-          {t.size} teams
+          {isHeadToHead(t.size) ? "H2H" : `${t.size} teams`}
         </Capsule>
       </span>
 

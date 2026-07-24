@@ -604,7 +604,7 @@ describe("simulateBracket: per-game box scores", () => {
 });
 
 // ===========================================================================
-// Parametrized bracket sizes (4/8/12/16/20) + size-20 play-in.
+// Parametrized bracket sizes (2/4/8/12/16/20) + size-20 play-in.
 // ===========================================================================
 
 describe("simulateBracket: variable sizes", () => {
@@ -614,8 +614,8 @@ describe("simulateBracket: variable sizes", () => {
     expect(() => simulateBracket(descField(8), "k", norms(), C, 16)).toThrow(); // wrong count
   });
 
-  it("runs to a single champion for each size 4/8/12/16/20", () => {
-    for (const size of [4, 8, 12, 16, 20] as const) {
+  it("runs to a single champion for each size 2/4/8/12/16/20", () => {
+    for (const size of [2, 4, 8, 12, 16, 20] as const) {
       const r = simulateBracket(descField(size), `champ-${size}`, norms(), C, size);
       expect(r.size).toBe(size);
       expect(r.teams.length).toBe(size);
@@ -630,13 +630,14 @@ describe("simulateBracket: variable sizes", () => {
 
   it("round structure matches the spec per size (every main round best-of-7)", () => {
     const expected: Record<number, number[]> = {
+      2: [1], // head-to-head: the Final IS the whole bracket (no conference round)
       4: [2, 1], // conf finals (1E+1W), Final
       8: [4, 2, 1], // semis (2E+2W), conf finals, Final
       12: [4, 4, 2, 1], // opening (2E+2W), semis (2E+2W), conf finals, Final
       16: [8, 4, 2, 1], // unchanged original
       20: [8, 4, 2, 1], // post-play-in: a normal 8-team-per-conf bracket
     };
-    for (const size of [4, 8, 12, 16, 20] as const) {
+    for (const size of [2, 4, 8, 12, 16, 20] as const) {
       const r = simulateBracket(descField(size), `struct-${size}`, norms(), C, size);
       expect(r.rounds.map((rd) => rd.length)).toEqual(expected[size]);
       for (const rd of r.rounds) for (const s of rd) expect(s.bestOf).toBe(7);
@@ -648,7 +649,7 @@ describe("simulateBracket: variable sizes", () => {
     // conference. So in EVERY conference, walking seeds 1..N must give a
     // monotonically non-increasing seedNet — even when affinity leans would, in
     // the old region-primary sort, have floated a weaker team up.
-    for (const size of [4, 8, 12, 16, 20] as const) {
+    for (const size of [2, 4, 8, 12, 16, 20] as const) {
       const r = simulateBracket(descField(size), `mono-${size}`, norms(), C, size);
       for (const conf of ["East", "West"] as const) {
         const seeded = r.teams
@@ -700,7 +701,7 @@ describe("simulateBracket: variable sizes", () => {
   });
 
   it("each conference holds size/2 teams seeded 1..N", () => {
-    for (const size of [4, 8, 12, 16, 20] as const) {
+    for (const size of [2, 4, 8, 12, 16, 20] as const) {
       const r = simulateBracket(descField(size), `seed-${size}`, norms(), C, size);
       const n = size / 2;
       for (const conf of ["East", "West"] as const) {
@@ -737,6 +738,57 @@ describe("simulateBracket: 16-team parity (no regression)", () => {
     );
     expect(r.rounds.map((rd) => rd.length)).toEqual([8, 4, 2, 1]);
     expect(r.championId).toBe("T0"); // strongest team on this deterministic seed
+  });
+});
+
+describe("simulateBracket: head-to-head (size 2)", () => {
+  it("is a single best-of-7 Final and nothing else", () => {
+    const r = simulateBracket(descField(2), "h2h", norms(), C, 2);
+    expect(r.size).toBe(2);
+    expect(r.teams.length).toBe(2);
+    expect(r.rounds.length).toBe(1); // no conference round — the Final is the tree
+    expect(r.rounds[0].length).toBe(1);
+    expect(r.rounds[0][0].bestOf).toBe(7);
+    expect(r.playIn).toBeUndefined();
+    // The series is a real best-of-7: the winner takes exactly 4 games.
+    const series = r.rounds[0][0];
+    expect(series.games.length).toBeGreaterThanOrEqual(4);
+    expect(series.games.length).toBeLessThanOrEqual(7);
+  });
+
+  it("splits the two teams across conferences, both as seed 1", () => {
+    const r = simulateBracket(descField(2), "h2h-conf", norms(), C, 2);
+    expect(r.teams.map((t) => t.conference).sort()).toEqual(["East", "West"]);
+    // With one team per side there is no within-conference ordering to express, so
+    // BOTH carry seed 1 — the Final is a 1-vs-1 by construction.
+    expect(r.teams.every((t) => t.seed === 1)).toBe(true);
+  });
+
+  it("gives the winner a 4-win record and the loser 4 losses", () => {
+    const r = simulateBracket(descField(2), "h2h-rec", norms(), C, 2);
+    const loserId = r.teams.find((t) => t.id !== r.championId)!.id;
+    expect(deriveRecord(r, r.championId).recordW).toBe(4);
+    expect(deriveRecord(r, loserId).recordL).toBe(4);
+    // The loser won no series, so its playoff wins are just the games it took.
+    expect(deriveRecord(r, loserId).recordW).toBeLessThanOrEqual(3);
+  });
+
+  it("is deterministic on a fixed seed and varies across seeds", () => {
+    const a = simulateBracket(descField(2), "same", norms(), C, 2);
+    const b = simulateBracket(descField(2), "same", norms(), C, 2);
+    expect(a.championId).toBe(b.championId);
+    expect(a.rounds[0][0].games.length).toBe(b.rounds[0][0].games.length);
+    // A flat (equal-strength) H2H must not always produce the same winner.
+    const champs = new Set<string>();
+    for (let i = 0; i < 30; i++) {
+      champs.add(simulateBracket(field([0, 0]), `flat-h2h-${i}`, norms(), C, 2).championId);
+    }
+    expect(champs.size).toBe(2);
+  });
+
+  it("still rejects a teams/size mismatch at size 2", () => {
+    expect(() => simulateBracket(descField(4), "x", norms(), C, 2)).toThrow();
+    expect(() => simulateBracket(descField(2), "x", norms(), C, 4)).toThrow();
   });
 });
 

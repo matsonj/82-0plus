@@ -18,6 +18,7 @@ import { TournamentResults } from "@/components/TournamentResults";
 import { TierBadge } from "@/components/TierBadge";
 import { PrivateTournamentCreate } from "@/components/private/PrivateTournamentCreate";
 import { PublicTournamentList } from "@/components/private/PublicTournamentList";
+import { privateSizeLabel } from "@/lib/privateTournament";
 import { getSavedUser, saveUser, clearUser } from "@/lib/tournamentSession";
 import { getCachedTeams, setCachedTeams } from "@/lib/tournamentTeamsCache";
 import { regWinsFromSeedNet } from "@/lib/tier";
@@ -433,7 +434,7 @@ function PrivateRowDesktop({ row }: { row: MyPrivateRow }) {
       title={row.name}
       subtitle={
         <>
-          {row.modeLabel} · {row.size} teams
+          {row.modeLabel} · {privateSizeLabel(row.size)}
         </>
       }
       run={
@@ -502,7 +503,7 @@ function PrivateCardMobile({ row }: { row: MyPrivateRow }) {
         </>
       }
       title={row.name}
-      subtitle={<>{row.modeLabel} · {row.size} teams</>}
+      subtitle={<>{row.modeLabel} · {privateSizeLabel(row.size)}</>}
       stamp={<PrivateStamp s={s} />}
     >
       <div className="flex items-baseline justify-between gap-3 border-t-2 border-[var(--md-ink)] px-4 py-2.5">

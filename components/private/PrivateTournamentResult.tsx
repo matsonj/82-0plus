@@ -7,6 +7,7 @@ import { buildRevealScript } from "@/lib/revealPath";
 import { getSavedUser } from "@/lib/tournamentSession";
 import { DeleteTournamentControl } from "@/components/private/DeleteTournamentControl";
 import type { PrivateCompletedResponse } from "@/components/private/types";
+import { isHeadToHead } from "@/lib/privateTournament";
 import {
   privateModeLabel,
   formatPrivateEntryStatus,
@@ -459,7 +460,7 @@ export function PrivateTournamentResult({
             {data.name}
           </h1>
           <div className="font-byline text-[11px] uppercase tracking-[0.1em] text-[var(--md-ink-muted)]">
-            Final · {data.size} Teams · Single Elim
+            Final · {isHeadToHead(data.size) ? "Head-to-Head · Best of 7" : `${data.size} Teams · Single Elim`}
           </div>
         </div>
 

@@ -43,6 +43,11 @@ export interface AnchorSpec {
   teamIds: string[]; // "team:<uuid>" / "ghost:<id>" in bracket order
 }
 
+// Sizes eligible for the calibration corpus. DELIBERATELY excludes size 2
+// (head-to-head): a single best-of-7 carries almost no bracket-shape signal and a
+// size-2 "champion" is close to a coin flip, so including it would skew the
+// champion-rate objective. The `teamIds.length < 4` floor below enforces the same
+// exclusion independently — this set is not the only guard.
 const VALID_SIZES = new Set<number>([4, 8, 12, 16, 20]);
 
 /** Default per-mode sampling weights when splitting a sample budget. */

@@ -237,7 +237,8 @@ export interface BracketResult {
   rounds: SeriesResult[][]; // main bracket, e.g. size 16 → [R1: 8, R2: 4, ConfFinals: 2, Final: 1]
   championId: string;
   championName: string;
-  // Bracket size: one of 4 | 8 | 12 | 16 | 20. Optional + defaulted at the read
+  // Bracket size: one of 2 | 4 | 8 | 12 | 16 | 20 (2 = head-to-head, a lone
+  // Final). Optional + defaulted at the read
   // site so brackets stored before this field shipped (always size 16) still load.
   size?: number;
   // Size-20 only: the per-conference play-in games (single games, EXCLUDED from
