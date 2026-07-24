@@ -39,7 +39,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --global vercel@latest
+      # PINNED, not `@latest`: a CLI major bump silently changed `vercel pull`'s
+      # output for Sensitive env vars ("" -> "[SENSITIVE]") and broke the
+      # production build with no code change (see #138). Bump this deliberately.
+      - run: npm install --global vercel@57.0.0
       - run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
       - run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
       - id: deploy
@@ -81,7 +84,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --global vercel@latest
+      # PINNED, not `@latest`: a CLI major bump silently changed `vercel pull`'s
+      # output for Sensitive env vars ("" -> "[SENSITIVE]") and broke the
+      # production build with no code change (see #138). Bump this deliberately.
+      - run: npm install --global vercel@57.0.0
       - run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
       - run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
       - run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
