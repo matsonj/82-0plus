@@ -81,8 +81,12 @@ function roundName(absIndex: number, totalRounds: number): string {
 // exact even for non-power-of-2 fields (size 12 / 20, whose play-in and byes
 // resolve to a power-of-2 main bracket) — where `size / 2^round` did not.
 function placementLabel(lostRound: number, totalRounds: number): string {
-  if (lostRound === 0) return "Round 1 exit";
+  // Losing the LAST round is Runner-Up — tested FIRST so head-to-head (totalRounds
+  // 1, where the only round is BOTH round 0 and the last) reads "Runner-Up" rather
+  // than "Round 1 exit". For every deeper bracket the two conditions are disjoint,
+  // so this ordering changes nothing.
   if (lostRound >= totalRounds - 1) return "Runner-Up";
+  if (lostRound === 0) return "Round 1 exit";
   const aliveEntering = 2 ** (totalRounds - lostRound);
   return `Top ${aliveEntering}`;
 }

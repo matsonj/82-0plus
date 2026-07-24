@@ -435,9 +435,12 @@ export interface SubmitPrivateEntryArgs {
   sixthJson: unknown; // { entity_id, team, decade }
   captainSlot: number;
   rosterDisplay: unknown; // final names (with captain flagged + sixth man)
-  provisionalRecordW: number;
-  provisionalRecordL: number;
-  provisionalStatus: PrivateResultLabel;
+  // Provisional standing computed at submit time. NULL for head-to-head, which
+  // has no meaningful provisional run (see the submit route) — the columns stay
+  // null and every read site already treats null as "nothing to show".
+  provisionalRecordW: number | null;
+  provisionalRecordL: number | null;
+  provisionalStatus: PrivateResultLabel | null;
   teamName?: string | null; // franchise name, if chosen at submit
 }
 

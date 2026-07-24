@@ -677,8 +677,8 @@ function playSeries(
 }
 
 /** Supported bracket sizes (teams). 16 is the original; the rest are added. */
-export type BracketSize = 4 | 8 | 12 | 16 | 20;
-const VALID_SIZES: ReadonlySet<number> = new Set([4, 8, 12, 16, 20]);
+export type BracketSize = 2 | 4 | 8 | 12 | 16 | 20;
+const VALID_SIZES: ReadonlySet<number> = new Set([2, 4, 8, 12, 16, 20]);
 
 /**
  * Top-level entry: `size` teams (default 16) → a fully resolved BracketResult.
@@ -690,6 +690,9 @@ const VALID_SIZES: ReadonlySet<number> = new Set([4, 8, 12, 16, 20]);
  *    only WHICH conference; it can never seed a weaker team above a stronger one.
  *    Seeds within each conference follow seedNet desc → seeds 1..N (N = size/2).
  * 2. Fixed tree per size (NO reseed). Every main-bracket round is best-of-7:
+ *      2  → [Final: 1] — HEAD-TO-HEAD. One team per conference, so there is no
+ *           conference round at all: each side's lone team IS its conf champion
+ *           and the only series played is the Final.
  *      4  → [ConfFinals: 2, Final: 1]
  *      8  → [Semis: 4, ConfFinals: 2, Final: 1]
  *      12 → seeds 1-2 BYE; seeds 3-6 play an opening round (3v6,4v5); then
@@ -993,6 +996,13 @@ export function simulateBracket(
     let seeded = seededIn;
     let roundIdx = 0; // index into confOffsets / into the conference's round list
 
+    if (size === 2) {
+      // HEAD-TO-HEAD — 1 per conf. There is no conference round to play: the lone
+      // team IS its conference champion, so `rounds` is empty and the caller's
+      // Final (round 1) is the entire bracket. Both teams therefore carry seed 1.
+      return { rounds: [], champion: { team: seeded[0].team } };
+    }
+
     if (size === 4) {
       // 2 per conf: a single conference final (round 1), then the Final (round 2).
       const r = playRound(pairBySeeds(seeded, [[0, 1]]), 7, 1, confOffsets[roundIdx]);
@@ -1054,8 +1064,10 @@ export function simulateBracket(
   // confOffsets per conference round. East rounds use offset 0; West offsets are
   // shifted by the number of East series in that same round so indices don't
   // collide. The per-round East series counts (= West shift) by size:
-  //   4 → [1];  8 → [2,1];  12 → [2,2,1];  16/20 → [4,2,1].
+  //   2 → [] (no conference round);  4 → [1];  8 → [2,1];  12 → [2,2,1];
+  //   16/20 → [4,2,1].
   const westShiftByRound: number[] =
+    size === 2 ? [] :
     size === 4 ? [1] :
     size === 8 ? [2, 1] :
     size === 12 ? [2, 2, 1] :

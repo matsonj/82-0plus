@@ -121,7 +121,9 @@ export interface PrivatePartialResponse {
 export interface PrivateSubmitResponse {
   status: string;
   finalized: boolean;
-  provisional: { recordW: number; recordL: number; status: string };
+  // null for head-to-head: a size-2 provisional would just be the match result
+  // against one bot, so the submit path skips the run entirely.
+  provisional: { recordW: number; recordL: number; status: string } | null;
   teamId: string;
   redirect: string;
 }

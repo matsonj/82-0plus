@@ -3,12 +3,17 @@ import {
   countsTowardPublicSpots,
   ENTRY_COMPLETION_MINUTES,
   entryDeadlineISO,
+  expiryHoursForSize,
   EXPIRY_HOURS,
   formatPublicSpots,
+  H2H_EXPIRY_HOURS,
+  isHeadToHead,
   isEntryExpired,
   isExpired,
   needsAttention,
   normalizeTournamentName,
+  privateEntrantsPhrase,
+  privateFormatLabel,
   privateModeLabel,
   validateCreateParams,
   type CreatePrivateParams,
@@ -68,6 +73,9 @@ describe("validateCreateParams", () => {
   it("rejects a bad size", () => {
     expect(validateCreateParams({ ...valid, size: 10 }).ok).toBe(false);
     expect(validateCreateParams({ ...valid, size: "8" }).ok).toBe(false);
+    // 2 is the SMALLEST legal field (head-to-head) — 1 and 3 are still rejected.
+    expect(validateCreateParams({ ...valid, size: 1 }).ok).toBe(false);
+    expect(validateCreateParams({ ...valid, size: 3 }).ok).toBe(false);
   });
 
   it("rejects a bad board mode", () => {
@@ -75,7 +83,7 @@ describe("validateCreateParams", () => {
   });
 
   it("accepts every legal size and both board/scoring modes", () => {
-    for (const size of [4, 8, 12, 16, 20]) {
+    for (const size of [2, 4, 8, 12, 16, 20]) {
       expect(validateCreateParams({ ...valid, size }).ok).toBe(true);
     }
     expect(validateCreateParams({ ...valid, mode: "classic" }).ok).toBe(true);
@@ -120,6 +128,53 @@ describe("needsAttention", () => {
         viewedFinalAt: "2026-06-09T00:00:00.000Z",
       }),
     ).toBe(false);
+  });
+});
+
+describe("isHeadToHead", () => {
+  it("is true only for size 2", () => {
+    expect(isHeadToHead(2)).toBe(true);
+    for (const size of [4, 8, 12, 16, 20]) expect(isHeadToHead(size)).toBe(false);
+  });
+});
+
+describe("expiryHoursForSize", () => {
+  it("gives head-to-head a 1-hour window", () => {
+    expect(H2H_EXPIRY_HOURS).toBe(1);
+    expect(expiryHoursForSize(2)).toBe(1);
+  });
+
+  it("gives every other size the 24-hour default", () => {
+    expect(EXPIRY_HOURS).toBe(24);
+    for (const size of [4, 8, 12, 16, 20] as const) {
+      expect(expiryHoursForSize(size)).toBe(EXPIRY_HOURS);
+    }
+  });
+
+  it("produces a window that isExpired agrees with", () => {
+    // The create route turns these hours into an absolute instant; check the H2H
+    // window actually closes an hour out (and not before).
+    const base = Date.parse("2026-06-09T00:00:00.000Z");
+    const h2hExpiry = new Date(base + expiryHoursForSize(2) * 3600_000).toISOString();
+    expect(isExpired(h2hExpiry, base)).toBe(false);
+    expect(isExpired(h2hExpiry, base + 59 * 60_000)).toBe(false); // 59 min in
+    expect(isExpired(h2hExpiry, base + 3600_000 + 1)).toBe(true); // just past 1h
+    // A 24-hour field is still open at the point H2H has already closed.
+    const bigExpiry = new Date(base + expiryHoursForSize(8) * 3600_000).toISOString();
+    expect(isExpired(bigExpiry, base + 3600_000 + 1)).toBe(false);
+  });
+});
+
+describe("privateFormatLabel / privateEntrantsPhrase", () => {
+  it("names head-to-head instead of claiming a single-elim tree", () => {
+    expect(privateFormatLabel(2)).toBe("Head-to-Head · Best of 7");
+    expect(privateEntrantsPhrase(2)).toBe("both entrants");
+  });
+
+  it("keeps the existing N-Team wording for every other size", () => {
+    expect(privateFormatLabel(8)).toBe("8-Team · Single Elim");
+    expect(privateFormatLabel(20)).toBe("20-Team · Single Elim");
+    expect(privateEntrantsPhrase(8)).toBe("all 8 entrants");
   });
 });
 

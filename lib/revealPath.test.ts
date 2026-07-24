@@ -177,6 +177,47 @@ describe("buildRevealScript", () => {
     expect(s.end).toEqual({ kind: "eliminated", finish: "Runner-Up" });
   });
 
+  // Head-to-head (size 2) is a ONE-round bracket, so the only round is both round
+  // 0 and the last round. The loser is the Runner-Up, NOT a "Round 1 exit".
+  it("labels a head-to-head loser 'Runner-Up' (size 2, single round)", () => {
+    const finalLoss = [
+      game(1, "B", "A", 110, 100),
+      game(2, "B", "A", 108, 99),
+      game(3, "A", "B", 105, 100),
+      game(4, "B", "A", 112, 100),
+      game(5, "B", "A", 109, 101),
+    ]; // B wins 4-1
+    const bracket: BracketResult = {
+      teams: [team("A", 1, 8), team("B", 1, 9)],
+      rounds: [[series("B", "A", finalLoss)]],
+      championId: "B",
+      championName: "B",
+      size: 2,
+    };
+    const s = buildRevealScript(bracket, YOU);
+    expect(s.totalRounds).toBe(1);
+    expect(s.rounds).toHaveLength(1);
+    expect(s.rounds[0].roundName).toBe("The Final");
+    expect(s.rounds[0].youWonSeries).toBe(false);
+    expect(s.rounds[0].isLastRound).toBe(true);
+    expect(s.end).toEqual({ kind: "eliminated", finish: "Runner-Up" });
+  });
+
+  it("labels a head-to-head winner champion (size 2)", () => {
+    const bracket: BracketResult = {
+      teams: [team("A", 1, 9), team("B", 1, 8)],
+      rounds: [[series("A", "B", winGames("A", "B"))]],
+      championId: "A",
+      championName: "A",
+      size: 2,
+    };
+    const s = buildRevealScript(bracket, YOU);
+    expect(s.rounds).toHaveLength(1);
+    expect(s.rounds[0].roundName).toBe("The Final");
+    expect(s.rounds[0].youWonSeries).toBe(true);
+    expect(s.end).toEqual({ kind: "champion" });
+  });
+
   it("labels a 20-team conf-finals exit 'Top 4'", () => {
     const cfLoss = [
       game(1, "B", "A", 110, 100),

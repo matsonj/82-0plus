@@ -5,7 +5,7 @@ import { getSessionHint, jsonWithSessionHint } from "@/lib/sessionHint";
 import { requireAuth } from "@/lib/apiAuth";
 import { verifyPin, hashPin } from "@/lib/pinHash";
 import {
-  EXPIRY_HOURS,
+  expiryHoursForSize,
   normalizeTournamentName,
   validateCreateParams,
 } from "@/lib/privateTournament";
@@ -151,8 +151,11 @@ export async function POST(req: NextRequest) {
     // ---- Hash the TOURNAMENT's own PIN for the tournament's name+PIN lookup. ----
     const { pinHash, pinSalt: salt } = hashPin(pin);
 
+    // Window length depends on the field: head-to-head closes in an hour, every
+    // other size in a day. Stored as an absolute instant, so this tournament keeps
+    // the window it was created under.
     const expiresAt = new Date(
-      Date.now() + EXPIRY_HOURS * 60 * 60 * 1000,
+      Date.now() + expiryHoursForSize(size) * 60 * 60 * 1000,
     ).toISOString();
 
     // Pass the pre-generated id so the stored row and the blind board's seed agree.

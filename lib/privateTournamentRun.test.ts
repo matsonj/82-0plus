@@ -101,6 +101,27 @@ describe("planFinalField", () => {
     expect(plan1.slice(3).every((s) => s.kind === "genericBot")).toBe(true);
   });
 
+  // Head-to-head no-show: the host locked a six, the invited opponent never did.
+  // The field must still be exactly 2 — host as a human, opponent as their own
+  // named bot — so the match resolves instead of hanging on an empty slot.
+  it("head-to-head (size 2) fills a no-show opponent with their named bot", () => {
+    const size: PrivateSize = 2;
+    const host = entry({ userName: "HOST", submitted: true });
+    const guest = entry({ userName: "GUEST", submitted: false });
+    const plan = planFinalField([host, guest], size);
+    expect(plan).toHaveLength(2);
+    expect(plan[0]).toMatchObject({ kind: "human" });
+    expect(plan[1]).toMatchObject({ kind: "reservedBot", botName: "GUEST BOT" });
+  });
+
+  it("head-to-head with nobody else joined gets one generic bot", () => {
+    const size: PrivateSize = 2;
+    const plan = planFinalField([entry({ submitted: true })], size);
+    expect(plan).toHaveLength(2);
+    expect(plan[0]).toMatchObject({ kind: "human" });
+    expect(plan[1]).toMatchObject({ kind: "genericBot", botName: "BOT 1" });
+  });
+
   it("always returns exactly size slots and clamps excess entries", () => {
     const size: PrivateSize = 4;
     const many = Array.from({ length: 7 }, () => entry({ submitted: true }));
@@ -201,6 +222,20 @@ function bt(id: string, over: Partial<BracketTeam> = {}): BracketTeam {
 }
 
 describe("statusLabel", () => {
+  // Head-to-head is a ONE-round bracket, so the single series is the Final: the
+  // winner is Champion and the loser "Lost Finals" (rendered "Runner-Up").
+  it("labels both sides of a head-to-head (size 2, single round)", () => {
+    const bracket: BracketResult = {
+      teams: [bt("ME"), bt("X")],
+      rounds: [[series("ME", "X", "ME")]],
+      championId: "ME",
+      championName: "ME",
+      size: 2,
+    };
+    expect(statusLabel(bracket, "ME")).toBe("Champion");
+    expect(statusLabel(bracket, "X")).toBe("Lost Finals");
+  });
+
   it("Champion when the team wins every round including the Final", () => {
     // 2-round bracket (size 4): conf final (round idx 0) + Final (round idx 1).
     const bracket: BracketResult = {
